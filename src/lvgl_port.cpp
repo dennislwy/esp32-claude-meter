@@ -40,5 +40,7 @@ lv_display_t *lvglPortBegin(Epaper &epaper)
   void *buffer = ps_malloc(bufferSize);
   assert(buffer);
   lv_display_set_buffers(display, buffer, nullptr, bufferSize, LV_DISPLAY_RENDER_MODE_FULL);
+  // The panel is 1-bit: anti-aliased edges would be thresholded into ragged, broken thin lines
+  lv_display_set_antialiasing(display, false);
   return display;
 }

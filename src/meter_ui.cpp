@@ -16,9 +16,27 @@ constexpr int CONTENT_W = WIDTH - 2 * PAD;
 // Dual view (Layout #2): two cards below the status bar, split by a divider
 constexpr int CARD_H = (HEIGHT - STATUS_BAR_H - DIVIDER_H) / 2;
 constexpr int SPLIT_BAR_H = 18;
+constexpr int RESET_LINE_X = 2;
 
 // Single-account view (Layout #1 style)
-constexpr int THIN_BAR_H = 8;
+constexpr int THIN_BAR_H = 14;
+// Vertical offsets inside singleWindow()
+constexpr int SINGLE_BAR_Y_OFFSET = 32;
+constexpr int SINGLE_RESET_Y_OFFSET = SINGLE_BAR_Y_OFFSET + THIN_BAR_H + 3;
+// Pitch between 5H and 7D windows (the second starts this many pixels below the first)
+constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 12 + 15;
+
+// Wi-Fi icon in the status bar: a dot with three concentric arcs fanning upwards
+constexpr int WIFI_ICON_W = 22;           // width of the outer arc's 90-degree wedge
+constexpr int WIFI_DOT_R = 2;
+constexpr int WIFI_ARC_RADII[] = {7, 11, 15}; // outer radius of each arc, innermost first
+constexpr int WIFI_ARC_LIT_W = 2;         // lit arcs are thick, unlit ones a thin outline
+constexpr int WIFI_ARC_UNLIT_W = 1;
+constexpr int8_t WIFI_3_ARCS_DBM = -60;
+constexpr int8_t WIFI_2_ARCS_DBM = -70;
+constexpr int8_t WIFI_1_ARC_DBM = -80;    // weaker: the dot alone
+
+constexpr int POPUP_W = 170;
 
 const lv_color_t BLACK = lv_color_black();
 const lv_color_t WHITE = lv_color_white();
@@ -72,9 +90,10 @@ String formatDuration(long seconds)
   const long hours = seconds % 86400 / 3600;
   const long minutes = seconds % 3600 / 60;
   char buf[24];
+  // Two most significant units only
   if (days > 0)
   {
-    snprintf(buf, sizeof(buf), "%ldd %ldh %ldm", days, hours, minutes);
+    snprintf(buf, sizeof(buf), "%ldd %ldh", days, hours);
   }
   else if (hours > 0)
   {
@@ -87,14 +106,38 @@ String formatDuration(long seconds)
   return buf;
 }
 
-String formatCountdown(const MeterScreen &screen, const AccountUsage &account, uint32_t reset)
+enum class DayCase
 {
-  if (!account.hasData || !screen.clockValid)
+  Upper, // "SAT"
+  Title, // "Sat", narrower
+};
+
+// prefix + " SAT 3 Oct 01:10 in 1h 14m", e.g. "5H resets SAT 3 Oct 01:10 in 1h 14m"
+String formatResetLine(const MeterScreen &screen, const AccountUsage &account, const char *prefix, uint32_t reset,
+                       DayCase dayCase = DayCase::Upper)
+{
+  static const char *const UPPER_DAYS[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+  static const char *const TITLE_DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  static const char *const MONTHS[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  const char *const *DAYS = dayCase == DayCase::Upper ? UPPER_DAYS : TITLE_DAYS;
+  String line = String(prefix) + " ";
+  if (!account.hasData)
   {
-    return "--";
+    return line + "--";
   }
-  const long seconds = (long)reset - (long)screen.now;
-  return seconds > 0 ? formatDuration(seconds) : String("now");
+  const time_t resetTime = reset;
+  struct tm local;
+  localtime_r(&resetTime, &local);
+  char when[24];
+  snprintf(when, sizeof(when), "%s %d %s %02d:%02d", DAYS[local.tm_wday], local.tm_mday, MONTHS[local.tm_mon],
+           local.tm_hour, local.tm_min);
+  line += when;
+  if (screen.clockValid)
+  {
+    const long seconds = (long)reset - (long)screen.now;
+    line += seconds > 0 ? " in " + formatDuration(seconds) : String(" (now)");
+  }
+  return line;
 }
 
 // Staleness for the card header: "2m ago", or the error when the last poll failed
@@ -114,6 +157,75 @@ String formatAge(const MeterScreen &screen, const AccountUsage &account)
   return error.isEmpty() ? ago : "! " + ago;
 }
 
+int wifiArcs(int8_t rssi)
+{
+  return rssi >= WIFI_3_ARCS_DBM ? 3 : rssi >= WIFI_2_ARCS_DBM ? 2 : rssi >= WIFI_1_ARC_DBM ? 1 : 0;
+}
+
+// One arc of the fan: a 90-degree wedge pointing up, centred on (cx, cy)
+void wifiArc(lv_obj_t *parent, int cx, int cy, int radius, int width)
+{
+  lv_obj_t *arc = lv_arc_create(parent);
+  lv_obj_remove_style_all(arc);
+  lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_size(arc, 2 * radius, 2 * radius);
+  lv_obj_set_pos(arc, cx - radius, cy - radius);
+  // LVGL measures angles clockwise from 3 o'clock, so 270 is straight up
+  lv_arc_set_bg_angles(arc, 225, 315);
+  lv_obj_set_style_arc_width(arc, width, LV_PART_MAIN);
+  lv_obj_set_style_arc_color(arc, WHITE, LV_PART_MAIN);
+  lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_arc_rounded(arc, true, LV_PART_MAIN);
+  lv_obj_set_style_arc_opa(arc, LV_OPA_TRANSP, LV_PART_INDICATOR);
+}
+
+// Wi-Fi signal, white on the black status bar: a dot with three arcs fanning upwards. Lit arcs
+// (thick) show strength from the innermost out; unlit ones stay as a thin outline. A failed
+// connection shows no lit arcs, followed by an "x".
+void wifiIcon(lv_obj_t *bar, int x, const MeterScreen &screen)
+{
+  if (screen.wifiState == WifiState::Unknown)
+  {
+    return;
+  }
+  const int lit = screen.wifiState == WifiState::Connected ? wifiArcs(screen.wifiRssi) : 0;
+  const int cx = x + WIFI_ICON_W / 2;
+  const int cy = STATUS_BAR_H - 4;
+  for (int i = 0; i < 3; i++)
+  {
+    wifiArc(bar, cx, cy, WIFI_ARC_RADII[i], i < lit ? WIFI_ARC_LIT_W : WIFI_ARC_UNLIT_W);
+  }
+  lv_obj_t *dot = box(bar, cx - WIFI_DOT_R, cy - WIFI_DOT_R, 2 * WIFI_DOT_R, 2 * WIFI_DOT_R, WHITE);
+  lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+  if (screen.wifiState == WifiState::Failed)
+  {
+    lv_obj_t *cross = text(bar, "x", &lv_font_montserrat_12, WHITE);
+    lv_obj_set_pos(cross, x + WIFI_ICON_W + 1, cy - lv_font_get_line_height(&lv_font_montserrat_12) + 3);
+  }
+}
+
+// Bordered box centred over the view: bold-ish title, then wrapped detail lines
+void popup(lv_obj_t *parent, const char *title, const String &body)
+{
+  lv_obj_t *frame = box(parent, 0, 0, POPUP_W, LV_SIZE_CONTENT, WHITE);
+  lv_obj_set_style_border_width(frame, 2, 0);
+  lv_obj_set_style_border_color(frame, BLACK, 0);
+  lv_obj_set_style_radius(frame, 6, 0);
+  lv_obj_set_style_pad_all(frame, 8, 0);
+  lv_obj_set_style_pad_row(frame, 4, 0);
+  lv_obj_set_flex_flow(frame, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(frame, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  text(frame, title, &lv_font_montserrat_14, BLACK);
+  lv_obj_t *detail = text(frame, body.c_str(), &lv_font_montserrat_12, BLACK);
+  lv_obj_set_width(detail, POPUP_W - 20);
+  lv_label_set_long_mode(detail, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(detail, LV_TEXT_ALIGN_CENTER, 0);
+
+  // Centre in the area below the status bar
+  lv_obj_align(frame, LV_ALIGN_CENTER, 0, STATUS_BAR_H / 2);
+}
+
 void statusBar(lv_obj_t *parent, const MeterScreen &screen)
 {
   lv_obj_t *bar = box(parent, 0, 0, WIDTH, STATUS_BAR_H, BLACK);
@@ -121,6 +233,7 @@ void statusBar(lv_obj_t *parent, const MeterScreen &screen)
   lv_obj_t *icon = lv_image_create(bar);
   lv_image_set_src(icon, &claude_icon);
   lv_obj_set_pos(icon, PAD, (STATUS_BAR_H - claude_icon.header.h) / 2);
+  wifiIcon(bar, PAD + claude_icon.header.w + 6, screen);
 
   char clock[8] = "--:--";
   if (screen.clockValid)
@@ -179,23 +292,22 @@ void dualCard(lv_obj_t *parent, int y, const MeterScreen &screen, int index)
   splitBar(parent, PAD, y + 20, "5-HOUR", account.fiveHourPercent, formatPercent(account, account.fiveHourPercent).c_str());
   splitBar(parent, PAD, y + 40, "7-DAY", account.sevenDayPercent, formatPercent(account, account.sevenDayPercent).c_str());
 
-  const String reset5h = "5H Reset " + formatCountdown(screen, account, account.fiveHourReset);
-  const String reset7d = "7D Reset " + formatCountdown(screen, account, account.sevenDayReset);
-  lv_obj_set_pos(text(parent, reset5h.c_str(), &lv_font_montserrat_10, BLACK), PAD, y + 60);
-  lv_obj_set_pos(text(parent, reset7d.c_str(), &lv_font_montserrat_10, BLACK), PAD, y + 72);
+  // Up to ~195 px at the longest ("WED 30 Sep ... in 4h 59m"), so these start nearer the edge
+  const String reset5h = formatResetLine(screen, account, "5H resets", account.fiveHourReset);
+  const String reset7d = formatResetLine(screen, account, "7D resets", account.sevenDayReset);
+  lv_obj_set_pos(text(parent, reset5h.c_str(), &lv_font_montserrat_10, BLACK), RESET_LINE_X, y + 60);
+  lv_obj_set_pos(text(parent, reset7d.c_str(), &lv_font_montserrat_10, BLACK), RESET_LINE_X, y + 72);
 }
 
-// One window in the single-account view: large %, badge, thin bar, "Resets in ..."
+// One window in the single-account view: window name ("5H") left and large % right in the same
+// style, thin bar, "<refresh icon> Sat 3 Oct 01:10 in ..."
 void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const AccountUsage &account,
-                  const char *badgeText, float percent, uint32_t reset)
+                  const char *windowName, float percent, uint32_t reset)
 {
-  lv_obj_set_pos(text(parent, formatPercent(account, percent).c_str(), &lv_font_montserrat_28, BLACK), PAD, y);
+  lv_obj_set_pos(text(parent, windowName, &lv_font_montserrat_28, BLACK), PAD, y);
+  textRight(parent, formatPercent(account, percent).c_str(), &lv_font_montserrat_28, BLACK, WIDTH - PAD, y);
 
-  lv_obj_t *badge = box(parent, WIDTH - PAD - 28, y + 6, 28, 18, BLACK);
-  lv_obj_set_style_radius(badge, 5, 0);
-  lv_obj_center(text(badge, badgeText, &lv_font_montserrat_12, WHITE));
-
-  lv_obj_t *track = box(parent, PAD, y + 32, CONTENT_W, THIN_BAR_H, WHITE);
+  lv_obj_t *track = box(parent, PAD, y + SINGLE_BAR_Y_OFFSET, CONTENT_W, THIN_BAR_H, WHITE);
   lv_obj_set_style_border_width(track, 1, 0);
   lv_obj_set_style_border_color(track, BLACK, 0);
   const int fillW = lroundf((CONTENT_W - 2) * clampPercent(percent) / 100.0f);
@@ -204,19 +316,22 @@ void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const Acco
     box(track, 0, 0, fillW, THIN_BAR_H - 2, BLACK);
   }
 
-  const String resets = "Resets in " + formatCountdown(screen, account, reset);
-  lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), PAD, y + 43);
+  // A refresh icon instead of "Resets", and "Wed" rather than "WED", keep the longest form
+  // ("Wed 20 May 00:00 in 4h 48m") to ~195 px at 12 px, so it starts nearer the edge
+  const String resets = formatResetLine(screen, account, LV_SYMBOL_REFRESH, reset, DayCase::Title);
+  lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
 }
 
 void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
 {
   const AccountUsage &account = screen.accounts[index];
   const int y = STATUS_BAR_H + 4;
-  lv_obj_set_pos(text(parent, screen.names[index].c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
+  lv_obj_set_pos(text(parent, screen.names[index].c_str(), &lv_font_montserrat_16, BLACK), PAD, y);
   textRight(parent, formatAge(screen, account).c_str(), &lv_font_montserrat_10, BLACK, WIDTH - PAD, y + 2);
 
-  singleWindow(parent, y + 22, screen, account, "5H", account.fiveHourPercent, account.fiveHourReset);
-  singleWindow(parent, y + 92, screen, account, "7D", account.sevenDayPercent, account.sevenDayReset);
+  const int y5h = y + 22;
+  singleWindow(parent, y5h, screen, account, "5H", account.fiveHourPercent, account.fiveHourReset);
+  singleWindow(parent, y5h + SINGLE_WINDOW_PITCH, screen, account, "7D", account.sevenDayPercent, account.sevenDayReset);
 }
 
 lv_obj_t *clearScreen()
@@ -258,5 +373,10 @@ void meterUiShow(const MeterScreen &screen)
   case MeterView::Account2:
     singleView(root, screen, 1);
     break;
+  }
+
+  if (screen.popupTitle)
+  {
+    popup(root, screen.popupTitle, screen.popupBody);
   }
 }

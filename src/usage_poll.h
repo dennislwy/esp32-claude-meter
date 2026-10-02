@@ -21,6 +21,8 @@ struct PollReport
 {
   bool configured;    // Wi-Fi set and at least one token
   bool wifiConnected;
+  int8_t wifiRssi;    // dBm, when connected
+  uint8_t wifiStatus; // wl_status_t when the connection failed, e.g. WL_NO_SSID_AVAIL
   bool clockSynced;   // NTP ran and succeeded
   int accountsOk;
   int accountsFailed;
@@ -32,6 +34,9 @@ PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf850
 
 // Serial printout of the cached usage, with countdowns from the current system time
 void printUsage(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT]);
+
+// Diagnostic: lists the Wi-Fi networks in range, flagging the saved SSID
+void runWifiScan();
 
 // Diagnostic: opens a TLS connection to api.anthropic.com without verification, prints the
 // certificate chain the server presents, then disconnects. Sends no request and no token.

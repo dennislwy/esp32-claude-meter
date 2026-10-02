@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <LittleFS.h>
+#include <WiFi.h>
 #include <Wire.h>
 #include <esp_sleep.h>
 #include <lvgl.h>
@@ -14,7 +15,6 @@
 #include "meter_ui.h"
 #include "pcf85063.h"
 #include "settings.h"
-#include "shtc3.h"
 #include "usage_poll.h"
 
 // How the meter runs:
@@ -34,6 +34,8 @@ constexpr uint32_t MIN_SLEEP_S = 1;
 constexpr time_t NTP_RESYNC_S = 6 * 3600;
 // A full (flashing) refresh after this many partial ones clears e-paper ghosting
 constexpr uint16_t FULL_REFRESH_EVERY = 60;
+constexpr uint8_t SHTC3_ADDRESS = 0x70;
+constexpr uint16_t SHTC3_CMD_SLEEP = 0xB098;
 
 // RTC memory survives deep sleep
 RTC_DATA_ATTR uint8_t savedFrame[Epaper::FRAME_BYTES]; // image left on the panel, for partial refresh on wake
@@ -44,6 +46,10 @@ RTC_DATA_ATTR time_t lastNtpSync = 0;
 RTC_DATA_ATTR uint16_t partialRefreshes = 0;
 RTC_DATA_ATTR uint32_t wakeCount = 0;
 RTC_DATA_ATTR bool debugMode = false;
+// Result of the last poll's Wi-Fi connection, for the status bar icon and the failure popup
+RTC_DATA_ATTR WifiState wifiState = WifiState::Unknown;
+RTC_DATA_ATTR int8_t wifiRssi = 0;
+RTC_DATA_ATTR uint8_t wifiFailStatus = 0;
 
 Pcf85063 rtc;
 Battery battery(PIN_BATTERY_ADC, BATTERY_DIVIDER_RATIO);
@@ -123,6 +129,32 @@ void refreshPanel()
   lv_refr_now(nullptr);
 }
 
+// The SHTC3 temperature sensor isn't used, but it powers up idle (~45 uA). Its sleep command
+// drops it to ~0.3 uA.
+void sleepTemperatureSensor()
+{
+  Wire.beginTransmission(SHTC3_ADDRESS);
+  Wire.write(SHTC3_CMD_SLEEP >> 8);
+  Wire.write(SHTC3_CMD_SLEEP & 0xFF);
+  Wire.endTransmission();
+}
+
+// Most likely cause, from the Wi-Fi status at the connect timeout
+const char *wifiFailReason(uint8_t status)
+{
+  switch (status)
+  {
+  case WL_NO_SSID_AVAIL:
+    return "Network not found";
+  case WL_CONNECT_FAILED:
+    return "Connection refused - check the password";
+  case WL_CONNECTION_LOST:
+    return "Connection lost";
+  default:
+    return "No response - check the password and signal";
+  }
+}
+
 void render()
 {
   MeterScreen screen = {};
@@ -139,9 +171,25 @@ void render()
   screen.now = time(nullptr);
   screen.clockValid = clockValid();
   screen.batteryPercent = Battery::percentFromMillivolts(battery.readMillivolts());
+  screen.wifiState = wifiState;
+  screen.wifiRssi = wifiRssi;
   if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
   {
     screen.notice = "Setup needed\nConnect USB and type help in the serial monitor";
+  }
+  else if (wifiState == WifiState::Failed)
+  {
+    screen.popupTitle = "Wi-Fi connect failed";
+    screen.popupBody = "\"" + settings::wifiSsid() + "\"\n" + wifiFailReason(wifiFailStatus);
+    if (screen.clockValid)
+    {
+      const time_t retry = nextPollAt;
+      struct tm local;
+      localtime_r(&retry, &local);
+      char at[8];
+      strftime(at, sizeof(at), "%H:%M", &local);
+      screen.popupBody += String("\nRetry at ") + at;
+    }
   }
   meterUiShow(screen);
   refreshPanel();
@@ -155,6 +203,20 @@ void poll()
   if (report.clockSynced)
   {
     lastNtpSync = time(nullptr);
+  }
+  if (!report.configured)
+  {
+    wifiState = WifiState::Unknown;
+  }
+  else if (report.wifiConnected)
+  {
+    wifiState = WifiState::Connected;
+    wifiRssi = report.wifiRssi;
+  }
+  else
+  {
+    wifiState = WifiState::Failed;
+    wifiFailStatus = report.wifiStatus;
   }
   // Schedule from when the poll started, so the interval doesn't drift by the poll's own duration
   nextPollAt = time(nullptr) - (millis() - start) / 1000 + settings::pollIntervalMinutes() * 60;
@@ -209,6 +271,8 @@ void printHelp()
   Serial.println("  warn5h <50-99>             5-hour warning sound threshold % (default 80)");
   Serial.println("  warn7d <50-99>             7-day warning sound threshold % (default 90)");
   Serial.println("  alerts                     show which alerts have fired; \"alerts clear\" re-arms them");
+  Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
+  Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT or PWR on USB returns)");
   Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT turns it back on)");
   Serial.println("  rtc                        read the RTC chip, compare with the system clock, last NTP sync");
@@ -220,6 +284,7 @@ void printHelp()
   Serial.println("  account1 <name>            name account 1 (default \"Claude 1\"), max 20 chars");
   Serial.println("  account2 <name>            name account 2 (default \"Claude 2\"); \"clear\" restores the default");
   Serial.println("  creds                      show saved credentials, masked");
+  Serial.println("  scan                       list Wi-Fi networks in range, flagging the saved SSID");
   Serial.println("  tlscheck                   show api.anthropic.com's certificate chain (sends no token)");
   Serial.println("  files                      list the file system");
   Serial.println("  play <file>                play a WAV, e.g. play 5h-warning.wav");
@@ -245,6 +310,7 @@ void printStatus()
   Serial.printf("View:      %s\n", viewName(view));
   Serial.printf("Interval:  %u min, next poll in %ld s\n", settings::pollIntervalMinutes(), (long)nextPollAt - (long)now);
   Serial.printf("Warnings:  5h at %u%%, 7d at %u%%\n", settings::warningPercent5h(), settings::warningPercent7d());
+  Serial.printf("Quiet:     %02u:00-%02u:00 (%s)\n", settings::quietHoursStart(), settings::quietHoursEnd(), settings::quietHoursEnabled() ? "on" : "off");
 }
 
 void listFiles()
@@ -422,6 +488,26 @@ void runCommand(const String &line)
   {
     printAlertState();
   }
+  else if (line == "quiet on" || line == "quiet off")
+  {
+    settings::setQuietHoursEnabled(line.endsWith("on"));
+    Serial.printf("Quiet hours %s (%02u:00-%02u:00)\n", settings::quietHoursEnabled() ? "on" : "off",
+                  settings::quietHoursStart(), settings::quietHoursEnd());
+  }
+  else if (line.startsWith("quiet "))
+  {
+    int startHour, endHour;
+    if (sscanf(line.c_str(), "quiet %d-%d", &startHour, &endHour) != 2 ||
+        startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23)
+    {
+      Serial.println("Usage: quiet <start>-<end> in 24h local time, e.g. quiet 22-8");
+    }
+    else
+    {
+      settings::setQuietHours(startHour, endHour);
+      Serial.printf("Quiet hours %02u:00-%02u:00 (%s)\n", startHour, endHour, settings::quietHoursEnabled() ? "on" : "off");
+    }
+  }
   else if (line == "alerts clear")
   {
     clearAlertState();
@@ -483,6 +569,10 @@ void runCommand(const String &line)
       Serial.printf("Account %d:      \"%s\", token %s\n", number, settings::accountName(number).c_str(),
                     settings::mask(settings::claudeToken(number)).c_str());
     }
+  }
+  else if (line == "scan")
+  {
+    runWifiScan();
   }
   else if (line == "tlscheck")
   {
@@ -683,8 +773,7 @@ void setup()
   delay(10);
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  // The SHTC3 isn't used, but it powers up idle (~45 uA); put it in its ~0.3 uA sleep state
-  Shtc3().sleep();
+  sleepTemperatureSensor();
   if (!rtc.begin())
   {
     Serial.println("PCF85063 not responding");

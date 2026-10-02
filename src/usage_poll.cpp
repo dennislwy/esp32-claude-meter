@@ -83,11 +83,13 @@ PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf850
   }
 
   report.wifiConnected = connectWifi();
+  report.wifiStatus = WiFi.status();
   if (!report.wifiConnected)
   {
     wifiOff();
     return report;
   }
+  report.wifiRssi = WiFi.RSSI();
   // TLS certificate checks need a correct clock
   if (syncClock || !clockValid())
   {
@@ -156,6 +158,28 @@ void printUsage(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT])
       Serial.printf("  last poll failed (HTTP %d), showing earlier data\n", account.lastStatus);
     }
   }
+}
+
+void runWifiScan()
+{
+  const String saved = settings::wifiSsid();
+  WiFi.mode(WIFI_STA);
+  const int count = WiFi.scanNetworks();
+  if (count < 0)
+  {
+    Serial.println("Wi-Fi scan failed");
+  }
+  bool found = false;
+  for (int i = 0; i < count; i++)
+  {
+    const bool isSaved = WiFi.SSID(i) == saved;
+    found |= isSaved;
+    Serial.printf("  %-32s %4d dBm  ch %2d  %s%s\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i),
+                  WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "open" : "secured", isSaved ? "  <- saved" : "");
+  }
+  Serial.printf("%d networks; saved SSID \"%s\" %s\n", count < 0 ? 0 : count, saved.c_str(), found ? "in range" : "NOT found");
+  WiFi.scanDelete();
+  wifiOff();
 }
 
 void runTlsCheck()

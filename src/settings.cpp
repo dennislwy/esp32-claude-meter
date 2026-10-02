@@ -6,6 +6,9 @@ namespace
 {
 const char *const NAMESPACE = "meter";
 const char *const KEY_WIFI_SSID = "wifi_ssid";
+const char *const KEY_QUIET_ENABLED = "quiet_on";
+const char *const KEY_QUIET_START = "quiet_start";
+const char *const KEY_QUIET_END = "quiet_end";
 const char *const KEY_WIFI_PASSWORD = "wifi_pass";
 const char *const KEY_POLL_INTERVAL = "poll_minutes";
 const char *const KEY_WARNING_5H = "warn_5h";
@@ -89,6 +92,49 @@ void setWarningPercent5h(uint8_t percent)
 void setWarningPercent7d(uint8_t percent)
 {
   storeByte(KEY_WARNING_7D, percent, WARNING_PERCENT_MIN, WARNING_PERCENT_MAX);
+}
+
+bool quietHoursEnabled()
+{
+  Preferences prefs;
+  prefs.begin(NAMESPACE, false);
+  // Default on, per R4a
+  const bool enabled = prefs.isKey(KEY_QUIET_ENABLED) ? prefs.getBool(KEY_QUIET_ENABLED) : true;
+  prefs.end();
+  return enabled;
+}
+
+uint8_t quietHoursStart() { return loadByte(KEY_QUIET_START, QUIET_HOUR_START_DEFAULT, 0, 23); }
+uint8_t quietHoursEnd() { return loadByte(KEY_QUIET_END, QUIET_HOUR_END_DEFAULT, 0, 23); }
+
+void setQuietHoursEnabled(bool enabled)
+{
+  Preferences prefs;
+  prefs.begin(NAMESPACE, false);
+  prefs.putBool(KEY_QUIET_ENABLED, enabled);
+  prefs.end();
+}
+
+void setQuietHours(uint8_t startHour, uint8_t endHour)
+{
+  storeByte(KEY_QUIET_START, startHour, 0, 23);
+  storeByte(KEY_QUIET_END, endHour, 0, 23);
+}
+
+bool isQuietHour(uint8_t localHour)
+{
+  if (!quietHoursEnabled())
+  {
+    return false;
+  }
+  const uint8_t start = quietHoursStart();
+  const uint8_t end = quietHoursEnd();
+  if (start == end)
+  {
+    return false;
+  }
+  // The window wraps past midnight when the end hour is earlier than the start
+  return start < end ? (localHour >= start && localHour < end) : (localHour >= start || localHour < end);
 }
 
 String wifiSsid() { return load(KEY_WIFI_SSID); }

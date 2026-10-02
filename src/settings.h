@@ -33,6 +33,18 @@ uint8_t warningPercent7d();
 void setWarningPercent5h(uint8_t percent);
 void setWarningPercent7d(uint8_t percent);
 
+// Quiet hours: no sounds play when the local hour is in [start, end) (wrapping past midnight)
+constexpr uint8_t QUIET_HOUR_START_DEFAULT = 22;
+constexpr uint8_t QUIET_HOUR_END_DEFAULT = 8;
+bool quietHoursEnabled();
+uint8_t quietHoursStart();
+uint8_t quietHoursEnd();
+void setQuietHoursEnabled(bool enabled);
+// Hours 0-23; start == end disables the window; writes outside that range are clamped
+void setQuietHours(uint8_t startHour, uint8_t endHour);
+// True when the given local hour (0-23) is inside the quiet window
+bool isQuietHour(uint8_t localHour);
+
 void setWifiSsid(const String &value);
 void setWifiPassword(const String &value);
 void setClaudeToken(int number, const String &value);

@@ -12,6 +12,14 @@ enum class MeterView : uint8_t
   Account2,
 };
 
+// Result of the last poll's Wi-Fi connection (Wi-Fi is off between polls)
+enum class WifiState : uint8_t
+{
+  Unknown, // not tried yet, or not configured: no icon
+  Connected,
+  Failed,
+};
+
 struct MeterScreen
 {
   const AccountUsage *accounts; // settings::CLAUDE_TOKEN_COUNT entries
@@ -20,7 +28,11 @@ struct MeterScreen
   time_t now;
   bool clockValid;
   uint8_t batteryPercent;
+  WifiState wifiState;
+  int8_t wifiRssi; // dBm, when connected
   const char *notice; // shown instead of the account(s) when set, e.g. setup instructions
+  const char *popupTitle; // when set, a box centred over the view, e.g. a Wi-Fi failure
+  String popupBody;
 };
 
 // Rebuilds the LVGL screen. The caller refreshes the panel (lv_refr_now).
