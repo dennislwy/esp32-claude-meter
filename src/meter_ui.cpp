@@ -1,6 +1,7 @@
 #include "meter_ui.h"
 
 #include <lvgl.h>
+#include "history.h"
 
 extern "C" const lv_image_dsc_t claude_icon;
 
@@ -322,6 +323,38 @@ void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const Acco
   lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
 }
 
+// Phase A stub: title + axis frame only. Phase B fills in the chart.
+void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
+{
+  const int y = STATUS_BAR_H + 4;
+  const String title = screen.names[index] + " - 7-day history";
+  lv_obj_set_pos(text(parent, title.c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
+
+  constexpr int CHART_TOP = STATUS_BAR_H + 24;
+  constexpr int CHART_BOTTOM = HEIGHT - 16;
+  constexpr int CHART_LEFT = PAD + 2;
+  constexpr int CHART_RIGHT = WIDTH - PAD - 2;
+  // Axis frame: horizontal baseline + vertical left edge for the eventual plot
+  box(parent, CHART_LEFT, CHART_BOTTOM, CHART_RIGHT - CHART_LEFT, 1, BLACK);
+  box(parent, CHART_LEFT, CHART_TOP, 1, CHART_BOTTOM - CHART_TOP, BLACK);
+
+  // Placeholder caption until Phase B draws the lines
+  HistSlot buf[HIST_SLOTS];
+  uint32_t newest = 0;
+  historySnapshot(index, buf, newest);
+  uint16_t filled = 0;
+  for (uint16_t i = 0; i < HIST_SLOTS; i++)
+  {
+    if (buf[i].h5 != HIST_EMPTY || buf[i].d7 != HIST_EMPTY)
+    {
+      filled++;
+    }
+  }
+  const String caption = "(chart pending) " + String(filled) + " / " + String(HIST_SLOTS) + " slots";
+  lv_obj_t *note = text(parent, caption.c_str(), &lv_font_montserrat_10, BLACK);
+  lv_obj_align(note, LV_ALIGN_CENTER, 0, 0);
+}
+
 void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
 {
   const AccountUsage &account = screen.accounts[index];
@@ -370,8 +403,14 @@ void meterUiShow(const MeterScreen &screen)
   case MeterView::Account1:
     singleView(root, screen, 0);
     break;
+  case MeterView::Account1History:
+    historyView(root, screen, 0);
+    break;
   case MeterView::Account2:
     singleView(root, screen, 1);
+    break;
+  case MeterView::Account2History:
+    historyView(root, screen, 1);
     break;
   }
 

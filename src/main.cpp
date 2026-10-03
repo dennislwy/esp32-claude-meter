@@ -85,18 +85,35 @@ bool viewAvailable(MeterView candidate)
     return accountConfigured(0) && accountConfigured(1);
   case MeterView::Account1:
     return accountConfigured(0);
+  case MeterView::Account1History:
+    return accountConfigured(0) && historyHasData(0);
   case MeterView::Account2:
     return accountConfigured(1);
+  case MeterView::Account2History:
+    return accountConfigured(1) && historyHasData(1);
   }
   return false;
 }
 
+// Cycle: Dual -> Account1 -> Account1History -> Account2 -> Account2History -> Dual
+// Views that aren't available (no token, or no history yet) are skipped.
 MeterView nextView(MeterView current)
 {
-  MeterView candidate = current;
-  for (int i = 0; i < 3; i++)
+  static const MeterView ORDER[] = {MeterView::Dual, MeterView::Account1, MeterView::Account1History,
+                                    MeterView::Account2, MeterView::Account2History};
+  constexpr int ORDER_SIZE = sizeof(ORDER) / sizeof(ORDER[0]);
+  int startIndex = 0;
+  for (int i = 0; i < ORDER_SIZE; i++)
   {
-    candidate = candidate == MeterView::Dual ? MeterView::Account1 : candidate == MeterView::Account1 ? MeterView::Account2 : MeterView::Dual;
+    if (ORDER[i] == current)
+    {
+      startIndex = i;
+      break;
+    }
+  }
+  for (int step = 1; step <= ORDER_SIZE; step++)
+  {
+    const MeterView candidate = ORDER[(startIndex + step) % ORDER_SIZE];
     if (viewAvailable(candidate))
     {
       return candidate;
@@ -107,7 +124,20 @@ MeterView nextView(MeterView current)
 
 const char *viewName(MeterView value)
 {
-  return value == MeterView::Dual ? "dual" : value == MeterView::Account1 ? "account 1" : "account 2";
+  switch (value)
+  {
+  case MeterView::Dual:
+    return "dual";
+  case MeterView::Account1:
+    return "account 1";
+  case MeterView::Account1History:
+    return "account 1 history";
+  case MeterView::Account2:
+    return "account 2";
+  case MeterView::Account2History:
+    return "account 2 history";
+  }
+  return "?";
 }
 
 // A USB host sends a start-of-frame every millisecond, whether or not a terminal has the port open

@@ -174,6 +174,22 @@ void historySnapshot(int account, HistSlot *out, uint32_t &newestEpoch)
   }
 }
 
+bool historyHasData(int account)
+{
+  if (account < 0 || account >= settings::CLAUDE_TOKEN_COUNT || hist.lastAbsSlot == 0)
+  {
+    return false;
+  }
+  for (uint16_t i = 0; i < HIST_SLOTS; i++)
+  {
+    if (hist.ring[account][i].h5 != HIST_EMPTY || hist.ring[account][i].d7 != HIST_EMPTY)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 void printHistoryState()
 {
   if (!fsOk)

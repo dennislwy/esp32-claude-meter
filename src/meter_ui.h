@@ -7,9 +7,11 @@
 
 enum class MeterView : uint8_t
 {
-  Dual,     // both accounts, Layout #2 (two cards with split bars)
-  Account1, // one account, Layout #1 style (large % per window)
+  Dual,            // both accounts, Layout #2 (two cards with split bars)
+  Account1,        // one account, Layout #1 style (large % per window)
+  Account1History, // 7-day line chart for account 1
   Account2,
+  Account2History, // 7-day line chart for account 2
 };
 
 // Result of the last poll's Wi-Fi connection (Wi-Fi is off between polls)

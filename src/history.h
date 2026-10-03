@@ -31,6 +31,10 @@ bool historySlotAdvancedTake();
 // the newest slot. account is 0..CLAUDE_TOKEN_COUNT-1.
 void historySnapshot(int account, HistSlot *out, uint32_t &newestEpoch);
 
+// True when the account has at least one recorded sample (used to hide the
+// chart view until there's something to draw)
+bool historyHasData(int account);
+
 // Serial dump: coverage per account and newest-slot timestamp
 void printHistoryState();
 
