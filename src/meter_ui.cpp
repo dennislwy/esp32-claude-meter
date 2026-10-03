@@ -323,36 +323,138 @@ void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const Acco
   lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
 }
 
-// Phase A stub: title + axis frame only. Phase B fills in the chart.
+// Chart geometry (used by historyView and chartSeries)
+constexpr int CHART_COLS = HIST_SLOTS / 2;    // 168 columns, 1 col = 1 hour
+constexpr int CHART_LEFT = 16;
+constexpr int CHART_RIGHT = CHART_LEFT + CHART_COLS; // 184
+constexpr int CHART_TOP = 50;
+constexpr int CHART_BOTTOM = 170;
+constexpr int CHART_H = CHART_BOTTOM - CHART_TOP; // 120 px
+
+// Static point buffers survive each UI rebuild; LVGL stores the pointer in lv_line
+lv_point_precise_t points5h[CHART_COLS];
+lv_point_precise_t points7d[CHART_COLS];
+
+int chartY(uint8_t value)
+{
+  const int clamped = value > 100 ? 100 : value;
+  return CHART_BOTTOM - (clamped * CHART_H) / 100;
+}
+
+// Draws one series as a sequence of lv_line widgets, breaking at HIST_EMPTY gaps.
+// buf is a static buffer the caller owns; segments share slices of it.
+void chartSeries(lv_obj_t *parent, lv_point_precise_t *buf, const uint8_t *values, int lineWidth)
+{
+  int bufIdx = 0;
+  int segStart = -1;
+  for (int i = 0; i < CHART_COLS; i++)
+  {
+    if (values[i] != HIST_EMPTY)
+    {
+      buf[bufIdx].x = CHART_LEFT + i;
+      buf[bufIdx].y = chartY(values[i]);
+      if (segStart < 0)
+      {
+        segStart = bufIdx;
+      }
+      bufIdx++;
+      continue;
+    }
+    if (segStart >= 0 && bufIdx - segStart >= 2)
+    {
+      lv_obj_t *line = lv_line_create(parent);
+      lv_line_set_points(line, buf + segStart, bufIdx - segStart);
+      lv_obj_set_style_line_color(line, BLACK, 0);
+      lv_obj_set_style_line_width(line, lineWidth, 0);
+    }
+    segStart = -1;
+  }
+  if (segStart >= 0 && bufIdx - segStart >= 2)
+  {
+    lv_obj_t *line = lv_line_create(parent);
+    lv_line_set_points(line, buf + segStart, bufIdx - segStart);
+    lv_obj_set_style_line_color(line, BLACK, 0);
+    lv_obj_set_style_line_width(line, lineWidth, 0);
+  }
+}
+
 void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
 {
   const int y = STATUS_BAR_H + 4;
-  const String title = screen.names[index] + " - 7-day history";
+  const String title = screen.names[index] + " - 7-day";
   lv_obj_set_pos(text(parent, title.c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
 
-  constexpr int CHART_TOP = STATUS_BAR_H + 24;
-  constexpr int CHART_BOTTOM = HEIGHT - 16;
-  constexpr int CHART_LEFT = PAD + 2;
-  constexpr int CHART_RIGHT = WIDTH - PAD - 2;
-  // Axis frame: horizontal baseline + vertical left edge for the eventual plot
-  box(parent, CHART_LEFT, CHART_BOTTOM, CHART_RIGHT - CHART_LEFT, 1, BLACK);
-  box(parent, CHART_LEFT, CHART_TOP, 1, CHART_BOTTOM - CHART_TOP, BLACK);
+  // Legend top-right: "5H" with a thin line sample, "7D" with a thick one
+  lv_obj_set_pos(text(parent, "5H", &lv_font_montserrat_10, BLACK), 118, y + 4);
+  box(parent, 134, y + 10, 14, 1, BLACK);
+  lv_obj_set_pos(text(parent, "7D", &lv_font_montserrat_10, BLACK), 156, y + 4);
+  box(parent, 172, y + 9, 14, 2, BLACK);
 
-  // Placeholder caption until Phase B draws the lines
+  // L-shaped axis frame: bottom baseline + left vertical
+  box(parent, CHART_LEFT, CHART_BOTTOM, CHART_RIGHT - CHART_LEFT + 1, 1, BLACK);
+  box(parent, CHART_LEFT, CHART_TOP, 1, CHART_BOTTOM - CHART_TOP, BLACK);
+  // Tick marks on the left axis at 50% and 100%
+  box(parent, CHART_LEFT - 2, chartY(50), 3, 1, BLACK);
+  box(parent, CHART_LEFT - 2, chartY(100), 3, 1, BLACK);
+  // Scale labels at the right edge so they don't cut into the plot
+  lv_obj_set_pos(text(parent, "100", &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, chartY(100) - 5);
+  lv_obj_set_pos(text(parent, "50", &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, chartY(50) - 5);
+  lv_obj_set_pos(text(parent, "0", &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, chartY(0) - 5);
+
+  // Snapshot and downsample to one column per hour, max of the two 30-min samples
   HistSlot buf[HIST_SLOTS];
   uint32_t newest = 0;
   historySnapshot(index, buf, newest);
-  uint16_t filled = 0;
-  for (uint16_t i = 0; i < HIST_SLOTS; i++)
+  uint8_t cols5h[CHART_COLS];
+  uint8_t cols7d[CHART_COLS];
+  for (int c = 0; c < CHART_COLS; c++)
   {
-    if (buf[i].h5 != HIST_EMPTY || buf[i].d7 != HIST_EMPTY)
+    const HistSlot &a = buf[c * 2];
+    const HistSlot &b = buf[c * 2 + 1];
+    uint8_t h5 = HIST_EMPTY;
+    if (a.h5 != HIST_EMPTY)
     {
-      filled++;
+      h5 = a.h5;
+    }
+    if (b.h5 != HIST_EMPTY && (h5 == HIST_EMPTY || b.h5 > h5))
+    {
+      h5 = b.h5;
+    }
+    uint8_t d7 = HIST_EMPTY;
+    if (a.d7 != HIST_EMPTY)
+    {
+      d7 = a.d7;
+    }
+    if (b.d7 != HIST_EMPTY && (d7 == HIST_EMPTY || b.d7 > d7))
+    {
+      d7 = b.d7;
+    }
+    cols5h[c] = h5;
+    cols7d[c] = d7;
+  }
+
+  chartSeries(parent, points5h, cols5h, 1);
+  chartSeries(parent, points7d, cols7d, 2);
+
+  // Day-of-week labels, right-aligned so "now" sits at the right edge of the chart
+  if (newest != 0)
+  {
+    static const char *const SHORT_DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    for (int d = 0; d < 7; d++)
+    {
+      // One day = 24 columns; label the midpoint of each day's slice
+      const int colCentre = CHART_COLS - 1 - d * 24 - 12;
+      if (colCentre < 0)
+      {
+        break;
+      }
+      const time_t t = (time_t)newest - (time_t)(d * 86400) - 43200;
+      struct tm local;
+      localtime_r(&t, &local);
+      lv_obj_t *label = text(parent, SHORT_DAYS[local.tm_wday], &lv_font_montserrat_10, BLACK);
+      lv_obj_set_pos(label, CHART_LEFT + colCentre - 7, CHART_BOTTOM + 3);
     }
   }
-  const String caption = "(chart pending) " + String(filled) + " / " + String(HIST_SLOTS) + " slots";
-  lv_obj_t *note = text(parent, caption.c_str(), &lv_font_montserrat_10, BLACK);
-  lv_obj_align(note, LV_ALIGN_CENTER, 0, 0);
 }
 
 void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
