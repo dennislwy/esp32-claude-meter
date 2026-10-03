@@ -323,10 +323,11 @@ void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const Acco
   lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
 }
 
-// Chart geometry (used by historyView and chartSeries)
+// Chart geometry (used by historyView and chartSeries). Shifted left so the right-side
+// y-axis labels ("100", "50", "0") fit within the 200-px panel.
 constexpr int CHART_COLS = HIST_SLOTS / 2;    // 168 columns, 1 col = 1 hour
-constexpr int CHART_LEFT = 16;
-constexpr int CHART_RIGHT = CHART_LEFT + CHART_COLS; // 184
+constexpr int CHART_LEFT = 6;
+constexpr int CHART_RIGHT = CHART_LEFT + CHART_COLS; // 174
 constexpr int CHART_TOP = 50;
 constexpr int CHART_BOTTOM = 170;
 constexpr int CHART_H = CHART_BOTTOM - CHART_TOP; // 120 px
@@ -393,13 +394,18 @@ void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
   // L-shaped axis frame: bottom baseline + left vertical
   box(parent, CHART_LEFT, CHART_BOTTOM, CHART_RIGHT - CHART_LEFT + 1, 1, BLACK);
   box(parent, CHART_LEFT, CHART_TOP, 1, CHART_BOTTOM - CHART_TOP, BLACK);
-  // Tick marks on the left axis at 50% and 100%
-  box(parent, CHART_LEFT - 2, chartY(50), 3, 1, BLACK);
-  box(parent, CHART_LEFT - 2, chartY(100), 3, 1, BLACK);
-  // Scale labels at the right edge so they don't cut into the plot
-  lv_obj_set_pos(text(parent, "100", &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, chartY(100) - 5);
-  lv_obj_set_pos(text(parent, "50", &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, chartY(50) - 5);
-  lv_obj_set_pos(text(parent, "0", &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, chartY(0) - 5);
+  // Y-axis: ticks and labels every 25 %
+  for (int pct = 0; pct <= 100; pct += 25)
+  {
+    const int yTick = chartY(pct);
+    if (pct > 0)
+    {
+      box(parent, CHART_LEFT - 2, yTick, 3, 1, BLACK);
+    }
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%d", pct);
+    lv_obj_set_pos(text(parent, buf, &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, yTick - 5);
+  }
 
   // Snapshot and downsample to one column per hour, max of the two 30-min samples
   HistSlot buf[HIST_SLOTS];
@@ -436,13 +442,13 @@ void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
   chartSeries(parent, points5h, cols5h, 1);
   chartSeries(parent, points7d, cols7d, 2);
 
-  // Day-of-week labels, right-aligned so "now" sits at the right edge of the chart
+  // X-axis: one-letter day labels with a tick mark at each (right-aligned so "now" is on the right)
   if (newest != 0)
   {
-    static const char *const SHORT_DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char *const DAY_INITIALS[] = {"S", "M", "T", "W", "T", "F", "S"};
     for (int d = 0; d < 7; d++)
     {
-      // One day = 24 columns; label the midpoint of each day's slice
+      // One day = 24 columns; place the tick at the midpoint of each day's slice
       const int colCentre = CHART_COLS - 1 - d * 24 - 12;
       if (colCentre < 0)
       {
@@ -451,8 +457,11 @@ void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
       const time_t t = (time_t)newest - (time_t)(d * 86400) - 43200;
       struct tm local;
       localtime_r(&t, &local);
-      lv_obj_t *label = text(parent, SHORT_DAYS[local.tm_wday], &lv_font_montserrat_10, BLACK);
-      lv_obj_set_pos(label, CHART_LEFT + colCentre - 7, CHART_BOTTOM + 3);
+      const int x = CHART_LEFT + colCentre;
+      box(parent, x, CHART_BOTTOM + 1, 1, 2, BLACK);
+      // Single letter is ~5 px wide; shift by -2 to centre under the tick
+      lv_obj_set_pos(text(parent, DAY_INITIALS[local.tm_wday], &lv_font_montserrat_10, BLACK),
+                     x - 2, CHART_BOTTOM + 4);
     }
   }
 }
