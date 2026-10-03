@@ -11,6 +11,7 @@
 #include "board_pins.h"
 #include "clock.h"
 #include "epaper.h"
+#include "history.h"
 #include "lvgl_port.h"
 #include "meter_ui.h"
 #include "pcf85063.h"
@@ -226,6 +227,7 @@ void poll()
 void pollAndShow()
 {
   poll();
+  historyRecord(usage);
   render();
   checkAlerts(usage, time(nullptr));
 }
@@ -271,6 +273,7 @@ void printHelp()
   Serial.println("  warn5h <50-99>             5-hour warning sound threshold % (default 80)");
   Serial.println("  warn7d <50-99>             7-day warning sound threshold % (default 90)");
   Serial.println("  alerts                     show which alerts have fired; \"alerts clear\" re-arms them");
+  Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
   Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT or PWR on USB returns)");
@@ -512,6 +515,15 @@ void runCommand(const String &line)
   {
     clearAlertState();
     Serial.println("Alert state cleared - the next poll alerts again for anything above a threshold");
+  }
+  else if (line == "history")
+  {
+    printHistoryState();
+  }
+  else if (line == "history clear")
+  {
+    historyErase();
+    Serial.println("History cleared");
   }
   else if (line == "view")
   {
@@ -779,6 +791,7 @@ void setup()
     Serial.println("PCF85063 not responding");
   }
   clockBegin(rtc);
+  historyInit();
 
   if (resumed)
   {
