@@ -6,14 +6,23 @@
 #include <driver/i2s.h>
 #include "board_pins.h"
 #include "es8311.h"
+#include "settings.h"
 
 namespace
 {
 constexpr i2s_port_t I2S_PORT = I2S_NUM_0;
-constexpr float VOLUME_DB = -3.0f;
 constexpr size_t CHUNK_FRAMES = 256;
 constexpr int DMA_BUF_COUNT = 4;
 constexpr int DMA_BUF_FRAMES = 256;
+
+// 0-100 percent → [-40, 0] dB. 0 % reads as effectively mute (-60 dB).
+float volumeDb()
+{
+  const uint8_t pct = settings::audioVolume();
+  if (pct == 0)
+    return -60.0f;
+  return -40.0f + pct * 40.0f / 100.0f;
+}
 
 struct WavInfo
 {
@@ -166,7 +175,7 @@ bool playWav(const char *path)
     return false;
   }
   codec.start(info.sampleRate);
-  codec.setVolume(VOLUME_DB);
+  codec.setVolume(volumeDb());
 
   // Amplifier only on while playing, to avoid hiss and save power
   pinMode(PIN_SPEAKER_AMP, OUTPUT);

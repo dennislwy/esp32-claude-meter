@@ -128,11 +128,13 @@ void checkAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], time
   // State is updated first so alerts don't catch up when quiet hours end; silence here is permanent
   struct tm local;
   localtime_r(&now, &local);
-  if (settings::isQuietHour(local.tm_hour))
+  if (settings::isQuietTime(local.tm_hour, local.tm_min))
   {
     if (soundCount > 0)
     {
-      Serial.printf("Quiet hours (%02u-%02u): %u alert sound(s) silenced\n", settings::quietHoursStart(), settings::quietHoursEnd(), (unsigned)soundCount);
+      Serial.printf("Quiet hours (%02u:%02u-%02u:%02u): %u alert sound(s) silenced\n",
+                    settings::quietHoursStart(), settings::quietMinuteStart(),
+                    settings::quietHoursEnd(), settings::quietMinuteEnd(), (unsigned)soundCount);
     }
     return;
   }

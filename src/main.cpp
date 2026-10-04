@@ -322,7 +322,7 @@ void printHelp()
   Serial.println("  alerts                     show which alerts have fired; \"alerts clear\" re-arms them");
   Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
-  Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8");
+  Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8 or quiet 22:30-7:15");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT+PWR or PWR on USB returns)");
   Serial.println("  panel                      toggle LAN control panel (same as long-press BOOT)");
   Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT+PWR turns it back on)");
@@ -361,7 +361,10 @@ void printStatus()
   Serial.printf("View:      %s\n", viewName(view));
   Serial.printf("Interval:  %u min, next poll in %ld s\n", settings::pollIntervalMinutes(), (long)nextPollAt - (long)now);
   Serial.printf("Warnings:  5h at %u%%, 7d at %u%%\n", settings::warningPercent5h(), settings::warningPercent7d());
-  Serial.printf("Quiet:     %02u:00-%02u:00 (%s)\n", settings::quietHoursStart(), settings::quietHoursEnd(), settings::quietHoursEnabled() ? "on" : "off");
+  Serial.printf("Quiet:     %02u:%02u-%02u:%02u (%s)\n",
+                settings::quietHoursStart(), settings::quietMinuteStart(),
+                settings::quietHoursEnd(), settings::quietMinuteEnd(),
+                settings::quietHoursEnabled() ? "on" : "off");
 }
 
 void listFiles()
@@ -542,21 +545,26 @@ void runCommand(const String &line)
   else if (line == "quiet on" || line == "quiet off")
   {
     settings::setQuietHoursEnabled(line.endsWith("on"));
-    Serial.printf("Quiet hours %s (%02u:00-%02u:00)\n", settings::quietHoursEnabled() ? "on" : "off",
-                  settings::quietHoursStart(), settings::quietHoursEnd());
+    Serial.printf("Quiet hours %s (%02u:%02u-%02u:%02u)\n", settings::quietHoursEnabled() ? "on" : "off",
+                  settings::quietHoursStart(), settings::quietMinuteStart(),
+                  settings::quietHoursEnd(), settings::quietMinuteEnd());
   }
   else if (line.startsWith("quiet "))
   {
-    int startHour, endHour;
-    if (sscanf(line.c_str(), "quiet %d-%d", &startHour, &endHour) != 2 ||
-        startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23)
+    int sh, sm = 0, eh, em = 0;
+    const int parsedHhMm = sscanf(line.c_str(), "quiet %d:%d-%d:%d", &sh, &sm, &eh, &em);
+    const int parsedH = parsedHhMm == 4 ? 4 : sscanf(line.c_str(), "quiet %d-%d", &sh, &eh);
+    const bool ok = (parsedHhMm == 4 || parsedH == 2) &&
+                    sh >= 0 && sh <= 23 && eh >= 0 && eh <= 23 && sm >= 0 && sm <= 59 && em >= 0 && em <= 59;
+    if (!ok)
     {
-      Serial.println("Usage: quiet <start>-<end> in 24h local time, e.g. quiet 22-8");
+      Serial.println("Usage: quiet <start>-<end> in 24h local time, e.g. quiet 22-8  or  quiet 22:30-7:15");
     }
     else
     {
-      settings::setQuietHours(startHour, endHour);
-      Serial.printf("Quiet hours %02u:00-%02u:00 (%s)\n", startHour, endHour, settings::quietHoursEnabled() ? "on" : "off");
+      settings::setQuietHours(sh, sm, eh, em);
+      Serial.printf("Quiet hours %02u:%02u-%02u:%02u (%s)\n", sh, sm, eh, em,
+                    settings::quietHoursEnabled() ? "on" : "off");
     }
   }
   else if (line == "alerts clear")
@@ -1004,6 +1012,13 @@ void loop()
   {
     panelService();
     const uint8_t act = panelTakeAction();
+    if (act & PANEL_ACT_REBOOT)
+    {
+      Serial.println("Panel: rebooting (user requested)");
+      Serial.flush();
+      delay(800); // let the HTTP response + any TCP close land
+      ESP.restart();
+    }
     if (act & PANEL_ACT_REFRESH)
     {
       pollAndShow();

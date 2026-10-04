@@ -3,11 +3,14 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include <esp_random.h>
-#include "settings.h"
-#include "panel_html.h"
+#include "audio_player.h"
 #include "battery.h"
 #include "board_pins.h"
+#include "history.h"
+#include "panel_html.h"
+#include "settings.h"
 
 namespace
 {
@@ -197,6 +200,7 @@ void handleState()
   d["ip"] = WiFi.localIP().toString();
   d["hostname"] = "claude-meter";
   d["uptime_s"] = (uint32_t)(millis() / 1000);
+  d["now_epoch"] = (uint32_t)time(nullptr);
   const uint32_t mv = battery.readMillivolts();
   d["battery_mv"] = mv;
   d["battery_pct"] = Battery::percentFromMillivolts(mv);
@@ -205,9 +209,12 @@ void handleState()
   d["poll_min"] = settings::pollIntervalMinutes();
   d["warn5"] = settings::warningPercent5h();
   d["warn7"] = settings::warningPercent7d();
-  d["quiet_start"] = settings::quietHoursStart();
-  d["quiet_end"] = settings::quietHoursEnd();
+  d["quiet_start_h"] = settings::quietHoursStart();
+  d["quiet_start_m"] = settings::quietMinuteStart();
+  d["quiet_end_h"] = settings::quietHoursEnd();
+  d["quiet_end_m"] = settings::quietMinuteEnd();
   d["quiet_on"] = settings::quietHoursEnabled();
+  d["audio_vol"] = settings::audioVolume();
 
   const time_t now = time(nullptr);
   JsonArray accounts = d["accounts"].to<JsonArray>();
@@ -220,6 +227,8 @@ void handleState()
     a["has_data"] = u && u->hasData;
     a["h5"] = u && u->hasData ? (int)u->fiveHourPercent : -1;
     a["d7"] = u && u->hasData ? (int)u->sevenDayPercent : -1;
+    a["h5_reset"] = u && u->hasData ? (uint32_t)u->fiveHourReset : 0;
+    a["d7_reset"] = u && u->hasData ? (uint32_t)u->sevenDayReset : 0;
     const long age = u && u->hasData ? (long)(now - (long)u->fetchedAt) : -1;
     a["age"] = age < 0 ? String("no data") : (age < 60 ? String("just now") : String(age / 60) + " m ago");
   }
@@ -241,10 +250,18 @@ void handleSettings()
     settings::setWarningPercent5h(body["warn5"].as<int>());
   if (body["warn7"].is<int>())
     settings::setWarningPercent7d(body["warn7"].as<int>());
-  if (body["quiet_start"].is<int>() && body["quiet_end"].is<int>())
-    settings::setQuietHours(body["quiet_start"].as<int>(), body["quiet_end"].as<int>());
+  if (body["quiet_start_h"].is<int>() && body["quiet_end_h"].is<int>())
+  {
+    const int sh = body["quiet_start_h"].as<int>();
+    const int sm = body["quiet_start_m"].is<int>() ? body["quiet_start_m"].as<int>() : 0;
+    const int eh = body["quiet_end_h"].as<int>();
+    const int em = body["quiet_end_m"].is<int>() ? body["quiet_end_m"].as<int>() : 0;
+    settings::setQuietHours(sh, sm, eh, em);
+  }
   if (!body["quiet_on"].isNull())
     settings::setQuietHoursEnabled(body["quiet_on"].as<bool>());
+  if (body["audio_vol"].is<int>())
+    settings::setAudioVolume(body["audio_vol"].as<int>());
   pendingActions |= PANEL_ACT_SETTINGS_SAVED;
   JsonDocument d;
   d["ok"] = true;
@@ -302,6 +319,169 @@ void handleRefresh()
   sendJson(200, d);
 }
 
+// Allowed test-play WAVs — kept in a whitelist so a crafted JSON body can't
+// probe arbitrary paths on LittleFS.
+const char *const ALLOWED_SOUNDS[] = {
+    "5h-warning.wav", "5h-depleted.wav", "5h-reset.wav",
+    "7d-warning.wav", "7d-depleted.wav", "7d-reset.wav",
+};
+constexpr size_t ALLOWED_SOUND_COUNT = sizeof(ALLOWED_SOUNDS) / sizeof(ALLOWED_SOUNDS[0]);
+
+void handleSoundsPlay()
+{
+  if (!requireAuth())
+    return;
+  JsonDocument body;
+  if (!readJsonBody(body))
+    return;
+  const char *file = body["file"] | "";
+  bool allowed = false;
+  for (size_t i = 0; i < ALLOWED_SOUND_COUNT; i++)
+  {
+    if (strcmp(file, ALLOWED_SOUNDS[i]) == 0)
+    {
+      allowed = true;
+      break;
+    }
+  }
+  if (!allowed)
+  {
+    sendErr(400, "unknown_sound");
+    return;
+  }
+  const String path = String("/") + file;
+  const bool ok = playWav(path.c_str());
+  JsonDocument d;
+  d["ok"] = ok;
+  if (!ok)
+    d["error"] = "play_failed";
+  sendJson(ok ? 200 : 500, d);
+}
+
+void handleHistory()
+{
+  if (!requireAuth())
+    return;
+  constexpr int COLS = HIST_SLOTS / 2; // 168 one-hour columns
+  HistSlot buf[HIST_SLOTS];
+  JsonDocument d;
+  d["cols"] = COLS;
+  d["col_seconds"] = 3600;
+  JsonArray accounts = d["accounts"].to<JsonArray>();
+  uint32_t newestAny = 0;
+  for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+  {
+    uint32_t newest = 0;
+    historySnapshot(i, buf, newest);
+    if (newest > newestAny)
+    {
+      newestAny = newest;
+    }
+    JsonObject a = accounts.add<JsonObject>();
+    a["name"] = settings::accountName(i + 1);
+    JsonArray h5 = a["h5"].to<JsonArray>();
+    JsonArray d7 = a["d7"].to<JsonArray>();
+    for (int c = 0; c < COLS; c++)
+    {
+      // Max of the two 30-min samples per hour-column, matching the ePaper chart
+      const HistSlot &aSlot = buf[c * 2];
+      const HistSlot &bSlot = buf[c * 2 + 1];
+      const auto pickMax = [](uint8_t x, uint8_t y) -> int {
+        if (x == HIST_EMPTY && y == HIST_EMPTY)
+          return -1;
+        if (x == HIST_EMPTY)
+          return (int)y;
+        if (y == HIST_EMPTY)
+          return (int)x;
+        return (int)(x > y ? x : y);
+      };
+      const int v5 = pickMax(aSlot.h5, bSlot.h5);
+      const int v7 = pickMax(aSlot.d7, bSlot.d7);
+      if (v5 < 0)
+        h5.add(nullptr);
+      else
+        h5.add(v5);
+      if (v7 < 0)
+        d7.add(nullptr);
+      else
+        d7.add(v7);
+    }
+  }
+  d["newest_epoch"] = newestAny;
+  sendJson(200, d);
+}
+
+void handleHistoryClear()
+{
+  if (!requireAuth())
+    return;
+  historyErase();
+  JsonDocument d;
+  d["ok"] = true;
+  sendJson(200, d);
+}
+
+void handleWifiScan()
+{
+  if (!requireAuth())
+    return;
+  const String savedSsid = settings::wifiSsid();
+  const int count = WiFi.scanNetworks(false, false, false, 300);
+  JsonDocument d;
+  JsonArray arr = d["networks"].to<JsonArray>();
+  for (int i = 0; i < count; i++)
+  {
+    JsonObject n = arr.add<JsonObject>();
+    n["ssid"] = WiFi.SSID(i);
+    n["rssi"] = WiFi.RSSI(i);
+    n["channel"] = WiFi.channel(i);
+    n["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    n["saved"] = WiFi.SSID(i) == savedSsid;
+  }
+  WiFi.scanDelete();
+  sendJson(200, d);
+}
+
+void handleFactoryReset()
+{
+  if (!requireAuth())
+    return;
+  // Confirmation guard: body must contain {"confirm":"wipe"} so a stray POST
+  // can't erase everything.
+  JsonDocument body;
+  if (!readJsonBody(body))
+    return;
+  if (strcmp(body["confirm"] | "", "wipe") != 0)
+  {
+    sendErr(400, "confirm_required");
+    return;
+  }
+  Preferences prefs;
+  prefs.begin("meter", false);
+  prefs.clear();
+  prefs.end();
+  prefs.begin("alerts", false);
+  prefs.clear();
+  prefs.end();
+  historyErase();
+  pendingActions |= PANEL_ACT_REBOOT;
+  JsonDocument d;
+  d["ok"] = true;
+  d["rebooting_in_ms"] = 1000;
+  sendJson(200, d);
+}
+
+void handleReboot()
+{
+  if (!requireAuth())
+    return;
+  pendingActions |= PANEL_ACT_REBOOT;
+  JsonDocument d;
+  d["ok"] = true;
+  d["rebooting_in_ms"] = 1000;
+  sendJson(200, d);
+}
+
 void handleNotFound()
 {
   server->send(404, "text/plain", "not found");
@@ -333,6 +513,12 @@ void panelBegin(PanelDisplay &out)
   server->on("/api/tokens", HTTP_POST, handleTokens);
   server->on("/api/wifi", HTTP_POST, handleWifi);
   server->on("/api/refresh", HTTP_POST, handleRefresh);
+  server->on("/api/history", HTTP_GET, handleHistory);
+  server->on("/api/history/clear", HTTP_POST, handleHistoryClear);
+  server->on("/api/wifi/scan", HTTP_GET, handleWifiScan);
+  server->on("/api/sounds/play", HTTP_POST, handleSoundsPlay);
+  server->on("/api/factory-reset", HTTP_POST, handleFactoryReset);
+  server->on("/api/reboot", HTTP_POST, handleReboot);
   server->onNotFound(handleNotFound);
   server->begin();
   active = true;
