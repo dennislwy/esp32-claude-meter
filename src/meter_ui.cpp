@@ -442,26 +442,46 @@ void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
   chartSeries(parent, points5h, cols5h, 1);
   chartSeries(parent, points7d, cols7d, 2);
 
-  // X-axis: one-letter day labels with a tick mark at each (right-aligned so "now" is on the right)
+  // X-axis: ticks at local midnight boundaries, one-letter day labels centred on each day's slice
   if (newest != 0)
   {
     static const char *const DAY_INITIALS[] = {"S", "M", "T", "W", "T", "F", "S"};
-    for (int d = 0; d < 7; d++)
+    const time_t newestT = (time_t)newest;
+    struct tm newestLocal;
+    localtime_r(&newestT, &newestLocal);
+    // Column at the local midnight that started "today" (col 167 = newest hour)
+    const int midnightCol = CHART_COLS - 1 - newestLocal.tm_hour;
+    for (int d = 0; d <= 7; d++)
     {
-      // One day = 24 columns; place the tick at the midpoint of each day's slice
-      const int colCentre = CHART_COLS - 1 - d * 24 - 12;
-      if (colCentre < 0)
+      const int col = midnightCol - d * 24;
+      if (col >= 0 && col < CHART_COLS)
+      {
+        box(parent, CHART_LEFT + col, CHART_BOTTOM + 1, 1, 2, BLACK);
+      }
+    }
+    for (int d = 0; d < 8; d++)
+    {
+      int sliceStart = midnightCol - d * 24;
+      int sliceEnd = d == 0 ? CHART_COLS - 1 : sliceStart + 23;
+      if (sliceEnd < 0)
       {
         break;
       }
-      const time_t t = (time_t)newest - (time_t)(d * 86400) - 43200;
+      if (sliceStart < 0)
+      {
+        sliceStart = 0;
+      }
+      if (sliceEnd >= CHART_COLS)
+      {
+        sliceEnd = CHART_COLS - 1;
+      }
+      const int colCentre = (sliceStart + sliceEnd) / 2;
+      const time_t t = newestT - (time_t)(d * 86400);
       struct tm local;
       localtime_r(&t, &local);
-      const int x = CHART_LEFT + colCentre;
-      box(parent, x, CHART_BOTTOM + 1, 1, 2, BLACK);
       // Single letter is ~5 px wide; shift by -2 to centre under the tick
       lv_obj_set_pos(text(parent, DAY_INITIALS[local.tm_wday], &lv_font_montserrat_10, BLACK),
-                     x - 2, CHART_BOTTOM + 4);
+                     CHART_LEFT + colCentre - 2, CHART_BOTTOM + 4);
     }
   }
 }
