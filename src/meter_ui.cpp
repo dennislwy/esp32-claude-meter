@@ -486,6 +486,44 @@ void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
   }
 }
 
+void panelView(lv_obj_t *parent, const MeterScreen &screen)
+{
+  const int y = STATUS_BAR_H + 6;
+  lv_obj_t *title = text(parent, "LAN Panel", &lv_font_montserrat_16, BLACK);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
+
+  const String url = String("http://") + screen.panelHostname + ".local";
+  lv_obj_t *urlLabel = text(parent, url.c_str(), &lv_font_montserrat_12, BLACK);
+  lv_obj_set_width(urlLabel, CONTENT_W);
+  lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, y + 22);
+
+  lv_obj_t *ipLabel = text(parent, screen.panelIp.c_str(), &lv_font_montserrat_12, BLACK);
+  lv_obj_set_width(ipLabel, CONTENT_W);
+  lv_obj_set_style_text_align(ipLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(ipLabel, LV_ALIGN_TOP_MID, 0, y + 38);
+
+  lv_obj_t *pinHint = text(parent, "PIN", &lv_font_montserrat_10, BLACK);
+  lv_obj_set_width(pinHint, CONTENT_W);
+  lv_obj_set_style_text_align(pinHint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(pinHint, LV_ALIGN_TOP_MID, 0, y + 60);
+
+  lv_obj_t *pin = text(parent, screen.panelPin.c_str(), &lv_font_montserrat_28, BLACK);
+  lv_obj_set_width(pin, CONTENT_W);
+  lv_obj_set_style_text_align(pin, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(pin, LV_ALIGN_TOP_MID, 0, y + 72);
+
+  lv_obj_t *footer = text(parent, "Short BOOT = exit", &lv_font_montserrat_10, BLACK);
+  lv_obj_set_width(footer, CONTENT_W);
+  lv_obj_set_style_text_align(footer, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -14);
+
+  lv_obj_t *warn = text(parent, "Wi-Fi on, drains fast", &lv_font_montserrat_10, BLACK);
+  lv_obj_set_width(warn, CONTENT_W);
+  lv_obj_set_style_text_align(warn, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(warn, LV_ALIGN_BOTTOM_MID, 0, -2);
+}
+
 void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
 {
   const AccountUsage &account = screen.accounts[index];
@@ -542,6 +580,9 @@ void meterUiShow(const MeterScreen &screen)
     break;
   case MeterView::Account2History:
     historyView(root, screen, 1);
+    break;
+  case MeterView::Panel:
+    panelView(root, screen);
     break;
   }
 
