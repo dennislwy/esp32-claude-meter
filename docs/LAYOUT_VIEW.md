@@ -134,6 +134,73 @@ Account-header offsets (`singleView()`, relative to y = STATUS_BAR_H + 4 = 28):
 | Age          | +2       | Montserrat 10, right |
 | First window | +22      | starts at y = 50     |
 
+## History view (R7, per account)
+
+A dedicated 7-day line chart, one per account. Reached from the view
+cycle: `Dual -> Acct1 -> Acct1 History -> Acct2 -> Acct2 History -> Dual`.
+A history view is skipped when its account has no recorded samples yet.
+
+```
+0                                                       199
++-----------------------------------------------------------+ y=0
+| [M] [fan]          12:34               [bat] 85%          |   status bar (24)
++-----------------------------------------------------------+ y=24
+| Claude 1 - 7-day            5H --   7D ==                 |   title (14) + legend (10)
+|                                                           |
+| 100 -|                                                    |
+|      |                                                    |
+|  75 -|            . .                                     |
+|      |         .    . . . .      . .                      |
+|  50 -|    .  .            . .  .     .      . .           |
+|      | .                       .      .  . .   . .        |
+|  25 -|.                                           . .  .  |
+|      |                                                    |
+|   0 -+--|--|--|--|--|--|--|-------------------------------+
+|         S  M  T  W  T  F  S                               |   single-letter days
++-----------------------------------------------------------+ y=200
+```
+
+Chart geometry:
+
+| Element       | Value                 | Purpose                           |
+| ------------- | --------------------- | --------------------------------- |
+| `CHART_COLS`  | 168                   | One column per hour (`HIST_SLOTS / 2`) |
+| `CHART_LEFT`  | 6                     | Left edge of plot                 |
+| `CHART_RIGHT` | 174                   | Right edge (= LEFT + COLS)        |
+| `CHART_TOP`   | 50                    | Top of plot                       |
+| `CHART_BOTTOM`| 170                   | Baseline (0 %)                    |
+| `CHART_H`     | 120                   | Plot height, 120 px               |
+
+Data pipeline:
+
+1. `historySnapshot(index, buf, newest)` fills a 336-slot stack buffer
+   oldest-to-newest.
+2. Downsample 2 adjacent slots per column (`max`, so sawtooth peaks
+   survive): `cols[c] = max(buf[2c], buf[2c+1])`.
+3. For each series, group contiguous non-`HIST_EMPTY` columns and emit
+   one `lv_line` widget per segment. `HIST_EMPTY` columns become line
+   breaks, so off-device gaps stay visible.
+
+Series styling:
+
+| Series | Line width | Static buffer         |
+| ------ | ---------- | --------------------- |
+| 5-hour | 1 px       | `points5h[168]`       |
+| 7-day  | 2 px       | `points7d[168]`       |
+
+Y-axis ticks and labels at 25 % intervals (`0 / 25 / 50 / 75 / 100`),
+right of `CHART_RIGHT`. The baseline (`CHART_BOTTOM`, 0 %) carries the
+`0` label but no extra tick (the axis itself is the tick).
+
+X-axis: one tick (1 px x 2 px) per day label, 24 columns apart, 7 ticks
+total. Labels use single-letter abbreviations (`S / M / T / W / T / F /
+S`); duplicates for Sun/Sat and Tue/Thu are intentional. The newest day
+sits above the rightmost tick (col 155), each previous day 24 columns to
+the left.
+
+Visibility of a line segment requires >= 2 adjacent valid columns, i.e.
+roughly 2 hours of continuous polling after a cold boot.
+
 ## Pop-ups and notices
 
 - **Wi-Fi failure popup** — `WifiState::Failed`. A 170 px bordered white
@@ -174,3 +241,6 @@ When the reset time has passed, the "in ..." tail becomes `(now)`.
 | `THIN_BAR_H`              | 14    | Single-view bar height                    |
 | `SINGLE_WINDOW_PITCH`     | 76    | Gap between 5H and 7D blocks              |
 | `POPUP_W`                 | 170   | Pop-up frame width                        |
+| `CHART_COLS`              | 168   | History columns (one per hour)            |
+| `CHART_LEFT / RIGHT`      | 6/174 | History plot x bounds                     |
+| `CHART_TOP / BOTTOM`      | 50/170| History plot y bounds                     |

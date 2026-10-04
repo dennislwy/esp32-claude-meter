@@ -1,6 +1,7 @@
 #include "meter_ui.h"
 
 #include <lvgl.h>
+#include "history.h"
 
 extern "C" const lv_image_dsc_t claude_icon;
 
@@ -322,6 +323,169 @@ void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const Acco
   lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
 }
 
+// Chart geometry (used by historyView and chartSeries). Shifted left so the right-side
+// y-axis labels ("100", "50", "0") fit within the 200-px panel.
+constexpr int CHART_COLS = HIST_SLOTS / 2;    // 168 columns, 1 col = 1 hour
+constexpr int CHART_LEFT = 6;
+constexpr int CHART_RIGHT = CHART_LEFT + CHART_COLS; // 174
+constexpr int CHART_TOP = 50;
+constexpr int CHART_BOTTOM = 170;
+constexpr int CHART_H = CHART_BOTTOM - CHART_TOP; // 120 px
+
+// Static point buffers survive each UI rebuild; LVGL stores the pointer in lv_line
+lv_point_precise_t points5h[CHART_COLS];
+lv_point_precise_t points7d[CHART_COLS];
+
+int chartY(uint8_t value)
+{
+  const int clamped = value > 100 ? 100 : value;
+  return CHART_BOTTOM - (clamped * CHART_H) / 100;
+}
+
+// Draws one series as a sequence of lv_line widgets, breaking at HIST_EMPTY gaps.
+// buf is a static buffer the caller owns; segments share slices of it.
+void chartSeries(lv_obj_t *parent, lv_point_precise_t *buf, const uint8_t *values, int lineWidth)
+{
+  int bufIdx = 0;
+  int segStart = -1;
+  for (int i = 0; i < CHART_COLS; i++)
+  {
+    if (values[i] != HIST_EMPTY)
+    {
+      buf[bufIdx].x = CHART_LEFT + i;
+      buf[bufIdx].y = chartY(values[i]);
+      if (segStart < 0)
+      {
+        segStart = bufIdx;
+      }
+      bufIdx++;
+      continue;
+    }
+    if (segStart >= 0 && bufIdx - segStart >= 2)
+    {
+      lv_obj_t *line = lv_line_create(parent);
+      lv_line_set_points(line, buf + segStart, bufIdx - segStart);
+      lv_obj_set_style_line_color(line, BLACK, 0);
+      lv_obj_set_style_line_width(line, lineWidth, 0);
+    }
+    segStart = -1;
+  }
+  if (segStart >= 0 && bufIdx - segStart >= 2)
+  {
+    lv_obj_t *line = lv_line_create(parent);
+    lv_line_set_points(line, buf + segStart, bufIdx - segStart);
+    lv_obj_set_style_line_color(line, BLACK, 0);
+    lv_obj_set_style_line_width(line, lineWidth, 0);
+  }
+}
+
+void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
+{
+  const int y = STATUS_BAR_H + 4;
+  const String title = screen.names[index] + " - 7-day";
+  lv_obj_set_pos(text(parent, title.c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
+
+  // Legend top-right: "5H" with a thin line sample, "7D" with a thick one
+  lv_obj_set_pos(text(parent, "5H", &lv_font_montserrat_10, BLACK), 118, y + 4);
+  box(parent, 134, y + 10, 14, 1, BLACK);
+  lv_obj_set_pos(text(parent, "7D", &lv_font_montserrat_10, BLACK), 156, y + 4);
+  box(parent, 172, y + 9, 14, 2, BLACK);
+
+  // L-shaped axis frame: bottom baseline + left vertical
+  box(parent, CHART_LEFT, CHART_BOTTOM, CHART_RIGHT - CHART_LEFT + 1, 1, BLACK);
+  box(parent, CHART_LEFT, CHART_TOP, 1, CHART_BOTTOM - CHART_TOP, BLACK);
+  // Y-axis: ticks and labels every 25 %
+  for (int pct = 0; pct <= 100; pct += 25)
+  {
+    const int yTick = chartY(pct);
+    if (pct > 0)
+    {
+      box(parent, CHART_LEFT - 2, yTick, 3, 1, BLACK);
+    }
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%d", pct);
+    lv_obj_set_pos(text(parent, buf, &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, yTick - 5);
+  }
+
+  // Snapshot and downsample to one column per hour, max of the two 30-min samples
+  HistSlot buf[HIST_SLOTS];
+  uint32_t newest = 0;
+  historySnapshot(index, buf, newest);
+  uint8_t cols5h[CHART_COLS];
+  uint8_t cols7d[CHART_COLS];
+  for (int c = 0; c < CHART_COLS; c++)
+  {
+    const HistSlot &a = buf[c * 2];
+    const HistSlot &b = buf[c * 2 + 1];
+    uint8_t h5 = HIST_EMPTY;
+    if (a.h5 != HIST_EMPTY)
+    {
+      h5 = a.h5;
+    }
+    if (b.h5 != HIST_EMPTY && (h5 == HIST_EMPTY || b.h5 > h5))
+    {
+      h5 = b.h5;
+    }
+    uint8_t d7 = HIST_EMPTY;
+    if (a.d7 != HIST_EMPTY)
+    {
+      d7 = a.d7;
+    }
+    if (b.d7 != HIST_EMPTY && (d7 == HIST_EMPTY || b.d7 > d7))
+    {
+      d7 = b.d7;
+    }
+    cols5h[c] = h5;
+    cols7d[c] = d7;
+  }
+
+  chartSeries(parent, points5h, cols5h, 1);
+  chartSeries(parent, points7d, cols7d, 2);
+
+  // X-axis: ticks at local midnight boundaries, one-letter day labels centred on each day's slice
+  if (newest != 0)
+  {
+    static const char *const DAY_INITIALS[] = {"S", "M", "T", "W", "T", "F", "S"};
+    const time_t newestT = (time_t)newest;
+    struct tm newestLocal;
+    localtime_r(&newestT, &newestLocal);
+    // Column at the local midnight that started "today" (col 167 = newest hour)
+    const int midnightCol = CHART_COLS - 1 - newestLocal.tm_hour;
+    for (int d = 0; d <= 7; d++)
+    {
+      const int col = midnightCol - d * 24;
+      if (col >= 0 && col < CHART_COLS)
+      {
+        box(parent, CHART_LEFT + col, CHART_BOTTOM + 1, 1, 2, BLACK);
+      }
+    }
+    for (int d = 0; d < 8; d++)
+    {
+      int sliceStart = midnightCol - d * 24;
+      int sliceEnd = d == 0 ? CHART_COLS - 1 : sliceStart + 23;
+      if (sliceEnd < 0)
+      {
+        break;
+      }
+      if (sliceStart < 0)
+      {
+        sliceStart = 0;
+      }
+      if (sliceEnd >= CHART_COLS)
+      {
+        sliceEnd = CHART_COLS - 1;
+      }
+      const int colCentre = (sliceStart + sliceEnd) / 2;
+      const time_t t = newestT - (time_t)(d * 86400);
+      struct tm local;
+      localtime_r(&t, &local);
+      // Single letter is ~5 px wide; shift by -2 to centre under the tick
+      lv_obj_set_pos(text(parent, DAY_INITIALS[local.tm_wday], &lv_font_montserrat_10, BLACK),
+                     CHART_LEFT + colCentre - 2, CHART_BOTTOM + 4);
+    }
+  }
+}
+
 void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
 {
   const AccountUsage &account = screen.accounts[index];
@@ -370,8 +534,14 @@ void meterUiShow(const MeterScreen &screen)
   case MeterView::Account1:
     singleView(root, screen, 0);
     break;
+  case MeterView::Account1History:
+    historyView(root, screen, 0);
+    break;
   case MeterView::Account2:
     singleView(root, screen, 1);
+    break;
+  case MeterView::Account2History:
+    historyView(root, screen, 1);
     break;
   }
 

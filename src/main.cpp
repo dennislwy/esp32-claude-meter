@@ -11,6 +11,7 @@
 #include "board_pins.h"
 #include "clock.h"
 #include "epaper.h"
+#include "history.h"
 #include "lvgl_port.h"
 #include "meter_ui.h"
 #include "pcf85063.h"
@@ -84,18 +85,35 @@ bool viewAvailable(MeterView candidate)
     return accountConfigured(0) && accountConfigured(1);
   case MeterView::Account1:
     return accountConfigured(0);
+  case MeterView::Account1History:
+    return accountConfigured(0) && historyHasData(0);
   case MeterView::Account2:
     return accountConfigured(1);
+  case MeterView::Account2History:
+    return accountConfigured(1) && historyHasData(1);
   }
   return false;
 }
 
+// Cycle: Dual -> Account1 -> Account1History -> Account2 -> Account2History -> Dual
+// Views that aren't available (no token, or no history yet) are skipped.
 MeterView nextView(MeterView current)
 {
-  MeterView candidate = current;
-  for (int i = 0; i < 3; i++)
+  static const MeterView ORDER[] = {MeterView::Dual, MeterView::Account1, MeterView::Account1History,
+                                    MeterView::Account2, MeterView::Account2History};
+  constexpr int ORDER_SIZE = sizeof(ORDER) / sizeof(ORDER[0]);
+  int startIndex = 0;
+  for (int i = 0; i < ORDER_SIZE; i++)
   {
-    candidate = candidate == MeterView::Dual ? MeterView::Account1 : candidate == MeterView::Account1 ? MeterView::Account2 : MeterView::Dual;
+    if (ORDER[i] == current)
+    {
+      startIndex = i;
+      break;
+    }
+  }
+  for (int step = 1; step <= ORDER_SIZE; step++)
+  {
+    const MeterView candidate = ORDER[(startIndex + step) % ORDER_SIZE];
     if (viewAvailable(candidate))
     {
       return candidate;
@@ -106,7 +124,20 @@ MeterView nextView(MeterView current)
 
 const char *viewName(MeterView value)
 {
-  return value == MeterView::Dual ? "dual" : value == MeterView::Account1 ? "account 1" : "account 2";
+  switch (value)
+  {
+  case MeterView::Dual:
+    return "dual";
+  case MeterView::Account1:
+    return "account 1";
+  case MeterView::Account1History:
+    return "account 1 history";
+  case MeterView::Account2:
+    return "account 2";
+  case MeterView::Account2History:
+    return "account 2 history";
+  }
+  return "?";
 }
 
 // A USB host sends a start-of-frame every millisecond, whether or not a terminal has the port open
@@ -226,6 +257,7 @@ void poll()
 void pollAndShow()
 {
   poll();
+  historyRecord(usage);
   render();
   checkAlerts(usage, time(nullptr));
 }
@@ -271,6 +303,7 @@ void printHelp()
   Serial.println("  warn5h <50-99>             5-hour warning sound threshold % (default 80)");
   Serial.println("  warn7d <50-99>             7-day warning sound threshold % (default 90)");
   Serial.println("  alerts                     show which alerts have fired; \"alerts clear\" re-arms them");
+  Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
   Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT or PWR on USB returns)");
@@ -512,6 +545,15 @@ void runCommand(const String &line)
   {
     clearAlertState();
     Serial.println("Alert state cleared - the next poll alerts again for anything above a threshold");
+  }
+  else if (line == "history")
+  {
+    printHistoryState();
+  }
+  else if (line == "history clear")
+  {
+    historyErase();
+    Serial.println("History cleared");
   }
   else if (line == "view")
   {
@@ -779,6 +821,7 @@ void setup()
     Serial.println("PCF85063 not responding");
   }
   clockBegin(rtc);
+  historyInit();
 
   if (resumed)
   {
