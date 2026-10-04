@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
 #include <Wire.h>
@@ -14,6 +15,7 @@
 #include "history.h"
 #include "lvgl_port.h"
 #include "meter_ui.h"
+#include "panel.h"
 #include "pcf85063.h"
 #include "settings.h"
 #include "usage_poll.h"
@@ -61,6 +63,14 @@ Epaper epaper({PIN_EPD_SCK, PIN_EPD_MOSI, PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, P
 bool powerOffArmed = false;
 bool pwrButtonWasDown = false;
 uint32_t pwrButtonDownAt = 0;
+
+// Panel mode (R8 Phase 1). Not RTC_DATA_ATTR: never survives deep sleep.
+bool panelMode = false;
+PanelDisplay panelDisplay;
+constexpr uint32_t PANEL_INACTIVITY_MS = 5UL * 60UL * 1000UL;
+
+void enterPanelMode();
+void exitPanelMode();
 
 bool accountConfigured(int index)
 {
@@ -205,6 +215,12 @@ void render()
   screen.batteryPercent = Battery::percentFromMillivolts(battery.readMillivolts());
   screen.wifiState = wifiState;
   screen.wifiRssi = wifiRssi;
+  if (view == MeterView::Panel)
+  {
+    screen.panelHostname = panelDisplay.hostname;
+    screen.panelIp = panelDisplay.ip;
+    screen.panelPin = panelDisplay.pin;
+  }
   if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
   {
     screen.notice = "Setup needed\nConnect USB and type help in the serial monitor";
@@ -306,8 +322,9 @@ void printHelp()
   Serial.println("  alerts                     show which alerts have fired; \"alerts clear\" re-arms them");
   Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
-  Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8");
+  Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8 or quiet 22:30-7:15");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT+PWR or PWR on USB returns)");
+  Serial.println("  panel                      toggle LAN control panel (same as long-press BOOT)");
   Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT+PWR turns it back on)");
   Serial.println("  rtc                        read the RTC chip, compare with the system clock, last NTP sync");
   Serial.println("  rtc set YYYY-MM-DD HH:MM:SS  set the RTC, local time (NTP also sets it when online)");
@@ -344,7 +361,10 @@ void printStatus()
   Serial.printf("View:      %s\n", viewName(view));
   Serial.printf("Interval:  %u min, next poll in %ld s\n", settings::pollIntervalMinutes(), (long)nextPollAt - (long)now);
   Serial.printf("Warnings:  5h at %u%%, 7d at %u%%\n", settings::warningPercent5h(), settings::warningPercent7d());
-  Serial.printf("Quiet:     %02u:00-%02u:00 (%s)\n", settings::quietHoursStart(), settings::quietHoursEnd(), settings::quietHoursEnabled() ? "on" : "off");
+  Serial.printf("Quiet:     %02u:%02u-%02u:%02u (%s)\n",
+                settings::quietHoursStart(), settings::quietMinuteStart(),
+                settings::quietHoursEnd(), settings::quietMinuteEnd(),
+                settings::quietHoursEnabled() ? "on" : "off");
 }
 
 void listFiles()
@@ -525,21 +545,26 @@ void runCommand(const String &line)
   else if (line == "quiet on" || line == "quiet off")
   {
     settings::setQuietHoursEnabled(line.endsWith("on"));
-    Serial.printf("Quiet hours %s (%02u:00-%02u:00)\n", settings::quietHoursEnabled() ? "on" : "off",
-                  settings::quietHoursStart(), settings::quietHoursEnd());
+    Serial.printf("Quiet hours %s (%02u:%02u-%02u:%02u)\n", settings::quietHoursEnabled() ? "on" : "off",
+                  settings::quietHoursStart(), settings::quietMinuteStart(),
+                  settings::quietHoursEnd(), settings::quietMinuteEnd());
   }
   else if (line.startsWith("quiet "))
   {
-    int startHour, endHour;
-    if (sscanf(line.c_str(), "quiet %d-%d", &startHour, &endHour) != 2 ||
-        startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23)
+    int sh, sm = 0, eh, em = 0;
+    const int parsedHhMm = sscanf(line.c_str(), "quiet %d:%d-%d:%d", &sh, &sm, &eh, &em);
+    const int parsedH = parsedHhMm == 4 ? 4 : sscanf(line.c_str(), "quiet %d-%d", &sh, &eh);
+    const bool ok = (parsedHhMm == 4 || parsedH == 2) &&
+                    sh >= 0 && sh <= 23 && eh >= 0 && eh <= 23 && sm >= 0 && sm <= 59 && em >= 0 && em <= 59;
+    if (!ok)
     {
-      Serial.println("Usage: quiet <start>-<end> in 24h local time, e.g. quiet 22-8");
+      Serial.println("Usage: quiet <start>-<end> in 24h local time, e.g. quiet 22-8  or  quiet 22:30-7:15");
     }
     else
     {
-      settings::setQuietHours(startHour, endHour);
-      Serial.printf("Quiet hours %02u:00-%02u:00 (%s)\n", startHour, endHour, settings::quietHoursEnabled() ? "on" : "off");
+      settings::setQuietHours(sh, sm, eh, em);
+      Serial.printf("Quiet hours %02u:%02u-%02u:%02u (%s)\n", sh, sm, eh, em,
+                    settings::quietHoursEnabled() ? "on" : "off");
     }
   }
   else if (line == "alerts clear")
@@ -574,6 +599,17 @@ void runCommand(const String &line)
     // A shorter interval takes effect now rather than after the old, longer wait
     nextPollAt = min<time_t>(nextPollAt, time(nullptr) + minutes * 60);
     Serial.printf("Poll interval: %ld min\n", minutes);
+  }
+  else if (line == "panel")
+  {
+    if (panelMode)
+    {
+      exitPanelMode();
+    }
+    else
+    {
+      enterPanelMode();
+    }
   }
   else if (line == "debug off")
   {
@@ -728,8 +764,10 @@ void setDebugMode(bool on)
   }
 }
 
-// In awake mode: a short BOOT press shows the next view. A long BOOT + PWR press together
-// toggles debug mode (and, if it just turned off, starts the sleep cycle).
+// Awake-mode BOOT handling:
+// - short press: next view (or exit panel mode if active)
+// - long press (BOOT alone, >= 1 s): enter LAN panel mode
+// - long press (BOOT + PWR together, >= 1 s): toggle debug mode
 void handleBootButton()
 {
   // The press that woke the board must be released before a new press counts
@@ -740,14 +778,26 @@ void handleBootButton()
   const bool pwrDown = digitalRead(PIN_PWR_BUTTON) == LOW;
   if (!down)
   {
-    // Short press: act on release. Ignore if the press was long enough to be an aborted combo
-    // (user held BOOT alone past 1 s and let go) — don't surprise them with a view change.
     const uint32_t heldFor = downAt != 0 ? millis() - downAt : 0;
-    if (armed && !longPressHandled && heldFor >= BUTTON_MIN_PRESS_MS && heldFor < LONG_PRESS_MS)
+    if (armed && !longPressHandled)
     {
-      view = nextView(view);
-      Serial.printf("View: %s\n", viewName(view));
-      render();
+      if (heldFor >= BUTTON_MIN_PRESS_MS && heldFor < LONG_PRESS_MS)
+      {
+        if (panelMode)
+        {
+          exitPanelMode();
+        }
+        else
+        {
+          view = nextView(view);
+          Serial.printf("View: %s\n", viewName(view));
+          render();
+        }
+      }
+      else if (heldFor >= LONG_PRESS_MS && !panelMode)
+      {
+        enterPanelMode();
+      }
     }
     armed = true;
     downAt = 0;
@@ -772,6 +822,67 @@ void handleBootButton()
       sleepUntilNextPoll();
     }
   }
+}
+
+void enterPanelMode()
+{
+  if (panelMode)
+  {
+    return;
+  }
+  if (settings::wifiSsid().isEmpty())
+  {
+    Serial.println("Panel: Wi-Fi not configured");
+    return;
+  }
+  Serial.println("Panel: starting LAN control panel...");
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(settings::wifiSsid().c_str(), settings::wifiPassword().c_str());
+    const uint32_t t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000)
+    {
+      delay(100);
+    }
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      Serial.println("Panel: Wi-Fi connect failed");
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      return;
+    }
+  }
+  MDNS.begin("claude-meter");
+  MDNS.addService("http", "tcp", 80);
+  panelBegin(panelDisplay);
+  panelMode = true;
+  wifiState = WifiState::Connected;
+  wifiRssi = WiFi.RSSI();
+  Serial.printf("Panel: http://%s.local  IP %s  PIN %s\n",
+                panelDisplay.hostname.c_str(), panelDisplay.ip.c_str(), panelDisplay.pin.c_str());
+  view = MeterView::Panel;
+  render();
+}
+
+void exitPanelMode()
+{
+  if (!panelMode)
+  {
+    return;
+  }
+  Serial.println("Panel: shutting down");
+  panelEnd();
+  MDNS.end();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  wifiState = WifiState::Unknown;
+  panelMode = false;
+  panelDisplay = {};
+  view = firstView();
+  render();
+  // Re-poll soon so the dashboard is current
+  nextPollAt = time(nullptr) + 2;
 }
 
 void setup()
@@ -832,6 +943,7 @@ void setup()
   }
   clockBegin(rtc);
   historyInit();
+  panelSetUsageSource(usage);
 
   if (resumed)
   {
@@ -895,6 +1007,49 @@ void loop()
   handleBootButton();
   handlePowerButton();
   handleSerialCommands();
+
+  if (panelMode)
+  {
+    panelService();
+    const uint8_t act = panelTakeAction();
+    if (act & PANEL_ACT_REBOOT)
+    {
+      Serial.println("Panel: rebooting (user requested)");
+      Serial.flush();
+      delay(800); // let the HTTP response + any TCP close land
+      ESP.restart();
+    }
+    if (act & PANEL_ACT_REFRESH)
+    {
+      pollAndShow();
+      // pollUsage() always turns Wi-Fi off at the end; bring it back for the panel session
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(settings::wifiSsid().c_str(), settings::wifiPassword().c_str());
+      const uint32_t t0 = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000)
+      {
+        delay(100);
+      }
+      if (WiFi.status() != WL_CONNECTED)
+      {
+        Serial.println("Panel: lost Wi-Fi after refresh, exiting");
+        exitPanelMode();
+      }
+      else
+      {
+        panelDisplay.ip = WiFi.localIP().toString();
+        view = MeterView::Panel;
+        render();
+      }
+    }
+    if (millis() - panelLastActivityMs() > PANEL_INACTIVITY_MS)
+    {
+      Serial.println("Panel: idle timeout");
+      exitPanelMode();
+    }
+    delay(5);
+    return;
+  }
 
   const time_t now = time(nullptr);
   if (now >= nextPollAt)

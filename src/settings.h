@@ -33,17 +33,27 @@ uint8_t warningPercent7d();
 void setWarningPercent5h(uint8_t percent);
 void setWarningPercent7d(uint8_t percent);
 
-// Quiet hours: no sounds play when the local hour is in [start, end) (wrapping past midnight)
+// Quiet hours: no sounds play when the local wall-clock time is in [start, end), wrapping past midnight
 constexpr uint8_t QUIET_HOUR_START_DEFAULT = 22;
+constexpr uint8_t QUIET_MINUTE_START_DEFAULT = 0;
 constexpr uint8_t QUIET_HOUR_END_DEFAULT = 8;
+constexpr uint8_t QUIET_MINUTE_END_DEFAULT = 0;
 bool quietHoursEnabled();
-uint8_t quietHoursStart();
-uint8_t quietHoursEnd();
+uint8_t quietHoursStart();        // 0-23
+uint8_t quietMinuteStart();       // 0-59
+uint8_t quietHoursEnd();          // 0-23
+uint8_t quietMinuteEnd();         // 0-59
 void setQuietHoursEnabled(bool enabled);
-// Hours 0-23; start == end disables the window; writes outside that range are clamped
-void setQuietHours(uint8_t startHour, uint8_t endHour);
-// True when the given local hour (0-23) is inside the quiet window
-bool isQuietHour(uint8_t localHour);
+// Writes outside valid ranges are clamped; start == end disables the window
+void setQuietHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute);
+// True when the given local time is inside the quiet window
+bool isQuietTime(uint8_t localHour, uint8_t localMinute);
+
+// Audio playback volume as 0-100 (0 = near-mute, 100 = full). Mapped linearly to
+// [-40, 0] dB when the codec is configured. Writes outside the range are clamped.
+constexpr uint8_t AUDIO_VOLUME_DEFAULT = 80;
+uint8_t audioVolume();
+void setAudioVolume(uint8_t percent);
 
 void setWifiSsid(const String &value);
 void setWifiPassword(const String &value);

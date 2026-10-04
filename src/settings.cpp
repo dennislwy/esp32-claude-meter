@@ -9,6 +9,9 @@ const char *const KEY_WIFI_SSID = "wifi_ssid";
 const char *const KEY_QUIET_ENABLED = "quiet_on";
 const char *const KEY_QUIET_START = "quiet_start";
 const char *const KEY_QUIET_END = "quiet_end";
+const char *const KEY_QUIET_START_MIN = "quiet_startM";
+const char *const KEY_QUIET_END_MIN = "quiet_endM";
+const char *const KEY_AUDIO_VOLUME = "audio_vol";
 const char *const KEY_WIFI_PASSWORD = "wifi_pass";
 const char *const KEY_POLL_INTERVAL = "poll_minutes";
 const char *const KEY_WARNING_5H = "warn_5h";
@@ -105,7 +108,9 @@ bool quietHoursEnabled()
 }
 
 uint8_t quietHoursStart() { return loadByte(KEY_QUIET_START, QUIET_HOUR_START_DEFAULT, 0, 23); }
+uint8_t quietMinuteStart() { return loadByte(KEY_QUIET_START_MIN, QUIET_MINUTE_START_DEFAULT, 0, 59); }
 uint8_t quietHoursEnd() { return loadByte(KEY_QUIET_END, QUIET_HOUR_END_DEFAULT, 0, 23); }
+uint8_t quietMinuteEnd() { return loadByte(KEY_QUIET_END_MIN, QUIET_MINUTE_END_DEFAULT, 0, 59); }
 
 void setQuietHoursEnabled(bool enabled)
 {
@@ -115,27 +120,33 @@ void setQuietHoursEnabled(bool enabled)
   prefs.end();
 }
 
-void setQuietHours(uint8_t startHour, uint8_t endHour)
+void setQuietHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute)
 {
   storeByte(KEY_QUIET_START, startHour, 0, 23);
+  storeByte(KEY_QUIET_START_MIN, startMinute, 0, 59);
   storeByte(KEY_QUIET_END, endHour, 0, 23);
+  storeByte(KEY_QUIET_END_MIN, endMinute, 0, 59);
 }
 
-bool isQuietHour(uint8_t localHour)
+bool isQuietTime(uint8_t localHour, uint8_t localMinute)
 {
   if (!quietHoursEnabled())
   {
     return false;
   }
-  const uint8_t start = quietHoursStart();
-  const uint8_t end = quietHoursEnd();
+  const uint16_t start = quietHoursStart() * 60 + quietMinuteStart();
+  const uint16_t end = quietHoursEnd() * 60 + quietMinuteEnd();
   if (start == end)
   {
     return false;
   }
-  // The window wraps past midnight when the end hour is earlier than the start
-  return start < end ? (localHour >= start && localHour < end) : (localHour >= start || localHour < end);
+  const uint16_t now = (uint16_t)localHour * 60 + localMinute;
+  // The window wraps past midnight when end is earlier than start
+  return start < end ? (now >= start && now < end) : (now >= start || now < end);
 }
+
+uint8_t audioVolume() { return loadByte(KEY_AUDIO_VOLUME, AUDIO_VOLUME_DEFAULT, 0, 100); }
+void setAudioVolume(uint8_t percent) { storeByte(KEY_AUDIO_VOLUME, percent, 0, 100); }
 
 String wifiSsid() { return load(KEY_WIFI_SSID); }
 String wifiPassword() { return load(KEY_WIFI_PASSWORD); }
