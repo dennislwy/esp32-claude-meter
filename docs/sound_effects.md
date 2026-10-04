@@ -82,6 +82,86 @@ Quiet hours can be disabled entirely with `quiet off`.
 | `files` | List files on LittleFS |
 | `play <file.wav>` | Force-play a WAV directly (bypasses alerts) |
 
+## Preparing audio files
+
+### Format requirements
+
+The player (`src/audio_player.cpp`) accepts WAVs that satisfy **all**
+of the following, otherwise it logs `"<path> is not a 16-bit PCM WAV"`
+and skips the sound:
+
+- **Container:** standard `RIFF`/`WAVE`
+- **Encoding:** PCM (format code `1`); no µ-law, A-law, ADPCM, or
+  float
+- **Bit depth:** exactly 16 bits per sample
+- **Channels:** 1 (mono) or 2 (stereo). The player accepts both.
+- **Sample rate:** any rate the ES8311 can be clocked at. 22050 Hz
+  and 44100 Hz are both fine. The sample rate is read from the WAV
+  header and the codec is reconfigured on each play.
+
+### Why mono is chosen
+
+Stereo *works*, but we convert source material to mono because:
+
+1. **One speaker.** The board has a single voice coil driven by one
+   amplifier (`PIN_SPEAKER_AMP = GPIO46`). Both I²S channels drive
+   the same physical driver, so stereo imaging is physically
+   impossible. `streamSamples()` in `audio_player.cpp` already
+   duplicates mono samples to both I²S channels for exactly this
+   reason — stereo content would just get summed in the air.
+2. **Half the file size.** LittleFS lives in the same 8 MB flash as
+   the firmware. A 2-second 22 kHz chime is ~88 kB mono or ~176 kB
+   stereo. Six alerts × ~90 kB each stays comfortably under the
+   data partition; stereo doubles that for zero audible benefit.
+3. **Faster `uploadfs`** and less flash wear every time the WAVs
+   change.
+4. **Short alert chimes** aren't musical content — there is nothing
+   to pan.
+
+### Converting MP3 (or anything else) to the right WAV
+
+Install [ffmpeg](https://ffmpeg.org/) (`winget install ffmpeg`,
+`brew install ffmpeg`, `apt install ffmpeg`), then:
+
+```sh
+ffmpeg -i source.mp3 -ac 1 -ar 22050 -sample_fmt s16 5h-warning.wav
+```
+
+Flag reference:
+
+| Flag | Meaning | Why |
+| --- | --- | --- |
+| `-ac 1` | Audio channels = 1 (mono) | See above |
+| `-ar 22050` | Sample rate 22050 Hz | Plenty for short beeps; halves the data vs 44100 |
+| `-sample_fmt s16` | 16-bit signed PCM | What the player requires |
+
+For a louder result without re-recording, add gain (ffmpeg clips at
+0 dBFS, so measure first):
+
+```sh
+ffmpeg -i source.mp3 -ac 1 -ar 22050 -sample_fmt s16 -af "volume=6dB" 5h-warning.wav
+```
+
+For a one-shot batch (all six files at once from a `src_sfx/` dir):
+
+```sh
+for f in src_sfx/*.mp3; do
+  ffmpeg -y -i "$f" -ac 1 -ar 22050 -sample_fmt s16 "data/$(basename "${f%.mp3}").wav"
+done
+```
+
+Then verify what you got — the player prints the actual format on
+each playback:
+
+```
+> play 5h-warning.wav
+Played /5h-warning.wav: 22050 Hz, 1 ch, 1240 ms
+```
+
+If you see `2 ch`, the file is stereo (still plays fine, just twice
+the size). If `play` reports `not a 16-bit PCM WAV`, re-encode with
+the flags above.
+
 ## First-time setup
 
 A fresh board with no WAVs on LittleFS still runs — alerts just make
