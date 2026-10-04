@@ -72,8 +72,8 @@ Type `help` for the full list. Highlights:
 ## Operation
 
 - **Debug mode** (default when USB host is attached at cold boot): serial
-  enabled, LED lit while awake. Long-press `BOOT` ≥ 1 s to toggle at any
-  time.
+  enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s to
+  toggle at any time (awake, asleep, or on battery).
 - **Normal mode** (battery): serial and LED off to save power. The board
   wakes on its poll timer, polls, draws, and deep-sleeps again. A short
   `BOOT` press wakes it to show the next view; a long `PWR` press powers

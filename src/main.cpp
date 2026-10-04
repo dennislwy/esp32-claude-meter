@@ -24,7 +24,8 @@
 //   PWR wakes it and switches it off.
 // - Debug mode on (USB host attached at cold boot): serial commands, LED lit while awake. Stays
 //   awake and polls on the same schedule; "sleep" starts the sleep cycle with debug mode kept on.
-// - A long BOOT press (>= 1 s) toggles debug mode, awake or asleep.
+// - A long BOOT + PWR press (>= 1 s with both held together) toggles debug mode, awake or asleep.
+//   This frees long BOOT alone and long PWR alone for other gestures (power off is still long PWR).
 
 constexpr uint32_t LONG_PRESS_MS = 1000;
 // Shorter presses are treated as contact bounce
@@ -306,8 +307,8 @@ void printHelp()
   Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
   Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8");
-  Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT or PWR on USB returns)");
-  Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT turns it back on)");
+  Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT+PWR or PWR on USB returns)");
+  Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT+PWR turns it back on)");
   Serial.println("  rtc                        read the RTC chip, compare with the system clock, last NTP sync");
   Serial.println("  rtc set YYYY-MM-DD HH:MM:SS  set the RTC, local time (NTP also sets it when online)");
   Serial.println("  ssid <name>                save Wi-Fi network name");
@@ -676,6 +677,7 @@ void powerOff()
 void handlePowerButton()
 {
   const bool down = digitalRead(PIN_PWR_BUTTON) == LOW;
+  const bool bootDown = digitalRead(PIN_BOOT_BUTTON) == LOW;
   const uint32_t now = millis();
   if (!down)
   {
@@ -685,7 +687,8 @@ void handlePowerButton()
   {
     pwrButtonDownAt = now;
   }
-  else if (powerOffArmed && now - pwrButtonDownAt >= LONG_PRESS_MS)
+  // Don't power off while BOOT is also held — that's the debug-mode combo
+  else if (powerOffArmed && !bootDown && now - pwrButtonDownAt >= LONG_PRESS_MS)
   {
     powerOff();
     render();
@@ -725,8 +728,8 @@ void setDebugMode(bool on)
   }
 }
 
-// In awake mode: a short BOOT press shows the next view, a long press turns debug mode off and
-// starts the sleep cycle
+// In awake mode: a short BOOT press shows the next view. A long BOOT + PWR press together
+// toggles debug mode (and, if it just turned off, starts the sleep cycle).
 void handleBootButton()
 {
   // The press that woke the board must be released before a new press counts
@@ -734,10 +737,13 @@ void handleBootButton()
   static uint32_t downAt = 0;
   static bool longPressHandled = false;
   const bool down = digitalRead(PIN_BOOT_BUTTON) == LOW;
+  const bool pwrDown = digitalRead(PIN_PWR_BUTTON) == LOW;
   if (!down)
   {
-    // Short press: act on release, once it's clear the press isn't a long one
-    if (armed && downAt != 0 && !longPressHandled && millis() - downAt >= BUTTON_MIN_PRESS_MS)
+    // Short press: act on release. Ignore if the press was long enough to be an aborted combo
+    // (user held BOOT alone past 1 s and let go) — don't surprise them with a view change.
+    const uint32_t heldFor = downAt != 0 ? millis() - downAt : 0;
+    if (armed && !longPressHandled && heldFor >= BUTTON_MIN_PRESS_MS && heldFor < LONG_PRESS_MS)
     {
       view = nextView(view);
       Serial.printf("View: %s\n", viewName(view));
@@ -756,11 +762,15 @@ void handleBootButton()
   {
     downAt = millis();
   }
-  else if (!longPressHandled && millis() - downAt >= LONG_PRESS_MS)
+  else if (!longPressHandled && pwrDown && millis() - downAt >= LONG_PRESS_MS)
   {
     longPressHandled = true;
-    setDebugMode(false);
-    sleepUntilNextPoll();
+    const bool wasOn = debugMode;
+    setDebugMode(!wasOn);
+    if (wasOn)
+    {
+      sleepUntilNextPoll();
+    }
   }
 }
 
@@ -786,21 +796,21 @@ void setup()
   // After deep sleep the panel still shows savedFrame
   const bool resumed = timerWake || buttonWake;
 
-  // Cold boot: debug mode on when a USB host is attached. After a BOOT wake, holding BOOT
-  // (counting from the wake, which millis() starts at) toggles it.
-  bool bootLongPress = false;
+  // Cold boot: debug mode on when a USB host is attached. On wake, holding BOOT + PWR together
+  // for LONG_PRESS_MS toggles it (counting from the wake, which millis() starts at).
+  bool comboLongPress = false;
   if (!resumed)
   {
     debugMode = usbHostConnected();
   }
-  else if (bootWake)
+  else if (buttonWake && digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == LOW)
   {
-    while (digitalRead(PIN_BOOT_BUTTON) == LOW && millis() < LONG_PRESS_MS)
+    while (digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == LOW && millis() < LONG_PRESS_MS)
     {
       delay(10);
     }
-    bootLongPress = digitalRead(PIN_BOOT_BUTTON) == LOW;
-    if (bootLongPress)
+    comboLongPress = digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == LOW;
+    if (comboLongPress)
     {
       debugMode = !debugMode;
     }
@@ -840,7 +850,7 @@ void setup()
     pollAndShow();
     sleepUntilNextPoll();
   }
-  if (bootWake && !bootLongPress)
+  if (bootWake && !comboLongPress)
   {
     // BOOT: next view from cached data, keeping the poll schedule unless a poll is due anyway
     view = nextView(view);
@@ -854,12 +864,12 @@ void setup()
     }
     sleepUntilNextPoll();
   }
-  if (bootWake && !debugMode)
+  if (buttonWake && comboLongPress && !debugMode)
   {
-    // Long press turned debug mode off: keep sleeping between polls
+    // Combo just turned debug mode off: keep sleeping between polls
     sleepUntilNextPoll();
   }
-  if (pwrWake)
+  if (pwrWake && !comboLongPress)
   {
     // Returns only when USB keeps the board running; stay awake in debug mode then
     powerOff();
@@ -874,7 +884,7 @@ void setup()
     pollAndShow();
     sleepUntilNextPoll();
   }
-  Serial.println("Debug mode on (awake) - type help for commands, long-press BOOT to turn it off");
+  Serial.println("Debug mode on (awake) - type help for commands, long-press BOOT+PWR to turn it off");
   pollAndShow();
 }
 
