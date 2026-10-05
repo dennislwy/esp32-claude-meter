@@ -53,21 +53,21 @@ starts the deep-sleep cycle once a USB host is no longer detected.
 
 Type `help` for the full list. Highlights:
 
-| Command | Purpose |
-| --- | --- |
-| `status` | Time, battery, current view, next poll, warning thresholds, quiet hours |
-| `usage` | Poll now, print the result, redraw, trigger any alerts |
-| `view` | Switch to the next view (dual / account 1 / account 2) |
-| `interval <1-5>` | Minutes between polls |
-| `warn5h <50-99>` / `warn7d <50-99>` | Warning threshold per window |
-| `quiet on \| off` | Enable or disable quiet hours |
-| `quiet <start>-<end>` | Set quiet hours, 24-h local time (e.g. `quiet 22-8`) |
-| `alerts` / `alerts clear` | Inspect / reset the per-window alert state |
-| `history` / `history clear` | Inspect / wipe the 7-day usage ring |
-| `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock |
-| `scan`, `tlscheck` | Diagnostics |
-| `files`, `play <file.wav>` | LittleFS tools |
-| `debug off` | Turn off serial & LED, start the sleep cycle |
+| Command                               | Purpose                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet hours |
+| `usage`                               | Poll now, print the result, redraw, trigger any alerts                  |
+| `view`                                | Switch to the next view (dual / account 1 / account 2)                  |
+| `interval <1-5>`                      | Minutes between polls                                                   |
+| `warn5h <50-99>` / `warn7d <50-99>`   | Warning threshold per window                                            |
+| `quiet on \| off`                     | Enable or disable quiet hours                                           |
+| `quiet <start>-<end>`                 | Set quiet hours, 24-h local time (e.g. `quiet 22-8`)                    |
+| `alerts` / `alerts clear`             | Inspect / reset the per-window alert state                              |
+| `history` / `history clear`           | Inspect / wipe the 7-day usage ring                                     |
+| `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock                                           |
+| `scan`, `tlscheck`                    | Diagnostics                                                             |
+| `files`, `play <file.wav>`            | LittleFS tools                                                          |
+| `debug off`                           | Turn off serial & LED, start the sleep cycle                            |
 
 ## Operation
 
@@ -97,4 +97,3 @@ data/          LittleFS payload: WAV alert sounds (gitignored)
 - NVS is **not** encrypted on this board. Anyone with the device and a
   USB cable can read back the Wi-Fi password and Claude tokens.
 - `.env` and `*.wav` are gitignored; keep tokens out of source control.
-- Rotate any token that was ever pasted into chat or a log.

@@ -14,7 +14,7 @@ struct CurvePoint
 // the textbook 4.20 V so a fully-charged pack reads 100 % after unplug: once the charger stops
 // holding CV, surface charge drops within seconds to ~4.17 V and then sags toward 4.10 V under
 // even a tiny load. 4.17 V is treated as 100 %; the lower half (where empty-warnings live) is
-// unchanged. See docs/battery.md for the full rationale.
+// unchanged. See docs/BATTERY.md for the full rationale.
 const CurvePoint CURVE[] = {
     {4170, 100}, {4120, 95}, {4080, 90}, {4000, 80}, {3950, 70}, {3870, 60}, {3840, 50},
     {3800, 40},  {3770, 30}, {3730, 20}, {3690, 10}, {3610, 5},  {3300, 0},
