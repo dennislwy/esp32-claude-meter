@@ -28,7 +28,7 @@ and get a strike-through.
 | ~~**OBS-2**~~ | ~~**RSSI on a card**~~ | **Closed 2026-10-05:** Status card shows SSID, dBm, and a quality word (excellent / good / fair / weak). |
 | ~~**OBS-3**~~ | ~~**Heap free + heap min**~~ | **Closed 2026-10-05:** Status card shows internal-SRAM free + low-water mark (`heap_free`, `heap_min`). |
 | **OBS-4** | **Model health** | Haiku / Sonnet / Opus / Fable up/down indicator in `/api/state`. We don't poll model status. |
-| **OBS-5** | **Anthropic news feed** | `/api/news` returns 5 RSS items (title + "Oct 02"); device fetches on a 6 h schedule. We have nothing. |
+| ~~**OBS-5**~~ | ~~**Anthropic news feed**~~ | **Closed 2026-10-05:** 10 latest headlines (title, date, link) in a scrolling Anthropic news card (5 visible). Fetched once each time panel mode opens rather than on a 6 h schedule, since the radio is off outside panel sessions. Same RSS mirror and streaming parse as theirs. |
 | **OBS-6** | **Lock state** | "locked (PIN screen)" / "unlocked" — N/A for us (no device-side PIN screen). |
 
 ## Device settings (SET)

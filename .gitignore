@@ -8,3 +8,5 @@ foobar/
 *.wav
 DESIGN_REQUIREMENTS.md
 src/build_info.cpp
+claude-ui-samples/
+*.ps1

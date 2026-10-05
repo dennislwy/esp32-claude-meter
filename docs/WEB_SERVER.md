@@ -80,6 +80,7 @@ routes require `Content-Type: application/json` on the request body.
 | GET | `/api/history` | — | `{cols:168, col_seconds:3600, newest_epoch, accounts:[{name, h5:[…], d7:[…]}]}` |
 | POST | `/api/history/clear` | — | wipes `/history.bin` |
 | GET | `/api/wifi/scan` | `?start=1` starts a scan; poll without it | `202 {"scanning":true}` while running, then `{networks:[{ssid,rssi,channel,secure,saved},…]}`; `500 {"error":"scan_failed"}`, or `409 {"error":"no_scan"}` when polled with no scan started. The scan starts ~150 ms after the `202`; the radio is off-channel for ~7-8 s while it runs (requests sent then stall until it ends), so the panel waits 4 s before polling. Click to list takes ~8-9 s |
+| GET | `/api/news` | — | `{ok, fetching, fetched_epoch, source, items:[{title, date, link}]}` — up to 10 headlines, fetched once per panel session (`fetching` is true until that run finishes) |
 | POST | `/api/sounds/play` | `{"file":"5h-warning.wav"}` | plays an allow-listed alert WAV (blocks ~1-3 s). Allowed: `5h-warning`, `5h-depleted`, `5h-reset`, `7d-warning`, `7d-depleted`, `7d-reset` |
 | POST | `/api/factory-reset` | `{"confirm":"wipe"}` | wipes NVS (`meter` + `alerts`) + history, schedules reboot |
 | POST | `/api/reboot` | — | schedules a reboot ~1 s after the response |
@@ -140,6 +141,7 @@ Rendered client-side from a single HTML blob:
 | **Sign in** | PIN prompt. Replaced by the dashboard after `/api/login` succeeds. |
 | **Status** | IP, Wi-Fi (SSID, dBm, quality word), uptime (`Xd Yh Zm`), battery, last-poll age, heap free / low-water mark, firmware revision + build time, per-account bars with `resets Sun 4 Oct 17:01 in 1h 4m` lines, "Refresh now" button. |
 | **7-day history** | Inline SVG line chart, 168 cols, orange = account 1, green = account 2 (thin = 5h, thick = 7d). Legend chips toggle each account's series. Day letters align to local midnight; y-axis ticks every 25 %. |
+| **Anthropic news** | 10 latest headlines (date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. |
 | **Accounts** | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token. |
 | **Wi-Fi** | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID. |
 | **Alert sounds** | Volume slider (0-100 %, saves on release) + 6 test-play buttons for the alert WAVs. |
@@ -192,6 +194,11 @@ against leaving it on by accident.
   (`400 bad_rotation`) rejects the whole request.
 - **Sound-play is allow-listed.** `/api/sounds/play` accepts only the 6
   alert WAV names; it will never read an arbitrary LittleFS path.
+- **News is third-party content.** Headlines come from an unofficial
+  RSS mirror over verified HTTPS (roots pinned in
+  `assets/certs/news_roots.pem`). The panel renders them as text, and a
+  link is only clickable if it's a plain `https://` URL; the device
+  drops anything else when parsing.
 - **No TLS.** HTTP on :80. Do not expose beyond trusted LAN.
 - **CSRF stance.** All state-changing routes require JSON body (not
   form-encoded) and the session cookie is `SameSite=Strict`. A

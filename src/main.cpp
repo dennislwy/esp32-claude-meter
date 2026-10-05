@@ -15,6 +15,7 @@
 #include "history.h"
 #include "lvgl_port.h"
 #include "meter_ui.h"
+#include "news.h"
 #include "panel.h"
 #include "pcf85063.h"
 #include "provisioning.h"
@@ -901,6 +902,8 @@ void enterPanelMode()
                 panelDisplay.hostname.c_str(), panelDisplay.ip.c_str(), panelDisplay.pin.c_str());
   view = MeterView::Panel;
   render();
+  // Headlines for the panel, fetched once per session; loop() runs it after the PIN is on screen
+  newsRequestFetch();
 }
 
 void enterProvisionMode()
@@ -1130,6 +1133,7 @@ void loop()
   if (panelMode)
   {
     panelService();
+    newsService();
     // 1 Hz LED heartbeat so the user can see panel mode is live
     static uint32_t lastBlinkMs = 0;
     static bool blinkOn = false;

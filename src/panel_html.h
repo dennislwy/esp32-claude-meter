@@ -65,6 +65,12 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
 .btn-row{display:flex;gap:8px;margin-top:8px}
 .btn-row>button{margin-top:0;width:auto;flex:1}
 .btn-row>button.btn-narrow{flex:0 0 auto;padding-left:16px;padding-right:16px}
+.news{list-style:none;padding:0 6px 0 0;overflow-y:auto;scrollbar-width:thin}
+.news li{padding:7px 0;border-bottom:1px solid var(--line);font-size:.9em;line-height:1.35}
+.news li:last-child{border-bottom:0}
+.news .d{display:block;color:var(--dim);font-size:.78em;font-variant-numeric:tabular-nums}
+.news a{color:var(--text);text-decoration:none}
+.news a:hover{color:var(--acc);text-decoration:underline}
 .combo{position:relative}
 .combo input{padding-right:34px}
 .combo .chev{position:absolute;right:10px;top:50%;width:14px;height:14px;margin-top:-7px;pointer-events:none;color:var(--dim);transition:transform .15s}
@@ -109,6 +115,12 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
       <h2>7-day history</h2>
       <svg id="histSvg" viewBox="0 0 320 160" preserveAspectRatio="none"></svg>
       <div class="hint" id="histLegend">loading…</div>
+    </div>
+
+    <div class="card">
+      <h2>Anthropic news</h2>
+      <ul class="news" id="newsList"></ul>
+      <div class="hint" id="newsStatus">loading…</div>
     </div>
 
     <div class="card">
@@ -365,12 +377,12 @@ function showLogin(){$('login').classList.remove('hidden');$('dash').classList.a
 function showDash(){$('login').classList.add('hidden');$('dash').classList.remove('hidden')}
 async function tryBoot(){
   const r=await api('/api/state','GET');
-  if(r.ok){showDash();await refreshState();refreshHistory()}else showLogin();
+  if(r.ok){showDash();await refreshState();refreshHistory();refreshNews()}else showLogin();
 }
 $('btnLogin').onclick=async()=>{
   $('loginStatus').textContent='…';
   const r=await api('/api/login','POST',{pin:$('pin').value});
-  if(r.ok){$('loginStatus').textContent='';$('pin').value='';showDash();await refreshState();refreshHistory()}
+  if(r.ok){$('loginStatus').textContent='';$('pin').value='';showDash();await refreshState();refreshHistory();refreshNews()}
   else{$('loginStatus').textContent=r.data?.error==='throttled'?'Try again in '+(r.data.retry_s||60)+' s':'Wrong PIN';$('loginStatus').className='status err'}
 };
 $('btnLogout').onclick=async()=>{await api('/api/logout','POST',{});showLogin()};
@@ -476,6 +488,38 @@ $('btnDisplay').onclick=async()=>{
   st.textContent=r.ok?'Saved':(r.data?.error||'Error');st.className='status '+(r.ok?'ok':'err');
   if(r.ok){tzDirty=false;rotDirty=false;tzSaved=null;refreshState()}
 };
+// Shows the first 5 headlines; the rest scroll. Heights vary with title wrapping, so measure.
+function fitNews(){
+  const list=$('newsList'),li=list.children;
+  list.style.maxHeight='';
+  if(li.length>5)list.style.maxHeight=(li[5].getBoundingClientRect().top-list.getBoundingClientRect().top)+'px';
+}
+window.addEventListener('resize',fitNews);
+// Headlines: the device fetches them once when panel mode opens, so poll briefly while that runs
+let newsTimer=null;
+async function refreshNews(tries=0){
+  clearTimeout(newsTimer);
+  const r=await api('/api/news','GET');
+  if(!r.ok)return;
+  const n=r.data,list=$('newsList');
+  if(n.fetching&&tries<20){$('newsStatus').textContent='Fetching headlines…';newsTimer=setTimeout(()=>refreshNews(tries+1),2500);return}
+  list.innerHTML='';list.scrollTop=0;
+  (n.items||[]).forEach(it=>{
+    const li=document.createElement('li');
+    const d=document.createElement('span');d.className='d';d.textContent=it.date||'';
+    // Feed text is third-party: textContent only, and links must be plain https
+    let t;
+    if(/^https:\/\/[^\s"<>]+$/.test(it.link||'')){t=document.createElement('a');t.href=it.link;t.target='_blank';t.rel='noopener noreferrer'}
+    else t=document.createElement('span');
+    t.textContent=it.title;
+    li.appendChild(d);li.appendChild(t);list.appendChild(li);
+  });
+  fitNews();
+  const age=n.fetched_epoch?fmtAge(Math.max(0,(deviceNow||Math.floor(Date.now()/1000))-n.fetched_epoch)):'';
+  $('newsStatus').textContent=n.ok?'Fetched '+age+' from an unofficial RSS mirror of anthropic.com/news. Refreshes the next time panel mode opens.'
+    :(n.items&&n.items.length?'Couldn\'t refresh the feed; showing headlines from '+age+'.':(n.fetched_epoch||n.fetching?'':'Couldn\'t fetch the news feed.'));
+}
+
 $('btnSettings').onclick=async()=>{
   const qs=parseTime($('qstart').value)||{h:0,m:0};
   const qe=parseTime($('qend').value)||{h:0,m:0};

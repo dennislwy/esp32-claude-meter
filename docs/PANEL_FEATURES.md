@@ -42,6 +42,24 @@ View-only, plus one action.
 Downsampled server-side from the 336-slot, 30-min ring to 168 one-hour
 columns (max of the two 30-min samples per hour).
 
+## Anthropic news
+
+The 10 latest headlines from anthropic.com/news: date and title, each a
+link that opens in a new tab. The first 5 show; scroll the list for the
+next 5.
+
+- Fetched **once per panel session**: the device asks for a fetch when
+  panel mode opens and runs it right after the PIN is drawn (~2–5 s,
+  during which the panel doesn't answer). The next panel session fetches
+  again; nothing is fetched outside panel mode.
+- Source: an unofficial RSS mirror of anthropic.com/news
+  (`raw.githubusercontent.com/Olshansk/rss-feeds`). The feed is ~200 kB, so the
+  device streams it and stops reading after the 10th item.
+- A failed fetch keeps the headlines from the last successful one and
+  says so under the list.
+- Headline text and links are third-party: they're rendered as plain
+  text, and only plain `https://` links become clickable.
+
 ## Accounts
 
 - Rename `Name 1` / `Name 2` (shown on the ePaper and in the status

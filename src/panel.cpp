@@ -11,6 +11,7 @@
 #include "board_pins.h"
 #include "build_info.h"
 #include "history.h"
+#include "news.h"
 #include "panel_html.h"
 #include "settings.h"
 
@@ -551,6 +552,27 @@ void handleWifiScan()
   sendJson(200, d);
 }
 
+void handleNews()
+{
+  if (!requireAuth())
+    return;
+  const NewsState &news = newsState();
+  JsonDocument d;
+  d["ok"] = news.ok;
+  d["fetching"] = news.pending;
+  d["fetched_epoch"] = news.fetchedAt;
+  d["source"] = NEWS_FEED_URL;
+  JsonArray items = d["items"].to<JsonArray>();
+  for (int i = 0; i < news.count; i++)
+  {
+    JsonObject o = items.add<JsonObject>();
+    o["title"] = news.items[i].title;
+    o["date"] = news.items[i].date;
+    o["link"] = news.items[i].link;
+  }
+  sendJson(200, d);
+}
+
 void handleFactoryReset()
 {
   if (!requireAuth())
@@ -626,6 +648,7 @@ void panelBegin(PanelDisplay &out)
   server->on("/api/history/clear", HTTP_POST, handleHistoryClear);
   server->on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   server->on("/api/sounds/play", HTTP_POST, handleSoundsPlay);
+  server->on("/api/news", HTTP_GET, handleNews);
   server->on("/api/factory-reset", HTTP_POST, handleFactoryReset);
   server->on("/api/reboot", HTTP_POST, handleReboot);
   server->onNotFound(handleNotFound);

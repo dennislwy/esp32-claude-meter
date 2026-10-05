@@ -1,12 +1,11 @@
 # Claude Usage Meter — ESP32-S3 ePaper 1.54
 
 Firmware for the [Waveshare ESP32-S3-ePaper-1.54](https://www.waveshare.com/wiki/ESP32-S3-ePaper-1.54)
-board. The device polls `api.anthropic.com` over verified HTTPS, reads the
-`anthropic-ratelimit-unified-*` response headers for the 5-hour and 7-day
-usage of up to two Claude accounts, and shows the result on the 200×200
-black & white ePaper panel. Audible alerts play from an onboard speaker
-when a window crosses a configurable warning threshold or depletes, with
-optional quiet hours.
+board. The device polls `api.anthropic.com` over verified HTTPS for the 
+5-hour and 7-day usage of up to two Claude accounts, and shows the result 
+on the 200×200 black & white ePaper panel. Audible alerts play from an 
+onboard speaker when a window crosses a configurable warning threshold or 
+depletes, with optional quiet hours.
 
 ## Hardware
 
@@ -17,7 +16,7 @@ optional quiet hours.
 - ES8311 audio codec + onboard speaker for WAV alert playback
 - SHTC3 temperature/humidity sensor (I²C 0x70) — put to sleep (~0.3 µA);
   not used
-- Li-ion battery with ADC-based gauge
+- 3.7V 400mAh Li-ion battery with ADC-based gauge
 
 ## Build & flash
 
@@ -93,7 +92,7 @@ when the 30-min slot advances — ~48 writes/day).
 src/           firmware (main, poll loop, UI, alerts, history, settings)
 include/       lv_conf.h and other build-only headers
 lib/           local libraries (Battery, Epaper154, ES8311, PCF85063, ClaudeUsage)
-assets/certs/  pinned root CAs for api.anthropic.com (embedded at build time)
+assets/certs/  pinned root CAs for api.anthropic.com and the news feed (embedded at build time)
 scripts/       build_info.py: writes src/build_info.cpp (git revision + build time) before each build
 data/          LittleFS payload: WAV alert sounds (gitignored)
 docs/          design notes: modes, buttons, battery, alert sounds, web panel
@@ -104,3 +103,12 @@ docs/          design notes: modes, buttons, battery, alert sounds, web panel
 - NVS is **not** encrypted on this board. Anyone with the device and a
   USB cable can read back the Wi-Fi password and Claude tokens.
 - `.env` and `*.wav` are gitignored; keep tokens out of source control.
+
+## Credits
+
+- Thanks to [oauramos/claude-usage-stick](https://github.com/oauramos/claude-usage-stick),
+  which inspired this project. Its control panel set the bar for this
+  one's feature list.
+- Thanks to [Olshansk/rss-feeds](https://github.com/Olshansk/rss-feeds)
+  for maintaining the RSS feed of Anthropic news that the panel's news card
+  reads.
