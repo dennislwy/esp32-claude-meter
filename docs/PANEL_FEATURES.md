@@ -9,6 +9,8 @@ underlying REST surface.
 The panel has five views: **Usage**, **Accounts**, **Device**,
 **Alerts & sound**, and **News**. Desktop uses a fixed sidebar; phones use
 a horizontally scrollable navigation row. Only the selected view is shown.
+The topbar is hidden at mobile widths (760px and below) to give the page
+content more room.
 Switching views keeps unsaved field edits. Automatic state updates also
 preserve edits until they are saved.
 
@@ -22,6 +24,14 @@ Design analysis and local preview instructions: [PANEL_DESIGN.md](PANEL_DESIGN.m
 
 ## Sign in
 
+The complete sign-in screen fits a 360 × 780 CSS viewport at DPR 3 in
+light and dark themes, with normal text size and the keyboard closed.
+Enlarged text and shorter viewports can scroll naturally.
+
+Entering or pasting six digits signs in automatically. Incomplete or
+non-numeric PINs are not submitted; a pending sign-in cannot submit twice.
+The button and Enter key also support manual retries after an error.
+
 Enter the 6-digit PIN shown on the ePaper → mint a `sid` cookie
 (`HttpOnly`, `SameSite=Strict`), held in RAM. Up to 4 sessions at once
 (e.g. phone + laptop); a 5th login evicts the one idle longest.
@@ -31,8 +41,9 @@ miss, capped at 5 min. Exiting panel mode resets the counter.
 
 ## Status
 
-Usage shows per-account usage, battery, last poll, signal strength, and
-uptime. Device → Device details contains the complete diagnostics.
+Usage shows per-account bars and the seven-day chart. Device → Device
+details contains battery, last poll, signal strength, uptime, and the
+complete diagnostics.
 
 - IP, hostname, uptime (`Xd Yh Zm`), battery %, last-poll age
 - Wi-Fi: SSID, RSSI and a quality word (`GSFwifi  ·  -55 dBm (excellent)`;
@@ -44,9 +55,6 @@ uptime. Device → Device details contains the complete diagnostics.
   line each, formatted in the device's selected time zone. Missing usage
   displays a dash instead of a fabricated percentage. Warning and exhausted
   windows use distinct bar colors.
-- A usage summary compares reporting accounts against the saved warning
-  thresholds. This describes the current reading; it does not predict
-  future usage.
 - **Refresh now** — forces an on-demand `/api/refresh` poll (device
   re-polls Claude, re-renders ePaper, re-connects Wi-Fi after the poll
   drops it). Expect a 3–5 s stall.
@@ -114,7 +122,18 @@ Under Device → Wi-Fi connection.
 
 ## Alert sounds
 
-Under Alerts & sound → Sound, just right.
+Under Alerts & sound → Polling & alerts, Quiet hours uses a compact blue
+switch beside its label and description, with the From/Until fields below.
+The gray off state and white thumb follow the supplied Claude snapshot.
+It supports keyboard operation and preserves unsaved changes during state
+updates; **Save settings** applies the switch and time window together.
+
+Under Alerts & sound → Alert sounds.
+
+The Alert sounds slider, playback icons, and button hover, focus, and
+playing states share the quiet-hours switch's blue accent. The volume value
+uses the standard text color. The slider track is 6px thick, matching the
+usage progress bars, with a 44px control height for touch operation.
 
 - Volume slider 0–100 % — saves on release, maps to −40…0 dB in the
   ES8311 codec. 0 % is near-mute, 100 % is codec max.

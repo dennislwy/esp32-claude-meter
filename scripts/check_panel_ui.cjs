@@ -28,6 +28,7 @@ const initialState = {
   const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
   const errors = [], posts = [], external = [];
   let signedIn = false, state = structuredClone(initialState), loginThrottle = false, offline = false, clearHistory = false, newsFetching = false;
+  let loginGate = null;
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, timezoneId: 'America/New_York', reducedMotion: 'reduce' });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
@@ -39,6 +40,7 @@ const initialState = {
     if (offline) return route.abort('failed');
     if (request.method() === 'POST') posts.push({ endpoint, body });
     if (endpoint === '/api/login') {
+      if (loginGate) await loginGate;
       if (loginThrottle) return reply({ error: 'throttled', retry_s: 60 }, 429);
       if (body.pin !== '123456') return reply({ error: 'auth' }, 401);
       signedIn = true; return reply({ ok: true });
@@ -61,6 +63,28 @@ const initialState = {
   const latestPost = endpoint => posts.filter(p => p.endpoint === endpoint).at(-1)?.body;
   try {
     const address = 'http://127.0.0.1:' + server.address().port;
+    const mobileContext = await browser.newContext({ viewport: { width: 360, height: 780 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+    const mobile = await mobileContext.newPage();
+    await mobile.route('**/api/**', route => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'auth' }) }));
+    await mobile.goto(address);
+    await mobile.locator('#pin').waitFor({ state: 'visible' });
+    for (const colorScheme of ['light', 'dark']) {
+      await mobile.emulateMedia({ colorScheme });
+      await mobile.waitForFunction(theme => document.documentElement.dataset.theme === theme, colorScheme);
+      const size = await mobile.evaluate(() => ({
+        width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight,
+        dpr: devicePixelRatio, footerBottom: document.querySelector('.login-footer').getBoundingClientRect().bottom,
+        helpBottom: document.querySelector('.login-help').getBoundingClientRect().bottom,
+        pinHeight: document.querySelector('#pin').getBoundingClientRect().height,
+        buttonHeight: document.querySelector('#btnLogin').getBoundingClientRect().height
+      }));
+      assert.equal(size.dpr, 3);
+      assert.ok(size.width <= 360 && size.height <= 780, 'S22 sign-in fits without scrolling in ' + colorScheme + ' mode');
+      assert.ok(size.footerBottom <= 780 && size.helpBottom <= 780, 'Sign-in instructions and footer remain visible');
+      assert.ok(size.pinHeight >= 44 && size.buttonHeight >= 44, 'Compact sign-in retains usable touch targets');
+    }
+    await mobileContext.close();
+    console.log('PASS: 360 x 780 sign-in at DPR 3, light/dark, complete content visible, and touch targets');
     await page.goto(address);
     await page.locator('#pin').waitFor({ state: 'visible' });
     for (const width of [320, 390, 768, 1440]) {
@@ -69,13 +93,30 @@ const initialState = {
     }
     await page.locator('#pin').fill('12'); await page.locator('#btnLogin').click();
     assert.equal(posts.length, 0, 'Malformed PIN must not be submitted');
-    await page.locator('#pin').fill('999999'); await page.locator('#pin').press('Enter');
+    await page.locator('#pin').fill('12x456');
+    assert.equal(posts.length, 0, 'Six characters containing a non-digit must not auto-submit');
+    await page.locator('#pin').fill('');
+    await page.locator('#pin').pressSequentially('99999');
+    assert.equal(posts.length, 0, 'Five digits must not auto-submit');
+    let releaseLogin;
+    loginGate = new Promise(resolve => { releaseLogin = resolve; });
+    await page.locator('#pin').pressSequentially('9');
+    await waitFor('#loginStatus', 'Opening');
+    await page.evaluate(() => {
+      document.querySelector('#pin').dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('#btnLogin').click();
+      document.querySelector('#pin').dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    });
+    assert.equal(posts.filter(p => p.endpoint === '/api/login').length, 1, 'Input, Enter, and click cannot duplicate a pending auto-login');
+    releaseLogin(); loginGate = null;
     await waitFor('#loginStatus', 'doesn’t match');
     loginThrottle = true; await page.locator('#btnLogin').click(); await waitFor('#loginStatus', '60 seconds'); loginThrottle = false;
-    await page.locator('#pin').fill('123456'); await page.locator('#pin').press('Enter');
+    await page.locator('#pin').fill('123456');
     await page.locator('.usage-account').first().waitFor();
+    assert.equal(posts.filter(p => p.endpoint === '/api/login').length, 3, 'A complete pasted PIN signs in without Enter or a button click');
     assert.equal(await page.locator('.usage-account').count(), 2);
     assert.equal(await page.locator('[role=progressbar]').count(), 4);
+    assert.equal(await page.locator('#view-usage .summary,#view-usage .overview-stats').count(), 0, 'Usage contains account cards and history without removed sections');
     const reset = await page.evaluate(() => ({ actual: document.querySelector('.resetline').textContent, expected: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(1791227200 * 1000)) }));
     assert.ok(reset.actual.includes(reset.expected), 'Reset times use the device zone instead of the browser zone');
     await page.locator('#histLegend button').first().focus(); await page.keyboard.press('Space');
@@ -101,9 +142,26 @@ const initialState = {
         assert.ok(geometry.width <= geometry.viewport, 'No horizontal overflow: ' + view + ' at ' + width + 'px');
         assert.equal(geometry.views, 1, 'One focused view at a time');
         if (width <= 760) assert.ok(geometry.brand <= geometry.actions, 'Mobile header controls must not overlap');
+        if (view === 'device' || view === 'alerts') {
+          const separators = await page.locator(view === 'device' ? '#btnDisplay' : '#btnSettings').evaluate(button => {
+            const actions = button.parentElement, lastRow = actions.previousElementSibling;
+            return Number(parseFloat(getComputedStyle(lastRow).borderBottomWidth) > 0) + Number(parseFloat(getComputedStyle(actions).borderTopWidth) > 0);
+          });
+          assert.equal(separators, 1, 'One separator above save actions: ' + view + ' at ' + width + 'px');
+        }
+        if (view === 'alerts') {
+          const quietLayout = await page.locator('.quiet-setting').evaluate(row => {
+            const copy = row.querySelector('.setting-copy').getBoundingClientRect();
+            const toggle = row.querySelector('.quiet-switch').getBoundingClientRect();
+            const times = row.querySelector('.quiet-row').getBoundingClientRect();
+            return { beside: copy.right <= toggle.left, centered: Math.abs((copy.top + copy.bottom - toggle.top - toggle.bottom) / 2) < 1, below: times.top >= Math.max(copy.bottom, toggle.bottom), targetHeight: toggle.height };
+          });
+          assert.ok(quietLayout.beside && quietLayout.centered && quietLayout.below, 'Quiet-hours description and switch share a row above the times at ' + width + 'px');
+          assert.ok(quietLayout.targetHeight >= 44, 'Compact switch keeps a usable touch target');
+        }
       }
     }
-    console.log('PASS: Login, throttling, device time zone, keyboard chart controls, themes, and 30 responsive view checks');
+    console.log('PASS: Six-digit auto-login, pending-request deduplication, throttling, simplified usage, device time zone, keyboard chart controls, themes, and 30 responsive view checks');
     await page.setViewportSize({ width: 1440, height: 1100 });
     await select('accounts');
     const unsafeName = '<img src=x onerror="window.injected=true">';
@@ -130,12 +188,21 @@ const initialState = {
     assert.equal(latestPost('/api/settings').tz_name, 'Asia/Tokyo');
     assert.equal(latestPost('/api/settings').rotation, 90);
     await select('alerts');
-    await page.locator('#warn5').fill('85'); await page.locator('#qon').selectOption('0');
+    const quietSwitch = page.getByRole('switch', { name: 'Quiet hours' });
+    assert.equal(await quietSwitch.isChecked(), true, 'Switch reflects the enabled device setting');
+    await quietSwitch.focus(); await page.keyboard.press('Space');
+    await page.locator('#warn5').fill('85');
     await page.evaluate(() => refreshState());
     assert.equal(await page.locator('#warn5').inputValue(), '85');
-    assert.equal(await page.locator('#qon').inputValue(), '0', 'Unsaved quiet-hours selection survives state polling');
+    assert.equal(await quietSwitch.isChecked(), false, 'Unsaved quiet-hours switch survives state polling');
     await page.locator('#btnSettings').click(); await waitFor('#setStatus', 'Saved');
     assert.equal(latestPost('/api/settings').warn5, 85); assert.equal(latestPost('/api/settings').quiet_on, false);
+    await quietSwitch.check();
+    await page.locator('#btnSettings').click();
+    await page.waitForFunction(() => !document.querySelector('#qon').dataset.dirty);
+    assert.equal(latestPost('/api/settings').quiet_on, true, 'Switch can save both disabled and enabled states');
+    state.quiet_on = false; await page.evaluate(() => refreshState());
+    assert.equal(await quietSwitch.isChecked(), false, 'A clean switch follows external device changes');
     await page.locator('#vol').fill('40'); await page.locator('#vol').dispatchEvent('change'); await waitFor('#sndStatus', 'Volume saved');
     assert.equal(latestPost('/api/settings').audio_vol, 40);
     for (const file of ['5h-warning', '5h-depleted', '5h-reset', '7d-warning', '7d-depleted', '7d-reset']) {
@@ -151,8 +218,10 @@ const initialState = {
     await page.locator('#btnClearHist').click(); await waitFor('#dangerStatus', 'History cleared');
     await page.evaluate(() => refreshHistory()); await select('usage');
     assert.equal(await page.locator('#historyEmpty').isVisible(), true);
-    state.accounts[0].h5 = 100; await page.evaluate(() => refreshState()); await waitFor('#usageSummary', 'fresh start');
-    state.accounts[0].h5 = 85; await page.evaluate(() => refreshState()); await waitFor('#usageSummary', 'warning threshold');
+    state.accounts[0].h5 = 100; await page.evaluate(() => refreshState());
+    assert.equal(await page.locator('.usage-account').first().locator('.bar.depleted').count(), 1);
+    state.accounts[0].h5 = 85; await page.evaluate(() => refreshState());
+    assert.equal(await page.locator('.usage-account').first().locator('.bar.warn').count(), 1);
     state.accounts.forEach(a => a.has_data = false); await page.evaluate(() => refreshState());
     assert.equal(await page.locator('#accounts [role=progressbar]').count(), 0, 'No fabricated percentages for missing data');
     assert.ok((await page.locator('.usage-number').first().textContent()).includes('—'));

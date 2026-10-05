@@ -4,7 +4,7 @@ Phase 1 of **R8**. A STA-mode HTTP server that lets you edit the device's
 settings from a browser on the same Wi-Fi, triggered on demand.
 
 Source: `src/panel.{h,cpp}`, `src/panel_html.h`. UI payload is a single
-PROGMEM HTML/CSS/JS blob (~78 kB) embedded in firmware. All fonts, icons,
+PROGMEM HTML/CSS/JS blob (~81 kB) embedded in firmware. All fonts, icons,
 styles, and scripts are local; no asset CDN is required.
 
 Phase 2 adds an **AP captive portal** for first-time Wi-Fi provisioning,
@@ -143,15 +143,15 @@ for the reference analysis and a simulated local preview.
 
 | Card | Purpose |
 | --- | --- |
-| **Sign in** | PIN prompt. Replaced by the dashboard after `/api/login` succeeds. |
-| **Usage / Device details** | Usage: threshold summary, per-account bars with device-time-zone reset times, battery, last poll, signal, uptime, and "Refresh now". Device details: IP, Wi-Fi (SSID, dBm, quality word), heap free / low-water mark, firmware revision + build time, and the full device diagnostics. |
+| **Sign in** | PIN prompt; typing or pasting six digits automatically calls `/api/login`. Replaced by the dashboard on success; manual retry is available. |
+| **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: battery, last poll, uptime, IP, Wi-Fi (SSID, dBm, quality word), heap free / low-water mark, firmware revision + build time, and the full device diagnostics. |
 | **7-day history** | Responsive inline SVG line chart in Usage, 168 cols, blue = account 1, green = account 2 (dashed = 5h, solid = 7d). Keyboard-accessible legend buttons toggle each account's series. Day names follow the device's time zone; y-axis ticks every 25 %. Empty samples preserve gaps; no samples show an empty state. |
 | **Anthropic news** | 10 latest headlines (date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. |
 | **Accounts** | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token. |
 | **Wi-Fi** | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID. |
 | **Alert sounds** | Volume slider (0-100 %, saves on release) + 6 test-play buttons for the alert WAVs. |
 | **Display & time** | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°. |
-| **Polling & alerts** | Poll interval (1-5 min), 5h/7d warning %, quiet hours (`<input type=time>` with HH:MM precision), quiet enabled toggle. |
+| **Polling & alerts** | Poll interval (1-5 min), 5h/7d warning %, quiet hours (`<input type=time>` with HH:MM precision), accessible On/Off switch; Save settings applies changes. |
 | **Appearance / Sign out** | Sidebar controls select System, Light, or Dark theme and clear the session cookie. Any authenticated endpoint returning 401 opens the PIN screen. |
 | **Device management** | In Device: Clear 7-day history / Restart device / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes). |
 
