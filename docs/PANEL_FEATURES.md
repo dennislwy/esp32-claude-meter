@@ -1,8 +1,24 @@
 # Panel features
 
-Everything a signed-in user can do in the LAN control panel, by card.
+Everything a signed-in user can do in the LAN control panel, by feature.
 See [WEB_SERVER.md](WEB_SERVER.md) for how to reach it and the
 underlying REST surface.
+
+## Navigation and appearance
+
+The panel has five views: **Usage**, **Accounts**, **Device**,
+**Alerts & sound**, and **News**. Desktop uses a fixed sidebar; phones use
+a horizontally scrollable navigation row. Only the selected view is shown.
+Switching views keeps unsaved field edits. Automatic state updates also
+preserve edits until they are saved.
+
+Choose **System**, **Light**, or **Dark** beside Sign out. The selection is
+saved in this browser; System follows the operating system's appearance.
+The complete UI loads from the meter, with no external fonts or scripts.
+Keyboard focus, labelled controls, live feedback, and reduced-motion
+preferences are supported.
+
+Design analysis and local preview instructions: [PANEL_DESIGN.md](PANEL_DESIGN.md).
 
 ## Sign in
 
@@ -15,7 +31,8 @@ miss, capped at 5 min. Exiting panel mode resets the counter.
 
 ## Status
 
-View-only, plus one action.
+Usage shows per-account usage, battery, last poll, signal strength, and
+uptime. Device → Device details contains the complete diagnostics.
 
 - IP, hostname, uptime (`Xd Yh Zm`), battery %, last-poll age
 - Wi-Fi: SSID, RSSI and a quality word (`GSFwifi  ·  -55 dBm (excellent)`;
@@ -24,27 +41,35 @@ View-only, plus one action.
 - Firmware: git revision + build time (`82dc70e  ·  2026-10-05 16:42 +0800`),
   generated per build by `scripts/build_info.py`
 - Per-account 5 H / 7 D bars with a `resets Sun 4 Oct 17:01 in 1h 4m`
-  line each
+  line each, formatted in the device's selected time zone. Missing usage
+  displays a dash instead of a fabricated percentage. Warning and exhausted
+  windows use distinct bar colors.
+- A usage summary compares reporting accounts against the saved warning
+  thresholds. This describes the current reading; it does not predict
+  future usage.
 - **Refresh now** — forces an on-demand `/api/refresh` poll (device
   re-polls Claude, re-renders ePaper, re-connects Wi-Fi after the poll
   drops it). Expect a 3–5 s stall.
 
 ## 7-day history
 
-168-column inline SVG line chart.
+168-column responsive inline SVG line chart in Usage.
 
-- Orange = account 1, green = account 2
-- Thin line = 5 H series, thick line = 7 D series
-- Click a legend chip to toggle that account's series on/off
-- Day letters aligned to local midnight; y-axis ticks every 25 %
+- Blue = account 1, green = account 2; colors adapt to the theme
+- Dashed line = 5 H series, solid line = 7 D series
+- Click a legend button (or use Enter/Space) to toggle that account's
+  series on/off
+- Day names aligned to midnight in the device's time zone; y-axis ticks
+  every 25 %
 - Empty slots render as broken segments (JSON `null`)
+- No recorded samples show an explicit empty state
 
 Downsampled server-side from the 336-slot, 30-min ring to 168 one-hour
 columns (max of the two 30-min samples per hour).
 
 ## Anthropic news
 
-The 10 latest headlines from anthropic.com/news: date and title, each a
+In News, the 10 latest headlines from anthropic.com/news: date and title, each a
 link that opens in a new tab. The first 5 show; scroll the list for the
 next 5.
 
@@ -76,6 +101,8 @@ pending).
 
 ## Wi-Fi
 
+Under Device → Wi-Fi connection.
+
 - Edit SSID + password (blank password = keep current)
 - **Scan** → sorted list of nearby 2.4 GHz networks (SSID, RSSI,
   lock icon, "saved" marker). Tap a row to populate the SSID field.
@@ -86,6 +113,8 @@ pending).
   current session stays on the old network).
 
 ## Alert sounds
+
+Under Alerts & sound → Sound, just right.
 
 - Volume slider 0–100 % — saves on release, maps to −40…0 dB in the
   ES8311 codec. 0 % is near-mute, 100 % is codec max.
@@ -98,6 +127,8 @@ pending).
 will never play an arbitrary file.
 
 ## Display &amp; time
+
+Under Device → Display & time.
 
 - **Time zone** — type-ahead picker: start typing a city, country,
   alias, or offset and the list narrows as you type (`berlin`, `japan`,
@@ -118,6 +149,8 @@ will never play an arbitrary file.
 
 ## Polling &amp; alerts
 
+Under Alerts & sound → Polling & alerts.
+
 - Poll interval, 1–5 min
 - 5 H warn %, 7 D warn %, each 50–99
 - Quiet-hours start / end as `<input type="time">` with HH:MM
@@ -135,9 +168,13 @@ Clears the `sid` cookie and ends the session. Panel mode on the device
 stays up until the normal exit (long BOOT, serial `panel`, 5 min idle,
 or reboot).
 
+A `401` from any authenticated endpoint returns the page to the PIN
+screen. Connection failures show feedback, and state polling retries
+while the dashboard is visible.
+
 ## Danger zone
 
-Each button uses a two-tap arm pattern: first tap shows "Tap again to
+Under Device → Device management. Each button uses a two-tap arm pattern: first tap shows "Tap again to
 confirm", second tap within 5 s executes.
 
 - **Clear 7-day history** — wipes `/history.bin` on LittleFS. Dashboard

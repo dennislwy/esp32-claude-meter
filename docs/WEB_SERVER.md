@@ -4,7 +4,8 @@ Phase 1 of **R8**. A STA-mode HTTP server that lets you edit the device's
 settings from a browser on the same Wi-Fi, triggered on demand.
 
 Source: `src/panel.{h,cpp}`, `src/panel_html.h`. UI payload is a single
-PROGMEM HTML/CSS/JS blob (~10 kB) embedded in firmware.
+PROGMEM HTML/CSS/JS blob (~78 kB) embedded in firmware. All fonts, icons,
+styles, and scripts are local; no asset CDN is required.
 
 Phase 2 adds an **AP captive portal** for first-time Wi-Fi provisioning,
 documented in the [Provisioning (Phase 2)](#provisioning-phase-2) section
@@ -134,21 +135,25 @@ renders gaps as broken line segments.
 
 ## UI sections
 
-Rendered client-side from a single HTML blob:
+Rendered client-side from a single HTML blob, organised into **Usage**,
+**Accounts**, **Device**, **Alerts & sound**, and **News** views. The
+sidebar becomes a scrollable navigation row on phones. System/light/dark
+appearance is saved per browser. See [PANEL_DESIGN.md](PANEL_DESIGN.md)
+for the reference analysis and a simulated local preview.
 
 | Card | Purpose |
 | --- | --- |
 | **Sign in** | PIN prompt. Replaced by the dashboard after `/api/login` succeeds. |
-| **Status** | IP, Wi-Fi (SSID, dBm, quality word), uptime (`Xd Yh Zm`), battery, last-poll age, heap free / low-water mark, firmware revision + build time, per-account bars with `resets Sun 4 Oct 17:01 in 1h 4m` lines, "Refresh now" button. |
-| **7-day history** | Inline SVG line chart, 168 cols, orange = account 1, green = account 2 (thin = 5h, thick = 7d). Legend chips toggle each account's series. Day letters align to local midnight; y-axis ticks every 25 %. |
+| **Usage / Device details** | Usage: threshold summary, per-account bars with device-time-zone reset times, battery, last poll, signal, uptime, and "Refresh now". Device details: IP, Wi-Fi (SSID, dBm, quality word), heap free / low-water mark, firmware revision + build time, and the full device diagnostics. |
+| **7-day history** | Responsive inline SVG line chart in Usage, 168 cols, blue = account 1, green = account 2 (dashed = 5h, solid = 7d). Keyboard-accessible legend buttons toggle each account's series. Day names follow the device's time zone; y-axis ticks every 25 %. Empty samples preserve gaps; no samples show an empty state. |
 | **Anthropic news** | 10 latest headlines (date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. |
 | **Accounts** | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token. |
 | **Wi-Fi** | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID. |
 | **Alert sounds** | Volume slider (0-100 %, saves on release) + 6 test-play buttons for the alert WAVs. |
 | **Display & time** | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°. |
 | **Polling & alerts** | Poll interval (1-5 min), 5h/7d warning %, quiet hours (`<input type=time>` with HH:MM precision), quiet enabled toggle. |
-| **Sign out** | Clears the session cookie. |
-| **Danger zone** | Clear 7-day history / Reboot / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes). |
+| **Appearance / Sign out** | Sidebar controls select System, Light, or Dark theme and clear the session cookie. Any authenticated endpoint returning 401 opens the PIN screen. |
+| **Device management** | In Device: Clear 7-day history / Restart device / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes). |
 
 ## State and side effects
 
@@ -212,7 +217,7 @@ against leaving it on by accident.
 | ePaper shows "LAN Panel" but IP is blank | Wi-Fi failed to connect within 15 s — check SSID/pass, 2.4 GHz availability |
 | Panel exits by itself | 5-min idle timeout; any API hit resets the counter |
 | 429 "throttled" | Too many wrong PINs — exit and re-enter panel mode to reset |
-| 401 "auth" after a while | Session evicted (new login elsewhere, or reboot). Reload page |
+| 401 "auth" after a while | Session evicted (new login elsewhere, or reboot). The panel returns to the PIN screen automatically |
 | Scan returns `[]` | Scan completed but no networks visible on 2.4 GHz; try moving the device |
 | Serial `panel` doesn't start the server | Device not in debug mode (no serial), or Wi-Fi not configured. Enter debug mode (long BOOT+PWR) first |
 

@@ -52,7 +52,7 @@ and get a strike-through.
 | --- | --- | --- |
 | ~~**API-1**~~ | ~~**Async Wi-Fi scan**~~ | **Closed 2026-10-05:** `GET /api/wifi/scan?start=1` queues an async scan and returns `202` at once; the panel polls until results land. Click-to-list time is unchanged (~8 s, bound by the radio); the gain is that the device stays responsive. |
 | **API-2** | **Deferred `202 queued`** | Refresh returns `202` immediately; `loop()` runs the fetch. Ours returns `{ok:true}` after the handler returns. |
-| **API-3** | **`401` blanks panel to login** | Explicit client-side flow. We likely bounce to login too but not documented. |
+| ~~**API-3**~~ | ~~**`401` blanks panel to login**~~ | **Closed 2026-10-05:** the redesigned panel returns to the PIN screen when any authenticated endpoint responds with `401`, including history, news, scans, and saves. |
 | ~~**API-4**~~ | ~~**`429` with `Retry-After` header**~~ | **Not a gap (corrected 2026-10-05):** `/api/login` already sends the `Retry-After` header alongside `{retry_s:N}` in the body. |
 | **API-5** | **Debug-build seed-history endpoint** | `/api/debug/seed-history` for layout testing. We have no debug-only endpoints. |
 
