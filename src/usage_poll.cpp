@@ -135,6 +135,11 @@ PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf850
   return report;
 }
 
+ClaudeUsage probeToken(const String &token)
+{
+  return fetchClaudeUsage(token.c_str(), rootCaPem);
+}
+
 void printUsage(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT])
 {
   for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)

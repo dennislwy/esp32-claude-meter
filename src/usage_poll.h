@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "claude_usage.h"
 #include "pcf85063.h"
 #include "settings.h"
 
@@ -31,6 +32,10 @@ struct PollReport
 // Connects to Wi-Fi, syncs the clock over NTP when syncClock is set, reads every account that has a
 // token, then turns Wi-Fi off. Accounts that fail keep their previous data.
 PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf85063 &rtc, bool syncClock);
+
+// Checks one token against the API over the Wi-Fi link that is already up, without touching
+// Wi-Fi or the cached usage. The panel uses it for an immediate verdict after a token is saved.
+ClaudeUsage probeToken(const String &token);
 
 // Serial printout of the cached usage, with countdowns from the current system time
 void printUsage(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT]);

@@ -1030,6 +1030,7 @@ void setup()
     partialRefreshes = 0;
   }
   lvglPortBegin(epaper);
+  lvglPortSetRotation(settings::displayRotation());
 
   // No stored Wi-Fi SSID → bring up the AP captive portal and stay awake until
   // the user saves creds (which reboots the board back through this same path).
@@ -1139,6 +1140,21 @@ void loop()
       digitalWrite(PIN_LED, blinkOn ? LED_ON : LED_OFF);
     }
     const uint8_t act = panelTakeAction();
+    if (act & PANEL_ACT_TIME_ZONE)
+    {
+      clockApplyTimeZone(rtc);
+      Serial.printf("Time zone: %s (%s)\n", settings::timeZoneName().c_str(), settings::timeZone().c_str());
+      render();
+    }
+    if (act & PANEL_ACT_ROTATION)
+    {
+      lvglPortSetRotation(settings::displayRotation());
+      Serial.printf("Rotation: %u deg\n", settings::displayRotation() * 90);
+      // Every pixel moves, so a partial refresh would leave heavy ghosting; this makes the next
+      // refreshPanel() take its full-refresh path
+      partialRefreshes = FULL_REFRESH_EVERY;
+      render();
+    }
     if (act & PANEL_ACT_REBOOT)
     {
       Serial.println("Panel: rebooting (user requested)");

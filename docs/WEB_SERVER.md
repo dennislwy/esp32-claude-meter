@@ -55,8 +55,8 @@ panel mode and shown on the ePaper. The PIN is **never persisted** —
 exit and re-enter to get a new one.
 
 Login mints a cookie `sid=<128-bit random hex>` with `HttpOnly;
-SameSite=Strict`. The session is single-slot and in-RAM: a second login
-evicts the first; a reboot or panel-mode exit kills all sessions.
+SameSite=Strict`. Sessions are in-RAM with 4 slots: a 5th login evicts
+the slot idle longest; a reboot or panel-mode exit kills all sessions.
 
 Failed-login throttle (RAM-only): after 5 wrong attempts, a backoff of
 60 s doubles with each additional miss, capped at 5 min. Successful
@@ -73,13 +73,13 @@ routes require `Content-Type: application/json` on the request body.
 | POST | `/api/login` | `{"pin":"123456"}` | `{"ok":true}` + Set-Cookie, or `401 {"error":"auth"}`, or `429 {"error":"throttled","retry_s":N}` |
 | POST | `/api/logout` | — | `{"ok":true}` + clears cookie |
 | GET | `/api/state` | — | full dashboard payload (see below) |
-| POST | `/api/settings` | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, audio_vol}` | `{"ok":true}` |
-| POST | `/api/tokens` | `{token1, token2, name1, name2}` (empty token = unchanged) | `{"ok":true}` |
+| POST | `/api/settings` | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, audio_vol, tz, tz_name, rotation}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270 | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` (nothing is applied) |
+| POST | `/api/tokens` | `{token1, token2, name1, name2}` (empty token = unchanged) | `{"ok":true, "probes":[{account, ok, http, h5?, d7?}]}` — each newly saved token is checked against the API (blocks ~2-3 s per token) |
 | POST | `/api/wifi` | `{ssid, pass}` (empty pass = unchanged) | `{"ok":true}` |
 | POST | `/api/refresh` | — | triggers an on-demand poll; `{"ok":true}` |
 | GET | `/api/history` | — | `{cols:168, col_seconds:3600, newest_epoch, accounts:[{name, h5:[…], d7:[…]}]}` |
 | POST | `/api/history/clear` | — | wipes `/history.bin` |
-| GET | `/api/wifi/scan` | — | `{networks:[{ssid,rssi,channel,secure,saved},…]}` (blocks ~2-3 s) |
+| GET | `/api/wifi/scan` | `?start=1` starts a scan; poll without it | `202 {"scanning":true}` while running, then `{networks:[{ssid,rssi,channel,secure,saved},…]}`; `500 {"error":"scan_failed"}`, or `409 {"error":"no_scan"}` when polled with no scan started. The scan starts ~150 ms after the `202`; the radio is off-channel for ~7-8 s while it runs (requests sent then stall until it ends), so the panel waits 4 s before polling. Click to list takes ~8-9 s |
 | POST | `/api/sounds/play` | `{"file":"5h-warning.wav"}` | plays an allow-listed alert WAV (blocks ~1-3 s). Allowed: `5h-warning`, `5h-depleted`, `5h-reset`, `7d-warning`, `7d-depleted`, `7d-reset` |
 | POST | `/api/factory-reset` | `{"confirm":"wipe"}` | wipes NVS (`meter` + `alerts`) + history, schedules reboot |
 | POST | `/api/reboot` | — | schedules a reboot ~1 s after the response |
@@ -91,6 +91,10 @@ routes require `Content-Type: application/json` on the request body.
   "ip": "192.168.0.203",
   "hostname": "claude-meter",
   "uptime_s": 1234,
+  "fw_rev": "82dc70e-dirty",
+  "fw_built": "2026-10-05 16:42 +0800",
+  "heap_free": 145320,
+  "heap_min": 98112,
   "now_epoch": 1759619826,
   "battery_mv": 4098,
   "battery_pct": 92,
@@ -103,6 +107,9 @@ routes require `Content-Type: application/json` on the request body.
   "quiet_end_h": 7,   "quiet_end_m": 15,
   "quiet_on": true,
   "audio_vol": 80,
+  "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
+  "tz_name": "Europe/Amsterdam",
+  "rotation": 0,
   "accounts": [
     {"name":"Claude 1","configured":true,"has_data":true,
      "h5":75,"d7":39,"h5_reset":1759637400,"d7_reset":1760223600,"age":"1 m ago"},
@@ -131,11 +138,12 @@ Rendered client-side from a single HTML blob:
 | Card | Purpose |
 | --- | --- |
 | **Sign in** | PIN prompt. Replaced by the dashboard after `/api/login` succeeds. |
-| **Status** | IP, uptime (`Xd Yh Zm`), battery, last-poll age, per-account bars with `resets Sun 4 Oct 17:01 in 1h 4m` lines, "Refresh now" button. |
+| **Status** | IP, Wi-Fi (SSID, dBm, quality word), uptime (`Xd Yh Zm`), battery, last-poll age, heap free / low-water mark, firmware revision + build time, per-account bars with `resets Sun 4 Oct 17:01 in 1h 4m` lines, "Refresh now" button. |
 | **7-day history** | Inline SVG line chart, 168 cols, orange = account 1, green = account 2 (thin = 5h, thick = 7d). Legend chips toggle each account's series. Day letters align to local midnight; y-axis ticks every 25 %. |
-| **Accounts** | Name + token fields. Empty token keeps the stored one. |
-| **Wi-Fi** | SSID + password + **Scan** button → scrollable sorted list, click to populate SSID. |
+| **Accounts** | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token. |
+| **Wi-Fi** | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID. |
 | **Alert sounds** | Volume slider (0-100 %, saves on release) + 6 test-play buttons for the alert WAVs. |
+| **Display & time** | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°. |
 | **Polling & alerts** | Poll interval (1-5 min), 5h/7d warning %, quiet hours (`<input type=time>` with HH:MM precision), quiet enabled toggle. |
 | **Sign out** | Clears the session cookie. |
 | **Danger zone** | Clear 7-day history / Reboot / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes). |
@@ -150,6 +158,8 @@ action flags drained by `loop()`:
 | --- | --- | --- |
 | `PANEL_ACT_REFRESH` | `/api/refresh` | Calls `pollAndShow()`, reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
 | `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens` | No immediate action — client polls `/api/state` on a timer |
+| `PANEL_ACT_TIME_ZONE` | `/api/settings` with a changed `tz` | `clockApplyTimeZone()`: `setenv("TZ")` + `tzset()`, rewrite the RTC (which holds local time) in the new zone, redraw |
+| `PANEL_ACT_ROTATION` | `/api/settings` with a changed `rotation` | `lvglPortSetRotation()`, then redraw with a full e-paper refresh |
 | `PANEL_ACT_REBOOT` | `/api/reboot`, `/api/factory-reset` | `delay(800)` to let the response flush, then `ESP.restart()` |
 
 Wi-Fi stays up the entire time panel mode is active. Each refresh
@@ -170,11 +180,16 @@ against leaving it on by accident.
   them (POST-only; empty = unchanged). R9 will add PIN-encrypted
   storage. Until then, treat panel access as token-equivalent.
 - **PIN is random per entry.** No persistence — exit kills it.
-- **Sessions are RAM-only.** Any reboot forces re-login.
+- **Sessions are RAM-only.** Up to 4 at once; any reboot or panel exit
+  forces re-login.
 - **Factory reset requires `{"confirm":"wipe"}`.** A stray POST without
   the magic string returns 400.
 - **Wi-Fi scan is auth-gated.** Even listing SSIDs needs a valid
-  session.
+  session. Scanned SSIDs are rendered as text, never HTML: a nearby
+  network's name is attacker-controlled.
+- **Settings input is validated before anything is applied.** A
+  malformed time zone (`400 bad_time_zone`) or rotation
+  (`400 bad_rotation`) rejects the whole request.
 - **Sound-play is allow-listed.** `/api/sounds/play` accepts only the 6
   alert WAV names; it will never read an arbitrary LittleFS path.
 - **No TLS.** HTTP on :80. Do not expose beyond trusted LAN.

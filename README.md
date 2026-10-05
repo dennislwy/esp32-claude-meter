@@ -78,6 +78,11 @@ Type `help` for the full list. Highlights:
   wakes on its poll timer, polls, draws, and deep-sleeps again. A short
   `BOOT` press wakes it to show the next view; a long `PWR` press powers
   it off (full refresh to white first, then VBAT_PWR is cut).
+- **LAN panel**: a long `BOOT` press opens a browser control panel on
+  your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
+  and screen rotation (default 0°) are set there, along with tokens,
+  Wi-Fi, alerts, and sounds. See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
+  and [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
 
 The usage ring survives power cycles (persisted to LittleFS; written only
 when the 30-min slot advances — ~48 writes/day).
@@ -89,7 +94,9 @@ src/           firmware (main, poll loop, UI, alerts, history, settings)
 include/       lv_conf.h and other build-only headers
 lib/           local libraries (Battery, Epaper154, ES8311, PCF85063, ClaudeUsage)
 assets/certs/  pinned root CAs for api.anthropic.com (embedded at build time)
+scripts/       build_info.py: writes src/build_info.cpp (git revision + build time) before each build
 data/          LittleFS payload: WAV alert sounds (gitignored)
+docs/          design notes: modes, buttons, battery, alert sounds, web panel
 ```
 
 ## Security notes

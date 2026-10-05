@@ -55,6 +55,19 @@ constexpr uint8_t AUDIO_VOLUME_DEFAULT = 80;
 uint8_t audioVolume();
 void setAudioVolume(uint8_t percent);
 
+// Local time zone as a POSIX TZ string (what the C library's tzset() reads), plus the IANA
+// name it was picked by in the panel, e.g. "CET-1CEST,M3.5.0,M10.5.0/3" + "Europe/Amsterdam"
+const char *const TIME_ZONE_DEFAULT = "MYT-8";
+const char *const TIME_ZONE_NAME_DEFAULT = "Asia/Kuala_Lumpur";
+String timeZone();
+String timeZoneName();
+// Stores both and returns true, or stores nothing and returns false when either looks malformed
+bool setTimeZone(const String &posix, const String &name);
+
+// Display rotation in quarter turns clockwise: 0 = 0 deg (default), 1 = 90, 2 = 180, 3 = 270
+uint8_t displayRotation();
+void setDisplayRotation(uint8_t quarterTurns);
+
 void setWifiSsid(const String &value);
 void setWifiPassword(const String &value);
 void setClaudeToken(int number, const String &value);

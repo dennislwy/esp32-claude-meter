@@ -4,10 +4,12 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
+#include <esp_heap_caps.h>
 #include <esp_random.h>
 #include "audio_player.h"
 #include "battery.h"
 #include "board_pins.h"
+#include "build_info.h"
 #include "history.h"
 #include "panel_html.h"
 #include "settings.h"
@@ -19,15 +21,19 @@ bool active = false;
 char pinCode[7] = {0};
 const AccountUsage *usageSource = nullptr;
 
-// Single session slot. The panel is one user at a time by design.
+// A few concurrent sessions (phone + laptop, say). A login past the limit evicts the slot
+// that has been idle longest.
 struct Session
 {
   uint8_t id[16];
   uint32_t lastSeenMs;
   bool used;
 };
-Session session = {};
+constexpr int MAX_SESSIONS = 4;
+Session sessions[MAX_SESSIONS] = {};
 uint32_t lastActivityMs = 0;
+bool scanStarted = false;
+uint32_t scanStartAtMs = 0; // non-zero: a requested scan that panelService() hasn't started yet
 uint8_t pendingActions = 0;
 
 // Simple failed-login throttle. RAM only — exit from panel mode resets it.
@@ -70,36 +76,41 @@ void sendErr(int code, const char *err)
   sendJson(code, d);
 }
 
-bool sessionValid()
+// Index of the session slot matching the request's sid cookie, or -1
+int findSession()
 {
   String cookie = server->header("Cookie");
   int at = cookie.indexOf("sid=");
   if (at < 0 || (int)cookie.length() < at + 4 + 32)
   {
-    return false;
+    return -1;
   }
   uint8_t want[16];
   if (!hexToBytes(cookie.c_str() + at + 4, want, sizeof(want)))
   {
-    return false;
+    return -1;
   }
-  if (!session.used || memcmp(session.id, want, sizeof(want)) != 0)
+  for (int i = 0; i < MAX_SESSIONS; i++)
   {
-    return false;
+    if (sessions[i].used && memcmp(sessions[i].id, want, sizeof(want)) == 0)
+    {
+      return i;
+    }
   }
-  session.lastSeenMs = millis();
-  lastActivityMs = millis();
-  return true;
+  return -1;
 }
 
 bool requireAuth()
 {
-  if (sessionValid())
+  const int slot = findSession();
+  if (slot < 0)
   {
-    return true;
+    sendErr(401, "auth");
+    return false;
   }
-  sendErr(401, "auth");
-  return false;
+  sessions[slot].lastSeenMs = millis();
+  lastActivityMs = millis();
+  return true;
 }
 
 bool readJsonBody(JsonDocument &doc)
@@ -168,6 +179,20 @@ void handleLogin()
     return;
   }
   loginFails = 0;
+  int slot = 0;
+  for (int i = 0; i < MAX_SESSIONS; i++)
+  {
+    if (!sessions[i].used)
+    {
+      slot = i;
+      break;
+    }
+    if (millis() - sessions[i].lastSeenMs > millis() - sessions[slot].lastSeenMs)
+    {
+      slot = i;
+    }
+  }
+  Session &session = sessions[slot];
   esp_fill_random(session.id, sizeof(session.id));
   session.used = true;
   session.lastSeenMs = millis();
@@ -183,9 +208,13 @@ void handleLogin()
 
 void handleLogout()
 {
-  if (!requireAuth())
+  const int slot = findSession();
+  if (slot < 0)
+  {
+    sendErr(401, "auth");
     return;
-  session.used = false;
+  }
+  sessions[slot].used = false;
   server->sendHeader("Set-Cookie", "sid=; Path=/; HttpOnly; Max-Age=0");
   JsonDocument d;
   d["ok"] = true;
@@ -200,6 +229,11 @@ void handleState()
   d["ip"] = WiFi.localIP().toString();
   d["hostname"] = "claude-meter";
   d["uptime_s"] = (uint32_t)(millis() / 1000);
+  d["fw_rev"] = FW_GIT_REV;
+  d["fw_built"] = FW_BUILD_TIME;
+  // Internal SRAM only: PSRAM is plentiful, internal heap is what TLS and the web server exhaust
+  d["heap_free"] = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+  d["heap_min"] = (uint32_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
   d["now_epoch"] = (uint32_t)time(nullptr);
   const uint32_t mv = battery.readMillivolts();
   d["battery_mv"] = mv;
@@ -215,6 +249,9 @@ void handleState()
   d["quiet_end_m"] = settings::quietMinuteEnd();
   d["quiet_on"] = settings::quietHoursEnabled();
   d["audio_vol"] = settings::audioVolume();
+  d["tz"] = settings::timeZone();
+  d["tz_name"] = settings::timeZoneName();
+  d["rotation"] = settings::displayRotation() * 90;
 
   const time_t now = time(nullptr);
   JsonArray accounts = d["accounts"].to<JsonArray>();
@@ -244,6 +281,34 @@ void handleSettings()
   JsonDocument body;
   if (!readJsonBody(body))
     return;
+  // Validate everything that can be rejected before applying any of it
+  const bool hasRotation = !body["rotation"].isNull();
+  const int rotation = body["rotation"] | -1;
+  if (hasRotation && (rotation < 0 || rotation > 270 || rotation % 90 != 0))
+  {
+    sendErr(400, "bad_rotation");
+    return;
+  }
+  if (!body["tz"].isNull())
+  {
+    // `| ""`, not as<String>(): a missing key would become the string "null"
+    const String tz = body["tz"] | "";
+    const String tzName = body["tz_name"] | "";
+    if (tz != settings::timeZone() || tzName != settings::timeZoneName())
+    {
+      if (!settings::setTimeZone(tz, tzName))
+      {
+        sendErr(400, "bad_time_zone");
+        return;
+      }
+      pendingActions |= PANEL_ACT_TIME_ZONE;
+    }
+  }
+  if (hasRotation && rotation / 90 != settings::displayRotation())
+  {
+    settings::setDisplayRotation(rotation / 90);
+    pendingActions |= PANEL_ACT_ROTATION;
+  }
   if (body["poll_min"].is<int>())
     settings::setPollIntervalMinutes(body["poll_min"].as<int>());
   if (body["warn5"].is<int>())
@@ -288,6 +353,25 @@ void handleTokens()
   pendingActions |= PANEL_ACT_SETTINGS_SAVED;
   JsonDocument d;
   d["ok"] = true;
+  // Probe each newly saved token so the user gets a verdict now, not at the next poll.
+  // Blocks ~2-3 s per token; Wi-Fi is already up in panel mode.
+  JsonArray probes = d["probes"].to<JsonArray>();
+  const String *saved[] = {&t1, &t2};
+  for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+  {
+    if (saved[i]->isEmpty())
+      continue;
+    const ClaudeUsage u = probeToken(*saved[i]);
+    JsonObject p = probes.add<JsonObject>();
+    p["account"] = i + 1;
+    p["ok"] = u.valid;
+    p["http"] = u.httpStatus;
+    if (u.valid)
+    {
+      p["h5"] = (int)constrain(u.fiveHourPercent, 0.0f, 100.0f);
+      p["d7"] = (int)constrain(u.sevenDayPercent, 0.0f, 100.0f);
+    }
+  }
   sendJson(200, d);
 }
 
@@ -421,12 +505,37 @@ void handleHistoryClear()
   sendJson(200, d);
 }
 
+// Async scan: ?start=1 queues one and returns 202 at once; the client then polls without it,
+// getting 202 until the results are in. The scan itself starts from panelService() a moment
+// later, because while it runs the radio is off-channel and a reply sent then is lost until TCP
+// retransmits it (~7 s).
 void handleWifiScan()
 {
   if (!requireAuth())
     return;
+  if (server->hasArg("start"))
+  {
+    WiFi.scanDelete();
+    scanStarted = true;
+    scanStartAtMs = millis() + 150;
+  }
+  const int count = WiFi.scanComplete();
+  if (scanStartAtMs != 0 || count == WIFI_SCAN_RUNNING)
+  {
+    JsonDocument d;
+    d["scanning"] = true;
+    sendJson(202, d);
+    return;
+  }
+  if (count < 0)
+  {
+    // scanComplete() reports "never started" and "failed" the same way
+    sendErr(scanStarted ? 500 : 409, scanStarted ? "scan_failed" : "no_scan");
+    scanStarted = false;
+    return;
+  }
+  scanStarted = false;
   const String savedSsid = settings::wifiSsid();
-  const int count = WiFi.scanNetworks(false, false, false, 300);
   JsonDocument d;
   JsonArray arr = d["networks"].to<JsonArray>();
   for (int i = 0; i < count; i++)
@@ -496,7 +605,7 @@ void panelBegin(PanelDisplay &out)
   }
   const uint32_t r = esp_random();
   snprintf(pinCode, sizeof(pinCode), "%06u", (unsigned)(r % 1000000u));
-  session.used = false;
+  memset(sessions, 0, sizeof(sessions));
   loginFails = 0;
   loginLockUntilMs = 0;
   pendingActions = 0;
@@ -538,7 +647,7 @@ void panelEnd()
   delete server;
   server = nullptr;
   active = false;
-  session.used = false;
+  memset(sessions, 0, sizeof(sessions));
   memset(pinCode, 0, sizeof(pinCode));
 }
 
@@ -549,9 +658,16 @@ bool panelActive()
 
 void panelService()
 {
-  if (active)
+  if (!active)
   {
-    server->handleClient();
+    return;
+  }
+  server->handleClient();
+  if (scanStartAtMs != 0 && (int32_t)(millis() - scanStartAtMs) >= 0)
+  {
+    scanStartAtMs = 0;
+    // A failure leaves scanComplete() negative, which the next poll reports as scan_failed
+    WiFi.scanNetworks(true);
   }
 }
 

@@ -7,3 +7,4 @@
 foobar/
 *.wav
 DESIGN_REQUIREMENTS.md
+src/build_info.cpp

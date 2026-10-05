@@ -4,6 +4,10 @@
 
 namespace
 {
+static_assert(Epaper::WIDTH == Epaper::HEIGHT, "rotation maps a square panel onto itself");
+constexpr int SIDE = Epaper::WIDTH;
+uint8_t rotation = 0;
+
 uint32_t tickMillis()
 {
   return millis();
@@ -17,8 +21,25 @@ void flushCb(lv_display_t *display, const lv_area_t *area, uint8_t *pxMap)
   {
     for (int x = area->x1; x <= area->x2; x++)
     {
+      int px = x;
+      int py = y;
+      switch (rotation)
+      {
+      case 1:
+        px = SIDE - 1 - y;
+        py = x;
+        break;
+      case 2:
+        px = SIDE - 1 - x;
+        py = SIDE - 1 - y;
+        break;
+      case 3:
+        px = y;
+        py = SIDE - 1 - x;
+        break;
+      }
       // Same black/white threshold as Waveshare's port
-      epaper->setPixel(x, y, *pixel++ < 0x7FFF);
+      epaper->setPixel(px, py, *pixel++ < 0x7FFF);
     }
   }
   epaper->refresh();
@@ -43,4 +64,9 @@ lv_display_t *lvglPortBegin(Epaper &epaper)
   // The panel is 1-bit: anti-aliased edges would be thresholded into ragged, broken thin lines
   lv_display_set_antialiasing(display, false);
   return display;
+}
+
+void lvglPortSetRotation(uint8_t quarterTurns)
+{
+  rotation = quarterTurns & 3;
 }

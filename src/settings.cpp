@@ -12,6 +12,9 @@ const char *const KEY_QUIET_END = "quiet_end";
 const char *const KEY_QUIET_START_MIN = "quiet_startM";
 const char *const KEY_QUIET_END_MIN = "quiet_endM";
 const char *const KEY_AUDIO_VOLUME = "audio_vol";
+const char *const KEY_TIME_ZONE = "tz";
+const char *const KEY_TIME_ZONE_NAME = "tz_name";
+const char *const KEY_ROTATION = "rotation";
 const char *const KEY_WIFI_PASSWORD = "wifi_pass";
 const char *const KEY_POLL_INTERVAL = "poll_minutes";
 const char *const KEY_WARNING_5H = "warn_5h";
@@ -63,6 +66,25 @@ void storeByte(const char *key, uint8_t value, uint8_t min, uint8_t max)
   prefs.putUChar(key, constrain(value, min, max));
   prefs.end();
 }
+
+// Every character in allowed, and length within min..max
+bool onlyChars(const String &value, const char *allowed, size_t min, size_t max)
+{
+  if (value.length() < min || value.length() > max)
+  {
+    return false;
+  }
+  for (size_t i = 0; i < value.length(); i++)
+  {
+    if (!strchr(allowed, value[i]))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+const char *const ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 }
 
 namespace settings
@@ -147,6 +169,34 @@ bool isQuietTime(uint8_t localHour, uint8_t localMinute)
 
 uint8_t audioVolume() { return loadByte(KEY_AUDIO_VOLUME, AUDIO_VOLUME_DEFAULT, 0, 100); }
 void setAudioVolume(uint8_t percent) { storeByte(KEY_AUDIO_VOLUME, percent, 0, 100); }
+
+String timeZone()
+{
+  const String value = load(KEY_TIME_ZONE);
+  return value.isEmpty() ? String(TIME_ZONE_DEFAULT) : value;
+}
+
+String timeZoneName()
+{
+  const String value = load(KEY_TIME_ZONE_NAME);
+  return value.isEmpty() ? String(TIME_ZONE_NAME_DEFAULT) : value;
+}
+
+bool setTimeZone(const String &posix, const String &name)
+{
+  const String posixChars = String(ALNUM) + "<>+-,./:";
+  const String nameChars = String(ALNUM) + "_/+-";
+  if (!onlyChars(posix, posixChars.c_str(), 3, 63) || !onlyChars(name, nameChars.c_str(), 1, 40))
+  {
+    return false;
+  }
+  store(KEY_TIME_ZONE, posix);
+  store(KEY_TIME_ZONE_NAME, name);
+  return true;
+}
+
+uint8_t displayRotation() { return loadByte(KEY_ROTATION, 0, 0, 3); }
+void setDisplayRotation(uint8_t quarterTurns) { storeByte(KEY_ROTATION, quarterTurns, 0, 3); }
 
 String wifiSsid() { return load(KEY_WIFI_SSID); }
 String wifiPassword() { return load(KEY_WIFI_PASSWORD); }

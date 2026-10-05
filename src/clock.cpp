@@ -3,11 +3,10 @@
 #include <Arduino.h>
 #include <esp_sntp.h>
 #include <sys/time.h>
+#include "settings.h"
 
 namespace
 {
-// Local time zone (Malaysia, UTC+8), POSIX TZ format
-const char *const TIMEZONE = "MYT-8";
 const char *const NTP_SERVER_1 = "pool.ntp.org";
 const char *const NTP_SERVER_2 = "time.google.com";
 constexpr uint32_t NTP_TIMEOUT_MS = 10000;
@@ -17,7 +16,7 @@ constexpr time_t VALID_AFTER = 1700000000;
 
 void clockBegin(Pcf85063 &rtc)
 {
-  setenv("TZ", TIMEZONE, 1);
+  setenv("TZ", settings::timeZone().c_str(), 1);
   tzset();
 
   RtcDateTime now;
@@ -45,7 +44,8 @@ bool clockValid()
 bool clockSyncNtp(Pcf85063 &rtc)
 {
   sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
-  configTzTime(TIMEZONE, NTP_SERVER_1, NTP_SERVER_2);
+  const String timeZone = settings::timeZone();
+  configTzTime(timeZone.c_str(), NTP_SERVER_1, NTP_SERVER_2);
   // configTzTime returns before the first sync completes
   const uint32_t start = millis();
   while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED || !clockValid())
@@ -58,6 +58,16 @@ bool clockSyncNtp(Pcf85063 &rtc)
   }
   clockSaveToRtc(rtc);
   return true;
+}
+
+void clockApplyTimeZone(Pcf85063 &rtc)
+{
+  setenv("TZ", settings::timeZone().c_str(), 1);
+  tzset();
+  if (clockValid())
+  {
+    clockSaveToRtc(rtc);
+  }
 }
 
 void clockSaveToRtc(Pcf85063 &rtc)

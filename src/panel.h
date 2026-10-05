@@ -21,6 +21,8 @@ struct PanelDisplay
 constexpr uint8_t PANEL_ACT_REFRESH = 0x01;         // poll Claude usage now
 constexpr uint8_t PANEL_ACT_SETTINGS_SAVED = 0x02;  // redraw after a settings POST
 constexpr uint8_t PANEL_ACT_REBOOT = 0x04;          // ESP.restart() after a short delay
+constexpr uint8_t PANEL_ACT_TIME_ZONE = 0x08;       // apply the new time zone, rewrite the RTC, redraw
+constexpr uint8_t PANEL_ACT_ROTATION = 0x10;        // apply the new rotation with a full refresh
 
 // Brings up the server. Caller must have Wi-Fi connected and mDNS available.
 // Generates a fresh random PIN and fills `out` so the display can show it.

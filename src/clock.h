@@ -18,3 +18,7 @@ bool clockSyncNtp(Pcf85063 &rtc);
 
 // Writes the current system time to the RTC, e.g. after setting it by hand.
 void clockSaveToRtc(Pcf85063 &rtc);
+
+// Switches to settings::timeZone(). System time (UTC) is unchanged; the RTC, which holds local
+// time, is rewritten in the new zone so the next boot reads it back correctly.
+void clockApplyTimeZone(Pcf85063 &rtc);
