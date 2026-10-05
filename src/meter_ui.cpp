@@ -513,7 +513,7 @@ void panelView(lv_obj_t *parent, const MeterScreen &screen)
   lv_obj_set_style_text_align(pin, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_align(pin, LV_ALIGN_TOP_MID, 0, y + 72);
 
-  lv_obj_t *footer = text(parent, "Short BOOT = exit", &lv_font_montserrat_10, BLACK);
+  lv_obj_t *footer = text(parent, "Long BOOT = exit", &lv_font_montserrat_10, BLACK);
   lv_obj_set_width(footer, CONTENT_W);
   lv_obj_set_style_text_align(footer, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -14);
@@ -522,6 +522,44 @@ void panelView(lv_obj_t *parent, const MeterScreen &screen)
   lv_obj_set_width(warn, CONTENT_W);
   lv_obj_set_style_text_align(warn, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_align(warn, LV_ALIGN_BOTTOM_MID, 0, -2);
+}
+
+void setupView(lv_obj_t *parent, const MeterScreen &screen)
+{
+  const int y = STATUS_BAR_H + 4;
+  lv_obj_t *title = text(parent, "Wi-Fi setup", &lv_font_montserrat_16, BLACK);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
+
+  lv_obj_t *hint = text(parent, "Join this network:", &lv_font_montserrat_12, BLACK);
+  lv_obj_set_width(hint, CONTENT_W);
+  lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, y + 24);
+
+  lv_obj_t *ssid = text(parent, screen.setupApSsid.c_str(), &lv_font_montserrat_14, BLACK);
+  lv_obj_set_width(ssid, CONTENT_W);
+  lv_obj_set_style_text_align(ssid, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(ssid, LV_ALIGN_TOP_MID, 0, y + 42);
+
+  lv_obj_t *open = text(parent, "(open, no password)", &lv_font_montserrat_10, BLACK);
+  lv_obj_set_width(open, CONTENT_W);
+  lv_obj_set_style_text_align(open, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(open, LV_ALIGN_TOP_MID, 0, y + 62);
+
+  lv_obj_t *then = text(parent, "Then open:", &lv_font_montserrat_12, BLACK);
+  lv_obj_set_width(then, CONTENT_W);
+  lv_obj_set_style_text_align(then, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(then, LV_ALIGN_TOP_MID, 0, y + 84);
+
+  const String url = String("http://") + screen.setupApIp;
+  lv_obj_t *urlLabel = text(parent, url.c_str(), &lv_font_montserrat_14, BLACK);
+  lv_obj_set_width(urlLabel, CONTENT_W);
+  lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, y + 102);
+
+  lv_obj_t *footer = text(parent, "Most phones show it automatically", &lv_font_montserrat_10, BLACK);
+  lv_obj_set_width(footer, CONTENT_W);
+  lv_obj_set_style_text_align(footer, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -2);
 }
 
 void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
@@ -583,6 +621,9 @@ void meterUiShow(const MeterScreen &screen)
     break;
   case MeterView::Panel:
     panelView(root, screen);
+    break;
+  case MeterView::Setup:
+    setupView(root, screen);
     break;
   }
 

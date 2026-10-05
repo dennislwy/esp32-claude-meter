@@ -1,4 +1,4 @@
-# Sound effects
+# Alert sounds
 
 The board has an onboard ES8311 audio codec driving a small speaker.
 The firmware uses it for a small set of edge-triggered usage alerts.

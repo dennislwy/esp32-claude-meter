@@ -13,6 +13,7 @@ enum class MeterView : uint8_t
   Account2,
   Account2History, // 7-day line chart for account 2
   Panel,           // R8 LAN panel: hostname/IP + login PIN
+  Setup,           // R8 Phase 2: AP captive portal for first-time Wi-Fi setup
 };
 
 // Result of the last poll's Wi-Fi connection (Wi-Fi is off between polls)
@@ -40,6 +41,9 @@ struct MeterScreen
   String panelHostname;
   String panelIp;
   String panelPin;
+  // Only used when view == Setup
+  String setupApSsid; // "claude-meter-XXXXXX"
+  String setupApIp;   // "192.168.4.1"
 };
 
 // Rebuilds the LVGL screen. The caller refreshes the panel (lv_refr_now).

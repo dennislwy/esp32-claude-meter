@@ -17,6 +17,7 @@
 #include "meter_ui.h"
 #include "panel.h"
 #include "pcf85063.h"
+#include "provisioning.h"
 #include "settings.h"
 #include "usage_poll.h"
 
@@ -68,6 +69,8 @@ uint32_t pwrButtonDownAt = 0;
 bool panelMode = false;
 PanelDisplay panelDisplay;
 constexpr uint32_t PANEL_INACTIVITY_MS = 5UL * 60UL * 1000UL;
+bool provisionMode = false;
+ProvisionInfo provisionInfo;
 
 void enterPanelMode();
 void exitPanelMode();
@@ -102,6 +105,10 @@ bool viewAvailable(MeterView candidate)
     return accountConfigured(1);
   case MeterView::Account2History:
     return accountConfigured(1) && historyHasData(1);
+  case MeterView::Panel:
+  case MeterView::Setup:
+    // Explicit modes - set by code, not by cycling. Trust the caller.
+    return true;
   }
   return false;
 }
@@ -221,7 +228,12 @@ void render()
     screen.panelIp = panelDisplay.ip;
     screen.panelPin = panelDisplay.pin;
   }
-  if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
+  if (view == MeterView::Setup)
+  {
+    screen.setupApSsid = provisionInfo.apSsid;
+    screen.setupApIp = provisionInfo.apIp;
+  }
+  else if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
   {
     screen.notice = "Setup needed\nConnect USB and type help in the serial monitor";
   }
@@ -324,6 +336,7 @@ void printHelp()
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
   Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8 or quiet 22:30-7:15");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT+PWR or PWR on USB returns)");
+  Serial.println("  reboot                     restart the firmware (ESP.restart)");
   Serial.println("  panel                      toggle LAN control panel (same as long-press BOOT)");
   Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT+PWR turns it back on)");
   Serial.println("  rtc                        read the RTC chip, compare with the system clock, last NTP sync");
@@ -621,6 +634,13 @@ void runCommand(const String &line)
     Serial.println("Sleeping between polls, debug mode stays on");
     sleepUntilNextPoll();
   }
+  else if (line == "reboot")
+  {
+    Serial.println("Rebooting...");
+    Serial.flush();
+    delay(200);
+    ESP.restart();
+  }
   else if (line == "rtc")
   {
     printRtc();
@@ -783,20 +803,25 @@ void handleBootButton()
     {
       if (heldFor >= BUTTON_MIN_PRESS_MS && heldFor < LONG_PRESS_MS)
       {
-        if (panelMode)
-        {
-          exitPanelMode();
-        }
-        else
+        // Short press: cycle view when not in panel; no-op in panel mode (long press exits)
+        if (!panelMode)
         {
           view = nextView(view);
           Serial.printf("View: %s\n", viewName(view));
           render();
         }
       }
-      else if (heldFor >= LONG_PRESS_MS && !panelMode)
+      else if (heldFor >= LONG_PRESS_MS)
       {
-        enterPanelMode();
+        // Long press: toggle panel mode (enter if not active, exit if already in it)
+        if (panelMode)
+        {
+          exitPanelMode();
+        }
+        else
+        {
+          enterPanelMode();
+        }
       }
     }
     armed = true;
@@ -835,6 +860,14 @@ void enterPanelMode()
     Serial.println("Panel: Wi-Fi not configured");
     return;
   }
+  // Panel sessions always need diagnostics on serial, regardless of the debug flag.
+  // ESP32-S3 USB-CDC can be re-begin'd safely; applyDebugMode() tracks the serial-started
+  // state so this is a no-op when debug mode is on.
+  if (!debugMode)
+  {
+    Serial.begin(115200);
+    delay(50);
+  }
   Serial.println("Panel: starting LAN control panel...");
   if (WiFi.status() != WL_CONNECTED)
   {
@@ -852,6 +885,11 @@ void enterPanelMode()
       WiFi.mode(WIFI_OFF);
       return;
     }
+    // Give lwIP a moment to finish bringing the TCP stack up before we bind to :80.
+    // Without this the WebServer::begin() can silently fail to listen, especially
+    // right after a deep-sleep wake.
+    delay(300);
+    Serial.printf("Panel: Wi-Fi up, IP %s\n", WiFi.localIP().toString().c_str());
   }
   MDNS.begin("claude-meter");
   MDNS.addService("http", "tcp", 80);
@@ -862,6 +900,22 @@ void enterPanelMode()
   Serial.printf("Panel: http://%s.local  IP %s  PIN %s\n",
                 panelDisplay.hostname.c_str(), panelDisplay.ip.c_str(), panelDisplay.pin.c_str());
   view = MeterView::Panel;
+  render();
+}
+
+void enterProvisionMode()
+{
+  if (provisionMode)
+  {
+    return;
+  }
+  Serial.println("Provisioning: starting AP captive portal...");
+  provisionBegin(provisionInfo);
+  provisionMode = true;
+  wifiState = WifiState::Unknown;
+  view = MeterView::Setup;
+  Serial.printf("Provisioning: SSID \"%s\"  URL http://%s\n",
+                provisionInfo.apSsid.c_str(), provisionInfo.apIp.c_str());
   render();
 }
 
@@ -879,10 +933,21 @@ void exitPanelMode()
   wifiState = WifiState::Unknown;
   panelMode = false;
   panelDisplay = {};
+  // Restore debug-mode LED state (blink loop left it in an undefined position)
+  applyDebugMode();
   view = firstView();
   render();
   // Re-poll soon so the dashboard is current
   nextPollAt = time(nullptr) + 2;
+  // Debug mode off → we were only awake because the user asked for the panel.
+  // Hand control back to the deep-sleep cycle. enterPanelMode force-started Serial
+  // for diagnostics; close it before sleep so the UART driver releases cleanly.
+  if (!debugMode)
+  {
+    Serial.flush();
+    Serial.end();
+    sleepUntilNextPoll();
+  }
 }
 
 void setup()
@@ -910,6 +975,7 @@ void setup()
   // Cold boot: debug mode on when a USB host is attached. On wake, holding BOOT + PWR together
   // for LONG_PRESS_MS toggles it (counting from the wake, which millis() starts at).
   bool comboLongPress = false;
+  bool bootLongPress = false;
   if (!resumed)
   {
     debugMode = usbHostConnected();
@@ -925,6 +991,15 @@ void setup()
     {
       debugMode = !debugMode;
     }
+  }
+  else if (bootWake && digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == HIGH)
+  {
+    // BOOT alone held after wake: distinguish long press (enter panel) from short press (next view)
+    while (digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == HIGH && millis() < LONG_PRESS_MS)
+    {
+      delay(10);
+    }
+    bootLongPress = digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == HIGH;
   }
   applyDebugMode();
 
@@ -956,10 +1031,29 @@ void setup()
   }
   lvglPortBegin(epaper);
 
+  // No stored Wi-Fi SSID → bring up the AP captive portal and stay awake until
+  // the user saves creds (which reboots the board back through this same path).
+  if (settings::wifiSsid().isEmpty())
+  {
+    enterProvisionMode();
+    return; // skip all sleep/poll branches; loop() pumps provisionService()
+  }
+
   if (timerWake)
   {
     wakeCount++;
     pollAndShow();
+    sleepUntilNextPoll();
+  }
+  if (bootWake && bootLongPress && !settings::wifiSsid().isEmpty())
+  {
+    // Long-BOOT from sleep: enter LAN panel mode directly. If Wi-Fi connect fails,
+    // enterPanelMode() returns with panelMode=false and we fall through to sleep.
+    enterPanelMode();
+    if (panelMode)
+    {
+      return; // loop() services the panel session
+    }
     sleepUntilNextPoll();
   }
   if (bootWake && !comboLongPress)
@@ -1008,9 +1102,42 @@ void loop()
   handlePowerButton();
   handleSerialCommands();
 
+  if (provisionMode)
+  {
+    provisionService();
+    // 4 Hz LED heartbeat so the user can tell the AP is live at a glance
+    static uint32_t lastBlinkMs = 0;
+    static bool blinkOn = false;
+    if (millis() - lastBlinkMs >= 125)
+    {
+      lastBlinkMs = millis();
+      blinkOn = !blinkOn;
+      digitalWrite(PIN_LED, blinkOn ? LED_ON : LED_OFF);
+    }
+    if (provisionShouldReboot())
+    {
+      Serial.println("Provisioning: creds saved, rebooting into STA...");
+      Serial.flush();
+      provisionEnd();
+      digitalWrite(PIN_LED, LED_OFF);
+      delay(200);
+      ESP.restart();
+    }
+    return; // nothing else runs during provisioning
+  }
+
   if (panelMode)
   {
     panelService();
+    // 1 Hz LED heartbeat so the user can see panel mode is live
+    static uint32_t lastBlinkMs = 0;
+    static bool blinkOn = false;
+    if (millis() - lastBlinkMs >= 500)
+    {
+      lastBlinkMs = millis();
+      blinkOn = !blinkOn;
+      digitalWrite(PIN_LED, blinkOn ? LED_ON : LED_OFF);
+    }
     const uint8_t act = panelTakeAction();
     if (act & PANEL_ACT_REBOOT)
     {

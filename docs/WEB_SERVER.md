@@ -6,6 +6,10 @@ settings from a browser on the same Wi-Fi, triggered on demand.
 Source: `src/panel.{h,cpp}`, `src/panel_html.h`. UI payload is a single
 PROGMEM HTML/CSS/JS blob (~10 kB) embedded in firmware.
 
+Phase 2 adds an **AP captive portal** for first-time Wi-Fi provisioning,
+documented in the [Provisioning (Phase 2)](#provisioning-phase-2) section
+below. Source: `src/provisioning.{h,cpp}`.
+
 ## When it is up
 
 The server does **not** run between polls — Wi-Fi is off during normal
@@ -24,14 +28,17 @@ and a fresh 6-digit login PIN.
 
 Exit panel mode:
 
-- Short-press **BOOT** on the device
+- Long-press **BOOT** on the device (same gesture that entered it)
 - Serial command `panel` again
 - 5 minutes with no authenticated API request (idle timeout)
 - Device reboot (loses the session)
 
-Panel entry from deep sleep is not supported in Phase 1 — wake first by
-pressing BOOT (shows next view) or BOOT+PWR together (debug mode on),
-then long-press BOOT.
+Long-pressing BOOT from deep sleep enters panel mode directly: `setup()`
+polls the BOOT pin for up to `LONG_PRESS_MS` after an `ext1` wake and
+takes the long-press branch when BOOT is still held at the deadline.
+Debug mode stays off (unless the user also uses the BOOT+PWR combo
+first), so when panel mode exits the device returns to the deep-sleep
+cycle automatically.
 
 ## Hostname and URL
 
@@ -187,13 +194,50 @@ against leaving it on by accident.
 | Scan returns `[]` | Scan completed but no networks visible on 2.4 GHz; try moving the device |
 | Serial `panel` doesn't start the server | Device not in debug mode (no serial), or Wi-Fi not configured. Enter debug mode (long BOOT+PWR) first |
 
-## Not in Phase 1
+## Provisioning (Phase 2)
+
+For first-time setup, when the device boots with no Wi-Fi SSID stored in
+NVS, it comes up as an **open SoftAP** instead of trying (and failing) to
+connect. The ePaper shows the AP name and URL; a captive portal popup
+guides the user to a one-page SSID picker.
+
+| Trigger | Where |
+| --- | --- |
+| Boot with empty `wifi.ssid` NVS key | Automatic (fresh device, after factory reset, or after `wifi "" ""`) |
+
+**AP:** `claude-meter-XXXXXX` (last 6 hex of MAC), **open**, IP
+`192.168.4.1`.
+
+**DNS hijack:** All queries resolve to `192.168.4.1`. iOS, Android, and
+Windows auto-trigger their captive-portal popup when they probe a known
+URL and get redirected to our setup page.
+
+### Routes (AP mode)
+
+| Method | Path | Response |
+| --- | --- | --- |
+| GET | `/` | Setup HTML (SSID list + password form) |
+| GET | `/scan` | `{networks:[{ssid,rssi,channel,secure},...]}` |
+| POST | `/save` | `{ssid, pass}` → saves to NVS, responds `{"ok":true}`, reboots ~1.2 s later |
+| GET | `/generate_204`, `/gen_204`, `/hotspot-detect.html`, `/library/test/success.html`, `/connecttest.txt`, `/ncsi.txt`, `/redirect` | 302 → `http://192.168.4.1/` (captive-portal detection) |
+| any | `*` | 302 → `http://192.168.4.1/` (catch-all) |
+
+**No auth.** The portal is open by design — the device is physically in
+the user's hand and the only thing being configured is Wi-Fi creds. No
+tokens, history, or settings are exposed.
+
+**No idle timeout.** The AP stays up until the user saves creds (which
+reboots into STA) or power-cycles the device.
+
+**Serial fallback.** On a device with USB attached, `wifi "ssid" "pass"`
+on the serial console followed by `reboot` is equivalent — handy if the
+captive portal doesn't play well with a particular host.
+
+## Not in Phase 2
 
 Deferred to later phases of R8 (and R9):
 
-- AP-mode captive portal for first-time Wi-Fi provisioning
 - PIN-encrypted token storage (merges with R9)
-- Panel entry directly from deep sleep (currently needs debug mode on)
 - Arbitrary WAV playback (deliberately restricted)
 - TLS
 
