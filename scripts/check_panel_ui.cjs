@@ -148,7 +148,7 @@ const initialState = {
         return element.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2)[1];
       };
       const toolbox=histChart.getViewOfComponentModel(model.getComponent('toolbox'));
-      const icon=toolbox.group.children().find(item=>item.__title==='Save image');
+      const icon=toolbox.group.children().find(item=>item.__title==='Take snapshot');
       const iconTops=toolbox.group.children().map(item=>{
         const rect=item.getBoundingRect();
         return item.transformCoordToGlobal(rect.x,rect.y)[1];
@@ -166,7 +166,7 @@ const initialState = {
     assert.equal(layout.titleText,'7 days usage history');
     assert(layout.titleBottom<layout.legendTop,'Legend stays below the title');
     assert(layout.legendBottom<layout.plotTop,'Legend stays above the plot');
-    assert(Math.abs(layout.titleCenter-layout.iconCenter)<1,'Save image is vertically centered with the chart title: '+JSON.stringify(layout));
+    assert(Math.abs(layout.titleCenter-layout.iconCenter)<1,'Take snapshot is vertically centered with the chart title: '+JSON.stringify(layout));
     assert(layout.iconTop>=0,'Toolbox icons are not clipped by the top of the chart: '+JSON.stringify(layout));
   };
   const checkMobileXAxisSpacing = async target => {
@@ -185,6 +185,35 @@ const initialState = {
     const rect=icon.getBoundingRect();
     return icon.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2);
   }, title);
+  // ECharts renders the toolbox tooltip as an unclassed absolute div, so match it by its exact text.
+  const tooltipGeometry = (target, title) => target.evaluate(title => {
+    const el = [...document.querySelectorAll('#histChart div')].find(node => {
+      if (node.textContent.trim() !== title) return false;
+      const style = getComputedStyle(node);
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+    });
+    if (!el) return null;
+    const rect = el.getBoundingClientRect(), chart = document.getElementById('histChart').getBoundingClientRect();
+    return { text: el.textContent.trim(), left: rect.left - chart.left, right: rect.right - chart.left, top: rect.top - chart.top, chartWidth: chart.width };
+  }, title);
+  const checkToolboxTooltip = async (target, title) => {
+    await target.locator('#histChart').scrollIntoViewIfNeeded();
+    const box = await target.locator('#histChart').boundingBox();
+    const point = await toolboxIconCenter(target, title);
+    await target.mouse.move(box.x + point[0] - 6, box.y + point[1] - 6);
+    await target.mouse.move(box.x + point[0], box.y + point[1]);
+    let geo = null;
+    for (let attempt = 0; attempt < 50 && !geo; attempt++) {
+      geo = await tooltipGeometry(target, title);
+      if (!geo) await target.waitForTimeout(100);
+    }
+    assert(geo, 'Hovering the toolbox icon shows a "' + title + '" tooltip');
+    assert(geo.left >= 0 && geo.right <= geo.chartWidth + 1, title + ' tooltip stays inside the chart: ' + JSON.stringify(geo));
+    // Park the cursor off the toolbox so the next hover starts clean.
+    await target.mouse.move(box.x + 4, box.y + box.height - 4);
+    for (let attempt = 0; attempt < 50 && await tooltipGeometry(target, title); attempt++) await target.waitForTimeout(100);
+    assert.equal(await tooltipGeometry(target, title), null, title + ' tooltip hides when the cursor leaves');
+  };
   const tapChart = async (target, point) => {
     const box = await target.locator('#histChart').boundingBox();
     if (await target.evaluate(()=>'ontouchstart' in window)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
@@ -192,9 +221,9 @@ const initialState = {
   };
   const exportChartCsv = async (target, expected) => {
     await target.locator('#histChart').scrollIntoViewIfNeeded();
-    const image = await toolboxIconCenter(target,'Save image'), csv = await toolboxIconCenter(target,'Export CSV');
-    assert(csv[0] > image[0] + 18, 'Export CSV sits to the right of Save image: '+JSON.stringify({image,csv}));
-    assert(Math.abs(csv[1] - image[1]) < 1, 'Export CSV is level with Save image');
+    const image = await toolboxIconCenter(target,'Take snapshot'), csv = await toolboxIconCenter(target,'Export to CSV');
+    assert(csv[0] > image[0] + 18, 'Export to CSV sits to the right of Take snapshot: '+JSON.stringify({image,csv}));
+    assert(Math.abs(csv[1] - image[1]) < 1, 'Export to CSV is level with Take snapshot');
     const pending = target.waitForEvent('download');
     await tapChart(target, csv);
     const download = await pending;
@@ -208,7 +237,7 @@ const initialState = {
   const saveChartImage = async target => {
     await target.locator('#histChart').scrollIntoViewIfNeeded();
     const box = await target.locator('#histChart').boundingBox();
-    const point = await toolboxIconCenter(target,'Save image');
+    const point = await toolboxIconCenter(target,'Take snapshot');
     const pending=target.waitForEvent('download');
     if (await target.evaluate(()=>'ontouchstart' in window)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
     else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
@@ -361,7 +390,7 @@ const initialState = {
   assert.equal(await page.evaluate(()=>histChart.getOption().legend[0].show),true);
   assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].itemSize),18);
   assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].showTitle),false);
-  assert.match(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.icon),/^M15 2H6/);
+  assert.match(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.icon),/^M13\.997 4a2 2 0 0 1 1\.76 1\.05/);
   await checkChartLayout(page);
   await clickChartLegend(page,0);
   assert.equal(await page.evaluate(()=>histChart.getOption().legend[0].selected['account-0-h5']),false);
@@ -369,14 +398,19 @@ const initialState = {
   assert.equal(await page.evaluate(()=>histChart.getOption().legend[0].selected['account-0-h5']),true);
 
     assert.equal(await page.locator('.chart-key').count(),0, 'History card has no extra chart key');
-    assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.title),'Save image');
+    assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.title),'Take snapshot');
+    await checkToolboxTooltip(page,'Take snapshot');
     await saveChartImage(page);
-    assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.myExportCsv.title),'Export CSV');
+    assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.myExportCsv.title),'Export to CSV');
+    await checkToolboxTooltip(page,'Export to CSV');
     await exportChartCsv(page, ['03-Oct-2026 00:00:00', '03-Oct-2026 00:30:00']);
     const samples = await page.evaluate(() => histChart.getOption().series.map(s => ({count:s.data.length,gap:s.data[50],style:s.lineStyle.type,width:s.lineStyle.width})));
     assert.deepEqual(samples, [0,1,2,3].map(i => ({count:HIST_COLS,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.6})));
     for (const zone of ['Asia/Kuala_Lumpur', 'Asia/Kolkata', 'Asia/Kathmandu', 'America/New_York']) {
       await page.evaluate(async zone => { deviceTimeZone=zone; await renderHistory(lastHistData); }, zone);
+      // Pointer events queue a histAxisFrame that re-applies the tick interval; let it flush before
+      // reading labels, or the axis can be mid-relayout and report the previous zone's ticks.
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const midnight = await page.evaluate(() => {
         const axis=histChart.getModel().getComponent('xAxis',0).axis;
         const values=histChart.getOption().xAxis[0].data;

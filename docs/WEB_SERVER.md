@@ -157,7 +157,7 @@ using the device's selected time zone and the same x-coordinate for both.
 
 ### `/api/history.csv` datetime column
 
-The firmware emits epoch seconds only. The panel's Export CSV control rewrites
+The firmware emits epoch seconds only. The panel's Export to CSV control rewrites
 the response before saving, prepending a `datetime` column formatted
 `dd-MMM-yyyy HH:mm:ss` in the **browser's** time zone. Formatting has to happen
 per row in the browser: the device cannot know the reader's zone, and a single

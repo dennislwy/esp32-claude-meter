@@ -145,8 +145,8 @@ docs/          design notes: modes, buttons, battery, alert sounds, web panel
   reads.
 - Thanks to [Lucide](https://lucide.dev) for the icons the panel draws inline:
   [Gauge](https://lucide.dev/icons/gauge) for the usage view,
-  [File Image](https://lucide.dev/icons/file-image) for the chart's Save image
-  control, and [File Down](https://lucide.dev/icons/file-down) for Export CSV.
+  [Camera](https://lucide.dev/icons/camera) for the chart's Take snapshot
+  control, and [File Down](https://lucide.dev/icons/file-down) for Export to CSV.
   ISC licensed.
 - The Claude Code mark on the e-paper status bar (`src/claude_icon.c`) is
   rasterized from the MIT-licensed mono SVG on

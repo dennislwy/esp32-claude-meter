@@ -90,12 +90,14 @@ flash and loaded after sign-in.
 - Compact series labels use `account 1 · 5h`, `account 1 · 7d`,
   `account 2 · 5h`, and `account 2 · 7d`, with the saved account names
 - All account/window series share one combined graph
-- The chart's **Save image** control sits beside the chart title and
-  downloads the current visible graph as
+- The chart's **Take snapshot** control (Lucide camera) sits beside the chart
+  title and downloads the current visible graph as
   `claude-meter-usage-history.png`, at 2x resolution with the current theme's
   background. The title is included in the PNG; the toolbox control
   itself is omitted
-- The **Export CSV** control (Lucide file-down), right of Save image,
+- Both toolbox icons show their label on hover — "Take snapshot" and
+  "Export to CSV" — in a themed tooltip below the icon, confined to the chart
+- The **Export to CSV** control (Lucide file-down), right of Take snapshot,
   downloads the raw 7-day history as
   `claude-meter-<first-timestamp>-<last-timestamp>.csv`. Columns:
   `datetime,timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d`, where `timestamp`

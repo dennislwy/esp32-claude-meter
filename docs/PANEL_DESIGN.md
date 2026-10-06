@@ -517,9 +517,17 @@ legend labels, 16 px mobile handle alignment and dragging, title and
 Save image alignment, PNG export, and four authenticated state requests
 over 30 seconds. Serial and browser connections were left open for testing.
 
-The chart's Save image toolbox control now uses Lucide's File Image outline,
-drawn by ECharts at the existing 18 px size. Its click target, native title
-alignment, and PNG export behavior remain the same. Local Chromium checks
-passed. The icon change was flashed to COM5 on 2026-10-06 with hash
-verification. A live Chromium run confirmed exact served HTML and chart
-assets, PNG export, and four authenticated state requests over 30 seconds.
+The chart's Save image toolbox control uses Lucide's Camera outline, drawn by
+ECharts at the existing 18 px size. Camera is wider than tall, so ECharts'
+centered layout scales it to 18 px wide and leaves it shorter than the
+Export CSV glyph beside it; both icons stay centered in their own 18 px cell,
+so their centers remain level and the title offset (measured from the Save
+image center) is unchanged. Its click target, native title alignment, and PNG
+export behavior remain the same.
+
+The two toolbox controls are titled "Take snapshot" and "Export to CSV", shown
+as hover tooltips below each icon rather than as ECharts' inline `showTitle`
+text, which would widen the toolbox and push into the legend. ECharts 6 renders
+the feature *name* (`saveAsImage`) by default, so `toolbox.tooltip.formatter`
+explicitly returns the title. The tooltip is themed to match the chart tooltip
+and uses `confine` so it cannot spill outside the canvas on narrow screens.

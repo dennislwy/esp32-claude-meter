@@ -450,7 +450,9 @@ async function renderHistory(data){
       aria:{enabled:true,label:{description:hasSamples?'Seven-day usage history. Solid lines show 5-hour usage; dashed lines show 7-day usage. Use the series buttons to show or hide lines. Use plus/minus keys to zoom, arrow keys to pan, and 0 to reset.':'No usage history recorded yet.'}},
       title:{text:'7 days usage history',left:0,top:0,padding:0,textStyle:{color:text,fontFamily:getComputedStyle(document.body).fontFamily,fontSize:matchMedia('(max-width:480px)').matches?16:18,fontWeight:600}},
       legend:{show:true,left:0,right:66,top:mobileSidebar.matches?46:50,itemWidth:18,itemHeight:8,itemGap:10,textStyle:{color:text,fontSize:11,fontFamily:getComputedStyle(document.body).fontFamily},formatter:legendLabel,data:series.map(item=>item.name),selected:histSelected},
-      toolbox:{right:4,top:0,padding:0,itemSize:18,showTitle:false,iconStyle:{borderColor:dim,borderWidth:1.5,borderCap:'round',borderJoin:'round'},emphasis:{iconStyle:{borderColor:text}},feature:{saveAsImage:{show:true,icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 12a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M20 17l-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22',title:'Save image',name:'claude-meter-usage-history',type:'png',pixelRatio:2,backgroundColor:card,excludeComponents:['toolbox']},myExportCsv:{show:true,title:'Export CSV',icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 18V12 M9 15l3 3l3-3',onclick:exportHistoryCsv}}},
+      toolbox:{right:4,top:0,padding:0,itemSize:18,showTitle:false,
+        tooltip:{show:true,position:'bottom',confine:true,formatter:item=>item.title,backgroundColor:card,borderColor:line,textStyle:{color:text,fontSize:12},extraCssText:'padding:6px 10px;box-shadow:0 4px 20px #0002;'},
+        iconStyle:{borderColor:dim,borderWidth:1.5,borderCap:'round',borderJoin:'round'},emphasis:{iconStyle:{borderColor:text}},feature:{saveAsImage:{show:true,icon:'M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z M15 13a3 3 0 1 1-6 0a3 3 0 1 1 6 0',title:'Take snapshot',name:'claude-meter-usage-history',type:'png',pixelRatio:2,backgroundColor:card,excludeComponents:['toolbox']},myExportCsv:{show:true,title:'Export to CSV',icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 18V12 M9 15l3 3l3-3',onclick:exportHistoryCsv}}},
       tooltip:{trigger:'axis',triggerOn:'mousemove|click',confine:true,renderMode:'html',formatter:historyTooltip,
         backgroundColor:card,borderColor:line,textStyle:{color:text,fontSize:12},extraCssText:'max-width:280px;white-space:normal;box-shadow:0 4px 20px #0002;'},
       axisPointer:{link:[{xAxisIndex:'all'}],lineStyle:{color:dim,type:'dashed'}},
@@ -461,7 +463,7 @@ async function renderHistory(data){
     const legendRect=legendView.group.getBoundingRect();
     const legendBottom=legendView.group.transformCoordToGlobal(legendRect.x,legendRect.y+legendRect.height)[1];
     const titleView=histChart.getViewOfComponentModel(histChart.getModel().getComponent('title'));
-    const exportIcon=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group.children().find(item=>item.__title==='Save image');
+    const exportIcon=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group.children().find(item=>item.__title==='Take snapshot');
     // The icons are taller than the title, so the title drops to meet them; pulling them up instead
     // would clip their top edge against the canvas.
     let titleTop=0;
