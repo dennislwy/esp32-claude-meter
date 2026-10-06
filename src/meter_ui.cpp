@@ -496,15 +496,17 @@ namespace
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
 
     const String url = String("http://") + screen.panelHostname + ".local";
-    lv_obj_t *urlLabel = text(parent, url.c_str(), &lv_font_montserrat_12, BLACK);
+    // 14 px fits the longest line ("http://claude-meter.local", ~177 px of CONTENT_W)
+    lv_obj_t *urlLabel = text(parent, url.c_str(), &lv_font_montserrat_14, BLACK);
     lv_obj_set_width(urlLabel, CONTENT_W);
     lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, y + 22);
 
-    lv_obj_t *ipLabel = text(parent, screen.panelIp.c_str(), &lv_font_montserrat_12, BLACK);
+    const String ipUrl = String("http://") + screen.panelIp;
+    lv_obj_t *ipLabel = text(parent, ipUrl.c_str(), &lv_font_montserrat_14, BLACK);
     lv_obj_set_width(ipLabel, CONTENT_W);
     lv_obj_set_style_text_align(ipLabel, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(ipLabel, LV_ALIGN_TOP_MID, 0, y + 38);
+    lv_obj_align(ipLabel, LV_ALIGN_TOP_MID, 0, y + 22 + lv_font_get_line_height(&lv_font_montserrat_14) + 2);
 
     lv_obj_t *pinHint = text(parent, "PIN", &lv_font_montserrat_10, BLACK);
     lv_obj_set_width(pinHint, CONTENT_W);
@@ -516,12 +518,14 @@ namespace
     lv_obj_set_style_text_align(pin, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(pin, LV_ALIGN_TOP_MID, 0, y + 72);
 
-    lv_obj_t *footer = text(parent, "Long BOOT = exit", &lv_font_montserrat_10, BLACK);
+    // Two stacked lines at the bottom: the warning, and the exit hint one line above it
+    const int footerLineH = lv_font_get_line_height(&lv_font_montserrat_12);
+    lv_obj_t *footer = text(parent, "Long BOOT = exit", &lv_font_montserrat_12, BLACK);
     lv_obj_set_width(footer, CONTENT_W);
     lv_obj_set_style_text_align(footer, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -14);
+    lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -2 - footerLineH);
 
-    lv_obj_t *warn = text(parent, "Wi-Fi on, drains fast", &lv_font_montserrat_10, BLACK);
+    lv_obj_t *warn = text(parent, "Wi-Fi on, drains fast", &lv_font_montserrat_12, BLACK);
     lv_obj_set_width(warn, CONTENT_W);
     lv_obj_set_style_text_align(warn, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(warn, LV_ALIGN_BOTTOM_MID, 0, -2);

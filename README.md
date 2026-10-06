@@ -11,6 +11,11 @@ with a saved window of 00:00-06:00.
 
 Firmware version: **0.0.9**, set in `src/build_info.h`.
 
+The web panel's usage history uses a locally served Apache ECharts bundle
+with series toggles, tooltips, mouse/touch zoom, and double-click/double-tap
+zoom toggling, plus PNG image export.
+It works without a CDN. See [panel features](docs/PANEL_FEATURES.md#7-day-history).
+
 ## Hardware
 
 - Waveshare ESP32-S3-ePaper-1.54 (ESP32-S3-PICO-1-N8R8: 8 MB quad flash,

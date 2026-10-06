@@ -32,7 +32,7 @@ setTheme(themeMode);
 .shell{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:100svh}.sidebar{background:var(--side);border-right:1px solid var(--line);padding:32px 18px 20px;position:sticky;top:0;height:100svh;display:flex;flex-direction:column}.sidebar .brand{padding:0 8px;font-size:25px}.sidebar .eyebrow{padding:8px 8px 0;font-size:10px;letter-spacing:.16em}.nav-label{font-size:11px;color:var(--dim);padding:40px 12px 10px}.nav{display:flex;flex-direction:column;gap:5px}.nav button{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dim);padding:11px 12px;min-height:44px;font-size:14px;font-weight:500}.nav button:hover{background:var(--soft);color:var(--text)}.nav button[aria-current=page]{background:var(--card);color:var(--text);border-color:var(--line);box-shadow:0 2px 3px #00000003}.nav button[aria-current=page] .icon{color:var(--acc)}.sidebar-bottom{margin-top:auto;padding:28px 10px 0}.connection{display:flex;align-items:center;gap:8px;font-size:12px}.dot{width:6px;height:6px;background:var(--ok);border-radius:50%;display:inline-block;flex-shrink:0}.connection.offline .dot{background:var(--err)}.host{font:10px/1.6 ui-monospace,Consolas,monospace;color:var(--dim);overflow-wrap:anywhere;margin:8px 0 20px}.sidebar-actions{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding-top:16px}.text-btn{border:0;background:none;color:var(--dim);font-size:12px;padding:8px 0}.text-btn:hover{color:var(--text)}.theme-switch{display:flex;background:var(--soft);border-radius:8px;padding:3px;gap:2px}.theme-switch button{width:30px;height:30px;display:grid;place-items:center;border:0;border-radius:6px;color:var(--dim);background:transparent}.theme-switch button[aria-pressed=true]{color:var(--text);background:var(--card);box-shadow:0 1px 4px #0000000d}.theme-switch .icon{width:16px;height:16px}
 .workspace{min-width:0}.topbar{height:76px;padding:0 48px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:20px}.breadcrumb{font-size:12px;color:var(--dim);display:flex;gap:12px;align-items:center}.breadcrumb strong{font-weight:500;color:var(--text)}.topbar-note{font:11px ui-monospace,Consolas,monospace;color:var(--dim)}.content{max-width:1160px;margin:0 auto;padding:44px 48px 24px}.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:30px;margin-bottom:32px}.page-head h1{margin-top:14px}.page-head p{color:var(--dim);font-size:14px;margin-top:14px}.page-head button{flex-shrink:0}.btn,button.alt,.btn-danger{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:42px;padding:10px 17px;border:1px solid var(--text);border-radius:8px;background:var(--text);color:var(--bg);font-size:13px;font-weight:600;transition:background .15s,border-color .15s,transform .15s}.btn:hover{opacity:.88}.btn:active,button.alt:active{transform:translateY(1px)}button.alt{background:var(--card);color:var(--text);border-color:var(--line);font-weight:500}button.alt:hover{border-color:var(--dim);background:var(--soft)}.btn .icon,button.alt .icon{width:16px;height:16px}.card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:26px;margin-bottom:22px}.card-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.card-head .eyebrow{font-size:10px;white-space:nowrap}.section-intro{color:var(--dim);font-size:13px;margin:8px 0 25px}
 #accounts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.usage-account{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:25px;min-width:0}.account-head{display:flex;gap:12px;align-items:center;margin-bottom:27px}.avatar{width:38px;height:38px;background:var(--acc-soft);color:var(--acc);border-radius:10px;display:grid;place-items:center;font:20px var(--font-serif);flex-shrink:0}.usage-account:nth-child(2) .avatar{color:var(--green);background:var(--soft)}.account-name{font-weight:600;overflow-wrap:anywhere;font-size:15px}.account-meta{font-size:11px;color:var(--dim);margin-top:1px}.usage-account .badge{margin-left:auto;color:var(--dim);font-size:9px;letter-spacing:.08em;flex-shrink:0}.usage-window+.usage-window{margin-top:25px}.usage-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;gap:12px}.usage-number{font-size:28px;font-weight:500;letter-spacing:-.06em;line-height:1.2;font-variant-numeric:tabular-nums}.usage-number small{font-size:13px;letter-spacing:0;color:var(--dim);font-weight:400;margin-left:3px}.bar{height:var(--bar-height);background:var(--soft);border-radius:10px;overflow:hidden;margin:12px 0 8px}.bar>i{display:block;height:100%;background:var(--blue);border-radius:10px;transition:width .6s ease}.usage-account:nth-child(2) .bar>i{background:var(--green)}.bar.warn>i{background:var(--acc)}.bar.depleted>i{background:var(--err)}.resetline{font-size:10px;color:var(--dim);min-height:15px}
-.history-card{margin-top:26px;padding-bottom:20px}#histSvg{width:100%;height:auto;display:block;max-height:290px;overflow:visible}.chart-key{display:flex;gap:15px;font-size:11px;color:var(--dim)}.chart-key span:before{content:'';display:inline-block;width:18px;border-top:2px solid var(--dim);vertical-align:middle;margin-right:6px}.chart-key span:last-child:before{border-top-style:dashed}.chart-bottom{margin-top:18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}#histLegend{margin:0;display:flex;gap:10px;flex-wrap:wrap;align-items:center}.legend-item{display:inline-flex;gap:7px;align-items:center;background:transparent;color:var(--text);font-size:11px;font-weight:500;border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-height:32px}.legend-item:before{content:'';width:6px;height:6px;background:var(--series);border-radius:50%}.legend-item.off{opacity:.6;text-decoration:line-through}.legend-item:hover{background:var(--soft)}.empty-chart{color:var(--dim);text-align:center;font-size:12px;padding:12px}.page-footer{border-top:1px solid var(--line);margin-top:32px;padding:20px 0 0;display:flex;justify-content:space-between;font-size:10px;color:var(--dim);gap:12px}.page-footer span:last-child{font-family:var(--font-serif);font-style:italic;font-size:12px}
+.history-card{margin-top:26px;padding-bottom:20px;position:relative;--history-pad:26px}.history-card .card-head{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0}.history-card:not(.chart-ready) .card-head{left:var(--history-pad);top:var(--history-pad);width:auto;height:auto;clip-path:none;overflow:visible;white-space:normal;z-index:1}#histChart{width:100%;height:346px;touch-action:none}@media(max-width:760px){.history-card{--history-pad:22px}}@media(max-width:480px){.history-card{--history-pad:20px}}.history-tooltip strong{display:block;margin-bottom:8px;font-weight:600}.history-tooltip>div{display:flex;gap:8px;align-items:center;margin:5px 0}.history-tooltip i{width:18px;flex-shrink:0}.chart-bottom{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.chart-bottom:focus-within{position:absolute;left:20px;right:20px;bottom:20px;width:auto;height:auto;overflow:visible;clip-path:none;white-space:normal;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;z-index:2}#histLegend{margin:0;display:flex;gap:10px;flex-wrap:wrap;align-items:center}.legend-item{display:inline-flex;gap:7px;align-items:center;background:transparent;color:var(--text);font-size:11px;font-weight:500;border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-height:44px}.legend-item:before{content:'';width:18px;border-top:2px solid var(--series)}.legend-item[data-dashed=true]:before{border-top-style:dashed}.legend-item.off{opacity:.6;text-decoration:line-through}.legend-item:hover{background:var(--soft)}.empty-chart{color:var(--dim);text-align:center;font-size:12px;padding:12px}.page-footer{border-top:1px solid var(--line);margin-top:32px;padding:20px 0 0;display:flex;justify-content:space-between;font-size:10px;color:var(--dim);gap:12px}.page-footer span:last-child{font-family:var(--font-serif);font-style:italic;font-size:12px}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.form-grid .card{margin-bottom:0}.f{min-width:0;margin-bottom:18px}.f>label{display:block;font-size:12px;font-weight:500;margin-bottom:7px}input:not([type=range]):not([type=checkbox]),select{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font-size:13px}input::placeholder{color:var(--dim);opacity:.8}input:focus,select:focus{border-color:var(--blue)}input[type=time]{font-variant-numeric:tabular-nums}.row{display:flex;gap:16px}.row>.f{flex:1}.status{font-size:12px;min-height:0;overflow-wrap:anywhere}.status:not(:empty){margin-top:12px;padding:10px 12px;background:var(--soft);border-radius:6px}.ok{color:var(--ok)}.err{color:var(--err)}.notice{padding:14px 17px;background:var(--soft);border-radius:8px;color:var(--dim);font-size:12px;line-height:1.7;margin-top:22px}.notice .icon{width:15px;height:15px;vertical-align:-3px;margin-right:5px}.setting-row{display:grid;grid-template-columns:1fr minmax(0,300px);gap:26px;padding:22px 0;align-items:start}.setting-row+.setting-row{border-top:1px solid var(--line)}.card-head+.setting-row{padding-top:0}.setting-row+.form-actions{margin-top:0}.setting-row .f{margin-bottom:0}.setting-copy label{display:block;font-size:14px;font-weight:500}.setting-copy p{font-size:12px;color:var(--dim);margin-top:5px}.form-actions{display:flex;justify-content:flex-end;margin-top:22px;border-top:1px solid var(--line);padding-top:20px}.kv{display:flex;justify-content:space-between;gap:24px;padding:14px 0;border-bottom:1px solid var(--line);font-size:12px;min-width:0}.kv:last-child{border:0}.kv .k{color:var(--dim);flex-shrink:0}.kv>span:last-child{text-align:right;overflow-wrap:anywhere;min-width:0;font-variant-numeric:tabular-nums}.btn-row{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}.btn-narrow{flex-shrink:0}.scanlist{max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;margin-top:16px;display:none}.scanitem{padding:12px;display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);font-size:12px;width:100%;text-align:left;background:var(--card);color:var(--text);border-top:0;border-left:0;border-right:0;min-height:44px}.scanitem:last-child{border-bottom:0}.scanitem:hover{background:var(--soft)}.scanitem .ssid{overflow-wrap:anywhere;min-width:0}.scanitem .meta{color:var(--dim);font-size:10px;flex-shrink:0}.scanitem.saved .ssid:before{content:'\2605 ';color:var(--acc)}.danger{margin-top:22px}.danger h2{color:var(--err)}.btn-danger{background:var(--card);color:var(--err);border-color:var(--line);font-weight:500}.btn-danger:hover{border-color:var(--err)}.btn-danger.armed{background:var(--err);color:var(--bg);border-color:var(--err)}.danger-row{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:18px 0;border-top:1px solid var(--line)}.danger-row p{color:var(--dim);font-size:12px;margin-top:4px}.danger-row button{flex-shrink:0}.vol{display:flex;align-items:center;gap:20px;padding:10px 0}.vol input{flex:1;min-width:0;height:44px;padding:0;margin:0;appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer;accent-color:var(--control-blue)}.vol input::-webkit-slider-runnable-track{height:var(--bar-height);border:0;border-radius:10px;background:linear-gradient(to right,var(--control-blue) 0%,var(--control-blue) var(--volume-fill,80%),var(--soft) var(--volume-fill,80%),var(--soft) 100%)}.vol input::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:14px;height:14px;border:0;border-radius:50%;background:var(--control-blue);margin-top:calc((var(--bar-height) - 14px)/2)}.vol input::-moz-range-track{height:var(--bar-height);border:0;border-radius:10px;background:var(--soft)}.vol input::-moz-range-progress{height:var(--bar-height);border-radius:10px;background:var(--control-blue)}.vol input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--control-blue)}.vol-val{color:var(--text);font-variant-numeric:tabular-nums;width:3em;text-align:right;font-size:14px}.sndgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.sndbtn{border:1px solid var(--line);padding:16px;background:var(--card);color:var(--text);border-radius:9px;font-size:12px;display:flex;align-items:center;gap:10px;min-height:54px}.sndbtn:before{content:'\25b7';color:var(--control-blue);font-size:18px}.sndbtn:hover{background:var(--control-blue-soft);border-color:var(--control-blue)}.sndbtn.playing{background:var(--control-blue-soft);border-color:var(--control-blue);color:var(--control-blue)}.sndbtn:focus-visible,.vol input:focus-visible{outline-color:var(--control-blue)}.sound-group{font-size:11px;color:var(--dim);margin:24px 0 10px}.combo{position:relative}.combo input{padding-right:34px}.combo .chev{position:absolute;right:12px;top:50%;width:14px;height:14px;margin-top:-7px;pointer-events:none;color:var(--dim);transition:transform .15s}.combo.open .chev{transform:rotate(180deg)}.combo-list{position:absolute;left:0;right:0;top:calc(100% + 6px);max-height:260px;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px #00000020;z-index:10;padding:5px;display:none}.combo.open .combo-list{display:block}.combo-opt{padding:10px;border-radius:5px;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.combo-opt .off{color:var(--dim);font-variant-numeric:tabular-nums}.combo-opt.active{background:var(--soft);color:var(--text)}.combo-opt.sel{color:var(--acc)}.combo-sec{padding:8px 10px 4px;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}.combo-empty{padding:12px;color:var(--dim);font-size:12px}
 .page-head h1[tabindex="-1"]:focus{outline:none}
 .sound-setting{display:block}.sound-setting>h3{font-size:14px;font-weight:500;margin-bottom:16px}
@@ -40,8 +40,8 @@ setTheme(themeMode);
 .news{list-style:none;padding:0;margin:0;overflow-y:auto;scrollbar-width:thin}.news li{padding:22px 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:110px 1fr;gap:24px;align-items:baseline}.news li:last-child{border:0}.news .d{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}.news a,.news li>span:not(.d){font:22px/1.4 var(--font-serif);letter-spacing:-.02em;text-decoration:none;display:block}.news a:after{content:'\2197';font:15px system-ui;margin-left:10px;color:var(--acc)}.news a:hover{color:var(--acc)}.news a:focus-visible{outline-offset:-2px}.news-source{font-size:12px;text-decoration:none;color:var(--dim)}.news-source:hover{color:var(--text)}.view{animation:arrive .24s ease both}@keyframes arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 @media(min-width:1600px){.content{padding-top:60px}.sidebar{padding-top:38px}.topbar{height:88px}}
 @media(max-width:1100px){.shell{grid-template-columns:190px minmax(0,1fr)}.content{padding:36px 28px 24px}.topbar{padding:0 28px}.sidebar{padding:28px 12px 18px}.sidebar .brand{font-size:23px}.usage-account{padding:20px}.resetline{font-size:10px}.form-grid{grid-template-columns:1fr}.setting-row{grid-template-columns:1fr minmax(0,270px)}.login-layout{gap:50px}}
-@media(max-width:760px){.shell{display:block}.sidebar{height:auto;position:sticky;z-index:20;padding:14px 20px 0;border-right:0;border-bottom:1px solid var(--line);display:block}.sidebar .brand{font-size:23px;padding:0}.brand-mark{width:28px;height:28px}.sidebar>.eyebrow,.nav-label,.sidebar-bottom .connection,.host{display:none}.sidebar-bottom{position:absolute;right:20px;top:12px;padding:0;margin:0}.sidebar-actions{border:0;padding:0;gap:16px}.nav{flex-direction:row;overflow-x:auto;gap:8px;padding:16px 0 12px;scrollbar-width:none}.nav button{white-space:nowrap;padding:9px 12px;gap:8px;min-height:42px;font-size:12px}.nav .icon{width:17px;height:17px}.topbar{display:none}.topbar-note{font-size:9px}.breadcrumb{font-size:10px;gap:8px}.content{padding:30px 22px 20px}.page-head{margin-bottom:24px;gap:18px}.page-head h1{font-size:42px}.page-head p{font-size:12px;max-width:250px}.page-head .btn{padding:10px 12px;font-size:11px}.page-head .btn .icon{display:none}.card{padding:22px}.card-head{gap:10px}.card-head .eyebrow{font-size:9px}.chart-key{font-size:10px;gap:10px}.chart-bottom>.hint{font-size:10px}.setting-row{grid-template-columns:1fr;gap:14px}.danger-row{align-items:flex-start}.danger-row p{font-size:11px}.danger-row .btn-danger{font-size:11px;padding:9px 12px;max-width:155px}.news li{grid-template-columns:1fr;gap:6px}.news a,.news li>span:not(.d){font-size:20px}.login-header{padding:24px}.login-layout{min-height:0;grid-template-columns:1fr;gap:40px;padding:40px 24px;max-width:520px}.login-story h1{font-size:56px;margin:16px 0}.login-story>p{font-size:15px;margin:20px 0}.story-foot{display:none}.login-card{padding:28px}.login-footer{padding:16px 24px}.sndbtn{padding:13px;font-size:11px}}
-@media(max-width:480px){#accounts{grid-template-columns:1fr;gap:16px}.usage-account{padding:22px}.account-head{margin-bottom:20px}.usage-window+.usage-window{margin-top:20px}.page-head h1{font-size:38px}.eyebrow{font-size:10px}.content{padding:28px 18px 18px}.card{padding:20px}.topbar{padding:0 18px}.topbar-note{max-width:150px;text-align:right}.row{gap:10px}.chart-key{gap:8px}.chart-key span:before{width:12px}.chart-bottom{margin-top:12px}.card-head h2{font-size:16px}.sidebar{padding:14px 18px 0}.sidebar-bottom{right:18px}.text-btn{font-size:11px}.theme-switch button{width:27px}.nav{gap:4px}.nav button{padding:9px 11px}.nav .icon{display:none}.sndgrid{gap:8px}.sndbtn{justify-content:center;flex-direction:column;gap:3px;padding:12px 6px}.scanitem{gap:8px}.scanitem .meta{font-size:9px}.page-footer{font-size:9px}.page-footer span:last-child{font-size:11px}}
+@media(max-width:760px){.shell{display:block}.sidebar{height:auto;position:sticky;z-index:20;padding:14px 20px 0;border-right:0;border-bottom:1px solid var(--line);display:block}.sidebar .brand{font-size:23px;padding:0}.brand-mark{width:28px;height:28px}.sidebar>.eyebrow,.nav-label,.sidebar-bottom .connection,.host{display:none}.sidebar-bottom{position:absolute;right:20px;top:12px;padding:0;margin:0}.sidebar-actions{border:0;padding:0;gap:16px}.nav{flex-direction:row;overflow-x:auto;gap:8px;padding:16px 0 12px;scrollbar-width:none}.nav button{white-space:nowrap;padding:9px 12px;gap:8px;min-height:42px;font-size:12px}.nav .icon{width:17px;height:17px}.topbar{display:none}.topbar-note{font-size:9px}.breadcrumb{font-size:10px;gap:8px}.content{padding:30px 22px 20px}.page-head{margin-bottom:24px;gap:18px}.page-head h1{font-size:42px}.page-head p{font-size:12px;max-width:250px}.page-head .btn{padding:10px 12px;font-size:11px}.page-head .btn .icon{display:none}.card{padding:22px}.card-head{gap:10px}.card-head .eyebrow{font-size:9px}.setting-row{grid-template-columns:1fr;gap:14px}.danger-row{align-items:flex-start}.danger-row p{font-size:11px}.danger-row .btn-danger{font-size:11px;padding:9px 12px;max-width:155px}.news li{grid-template-columns:1fr;gap:6px}.news a,.news li>span:not(.d){font-size:20px}.login-header{padding:24px}.login-layout{min-height:0;grid-template-columns:1fr;gap:40px;padding:40px 24px;max-width:520px}.login-story h1{font-size:56px;margin:16px 0}.login-story>p{font-size:15px;margin:20px 0}.story-foot{display:none}.login-card{padding:28px}.login-footer{padding:16px 24px}.sndbtn{padding:13px;font-size:11px}}
+@media(max-width:480px){#accounts{grid-template-columns:1fr;gap:16px}.usage-account{padding:22px}.account-head{margin-bottom:20px}.usage-window+.usage-window{margin-top:20px}.page-head h1{font-size:38px}.eyebrow{font-size:10px}.content{padding:28px 18px 18px}.card{padding:20px}.topbar{padding:0 18px}.topbar-note{max-width:150px;text-align:right}.row{gap:10px}.chart-bottom{margin-top:12px}.card-head h2{font-size:16px}.sidebar{padding:14px 18px 0}.sidebar-bottom{right:18px}.text-btn{font-size:11px}.theme-switch button{width:27px}.nav{gap:4px}.nav button{padding:9px 11px}.nav .icon{display:none}.sndgrid{gap:8px}.sndbtn{justify-content:center;flex-direction:column;gap:3px;padding:12px 6px}.scanitem{gap:8px}.scanitem .meta{font-size:9px}.page-footer{font-size:9px}.page-footer span:last-child{font-size:11px}}
 .sidebar .brand{font-size:23px;gap:8px;white-space:nowrap;width:max-content}.sidebar .brand-mark{width:28px;height:28px}.sidebar>.eyebrow{letter-spacing:.09em}.usage-label{font-size:13px}.account-meta{font-size:12px}.resetline{font-size:11px}.usage-number{font-size:32px}.page-footer{font-size:11px}
 @media(max-width:760px){.login-header>.eyebrow{display:none}.sidebar .brand{font-size:23px}.sidebar>.eyebrow{display:none}}
 @media(max-width:480px){.sidebar-actions{gap:10px}.theme-switch button{width:25px}.sidebar .brand{font-size:21px}.page-footer{font-size:9px}.resetline{font-size:11px}}
@@ -108,7 +108,7 @@ setTheme(themeMode);
       <section class="view" id="view-usage" aria-labelledby="usageTitle"><div class="page-head"><div><div class="eyebrow">Less guesswork. More headspace.</div><h1 id="usageTitle" tabindex="-1">Your usage,<br>at a glance.</h1><p>A clear view of your session and weekly limits.</p></div><button class="btn" id="btnRefresh"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh now</button></div>
         <p id="pauseNotice" class="hint hidden" role="status"></p>
         <div id="accounts"></div>
-        <div class="card history-card"><div class="card-head"><h2>7 days usage history</h2><div class="chart-key"><span>5-hour</span><span>7-day</span></div></div><svg id="histSvg" viewBox="0 0 800 240" role="img" aria-label="Usage history over the past seven days"></svg><p class="empty-chart hidden" id="historyEmpty">Your history starts with the first usage sample.</p><div class="chart-bottom"><div id="histLegend"></div><span class="hint">Hourly samples · Select an account to hide its lines</span></div></div>
+        <div class="card history-card"><div class="card-head"><h2>7 days usage history</h2></div><div id="histChart" role="group" tabindex="0" aria-label="Usage history over the past seven days" aria-describedby="histHelp" aria-keyshortcuts="+ - ArrowLeft ArrowRight 0"></div><div class="status" id="chartStatus" role="status"></div><button class="alt" id="btnChartRetry" hidden>Retry chart</button><p class="empty-chart hidden" id="historyEmpty">Your history starts with the first usage sample.</p><div class="chart-bottom"><div id="histLegend" role="group" aria-label="History series"></div></div><p class="hint" id="histHelp">Hover or tap for details. Double-click or double-tap to zoom in or out. Scroll or pinch to zoom. Drag to pan.</p></div>
       </section>
       <section class="view hidden" id="view-accounts" aria-labelledby="accountsTitle"><div class="page-head"><div><div class="eyebrow">Two accounts. One clear view.</div><h1 id="accountsTitle" tabindex="-1">Make it yours.</h1><p>Connect your Claude accounts and give each a familiar name.</p></div></div>
         <div class="card"><div class="card-head"><h2>Connected accounts</h2><span class="eyebrow">Up to two accounts</span></div><div class="form-grid"><div><h3>Account 01</h3><p class="section-intro">Your first workspace.</p><div class="f"><label for="name1">Display name</label><input id="name1" maxlength="20" placeholder="e.g. Personal"></div><div class="f"><label for="token1">Claude OAuth token</label><input id="token1" type="password" autocomplete="new-password" placeholder="Leave blank to keep current token"></div></div><div><h3>Account 02</h3><p class="section-intro">A second workspace, if you need one.</p><div class="f"><label for="name2">Display name</label><input id="name2" maxlength="20" placeholder="e.g. Work"></div><div class="f"><label for="token2">Claude OAuth token</label><input id="token2" type="password" autocomplete="new-password" placeholder="Leave blank to keep current token"></div></div></div><div class="hint">Tokens start with sk-ant-oat01-. New tokens are checked with Claude when you save.</div><div class="form-actions"><button class="btn" id="btnTokens">Save accounts</button></div><div class="status" id="tokenStatus" role="status"></div></div><div class="notice"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Tokens are never displayed here after saving. They are currently stored unencrypted on the device; use this panel on a trusted local network.</div>
@@ -130,7 +130,6 @@ setTheme(themeMode);
 
 <script>
 const $=(id)=>document.getElementById(id);
-const SVGNS='http://www.w3.org/2000/svg';
 let deviceTimeZone='Etc/UTC';
 function applyTheme(mode){
   setTheme(mode);
@@ -198,8 +197,9 @@ function fmtReset(epoch,nowEpoch){
   return 'Resets at '+when+tail;
 }
 
-// Per-account visibility toggles for the history chart. Session-scoped.
-const histVisible=[true,true];
+// ECharts interactions persist across polling, theme changes, and view switches.
+let histChart=null,histEnginePromise=null,histAxisFrame=0;
+let histZoom={start:0,end:100},histSelected={},histLabels={};
 let lastHistData=null;
 
 async function refreshState(){
@@ -262,63 +262,213 @@ async function refreshHistory(){
   const r=await api('/api/history','GET');
   if(!r.ok)return;
   lastHistData=r.data;
-  renderHistory(lastHistData);
+  await renderHistory(lastHistData);
 }
 
-function renderHistory(data){
-  const svg=$('histSvg');svg.innerHTML='';
-  const W=Math.max(360,Math.min(800,svg.clientWidth||800)),H=240,ML=32,MR=8,MT=12,MB=30;
-  svg.setAttribute('viewBox','0 0 '+W+' '+H);
-  const css=getComputedStyle(document.documentElement),dim=css.getPropertyValue('--dim').trim(),line=css.getPropertyValue('--line').trim();
-  const PW=W-ML-MR,PH=H-MT-MB;
-  const cols=data.cols;
-  const svgLine=(x1,y1,x2,y2,sw,stroke)=>{const l=document.createElementNS(SVGNS,'line');l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);l.setAttribute('stroke',stroke||dim);l.setAttribute('stroke-width',sw||1);svg.appendChild(l)};
-  const svgText=(x,y,s,anchor,fill)=>{const t=document.createElementNS(SVGNS,'text');t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('font-size','11');t.setAttribute('fill',fill||dim);if(anchor)t.setAttribute('text-anchor',anchor);t.textContent=s;svg.appendChild(t)};
-  for(let pct=0;pct<=100;pct+=25){const y=MT+PH-(pct*PH/100);svgLine(ML,y,ML+PW,y,0.6,line);svgText(ML-3,y+3,pct,'end')}
-  svgLine(ML,MT+PH,ML+PW,MT+PH,1);svgLine(ML,MT,ML,MT+PH,1);
-  const newest=data.newest_epoch;
-  if(newest){
-    const localHour=+zonedParts(newest).hour;
-    const midnightCol=cols-1-localHour;
-    for(let d=0;d<=7;d++){
-      const col=midnightCol-d*24;
-      if(col<0)break;
-      if(col>=cols)continue;
-      const x=ML+col*PW/cols;
-      svgLine(x,MT+PH,x,MT+PH+3,0.6);
-      svgText(x,MT+PH+14,zonedParts(newest-d*86400).weekday,'middle');
-    }
-  }
-  const COLORS=[css.getPropertyValue('--blue').trim(),css.getPropertyValue('--green').trim()];
-  const hasSamples=(data.accounts||[]).some(a=>[...(a.h5||[]),...(a.d7||[])].some(v=>v!=null));
-  $('historyEmpty').classList.toggle('hidden',hasSamples);
-  svg.setAttribute('aria-label',hasSamples?'Seven-day usage history. Solid lines show 5-hour usage; dashed lines show 7-day usage. Account colors match the legend.':'No usage history recorded yet');
-  (data.accounts||[]).forEach((acc,i)=>{
-    if(!histVisible[i])return;
-    const c=COLORS[i%COLORS.length];
-    [acc.h5,acc.d7].forEach((series,j)=>{
-      const sw=j===0?1.5:2.2;let path='';let open=false;
-      for(let k=0;k<series.length;k++){
-        const v=series[k];
-        if(v==null){open=false;continue}
-        const x=ML+k*PW/cols;
-        const y=MT+PH-(Math.min(100,v)*PH/100);
-        path+=(open?'L':'M')+x.toFixed(1)+','+y.toFixed(1)+' ';
-        open=true;
-      }
-      if(path){const p=document.createElementNS(SVGNS,'path');p.setAttribute('d',path);p.setAttribute('fill','none');p.setAttribute('stroke',c);p.setAttribute('stroke-width',sw);p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');if(j===1)p.setAttribute('stroke-dasharray','4 4');svg.appendChild(p)}
-    });
+function loadHistoryEngine(){
+  if(window.echarts)return Promise.resolve(window.echarts);
+  if(!histEnginePromise)histEnginePromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');let timer;
+    const fail=()=>{clearTimeout(timer);script.remove();histEnginePromise=null;reject(new Error('chart_load'))};
+    script.src='/assets/echarts-6.1.0-v2.js';
+    script.onload=()=>{clearTimeout(timer);window.echarts?resolve(window.echarts):fail()};
+    script.onerror=fail;timer=setTimeout(fail,20000);document.head.appendChild(script);
   });
+  return histEnginePromise;
+}
+function historyTickHours(){
+  const hours=(lastHistData?.cols||168)*(histZoom.end-histZoom.start)/100;
+  const plotWidth=Math.max(1,(histChart?.getWidth()||innerWidth)-58);
+  const maxLabels=Math.max(2,Math.floor(plotWidth/48));
+  const minimum=hours<=12?1:hours<=48?3:24;
+  return [1,2,3,4,6,12,24,48,72,96,168].find(step=>step>=minimum&&step>=hours/maxLabels)||168;
+}
+function historyTicks(index,value){
+  const parts=zonedParts(+value),step=historyTickHours();
+  if(parts.minute!=='00')return false;
+  if(step<24)return +parts.hour%step===0;
+  return parts.hour==='00'&&Math.floor(+value/86400)%(step/24)===0;
+}
+function historyAxisLabel(value){
+  const parts=zonedParts(+value);
+  return parts.hour==='00'?parts.weekday:parts.hour+':'+parts.minute;
+}
+function historyTooltip(params){
+  const content=document.createElement('div');content.className='history-tooltip';
+  const epoch=+(params[0]?.axisValue||0),parts=zonedParts(epoch);
+  const heading=document.createElement('strong');heading.textContent=parts.weekday+' '+parts.day+' '+parts.month+' · '+parts.hour+':'+parts.minute;
+  content.appendChild(heading);
+  params.forEach(point=>{
+    if(typeof point.value!=='number'||!Number.isFinite(point.value))return;
+    const row=document.createElement('div'),swatch=document.createElement('i'),text=document.createElement('span');
+    swatch.style.borderTop='2px '+(point.seriesIndex%2?'dashed':'solid')+' '+point.color;
+    text.textContent=(histLabels[point.seriesName]||'Usage')+': '+point.value+'%';
+    row.append(swatch,text);content.appendChild(row);
+  });
+  return content;
+}
+function updateHistoryLegend(series){
   const legend=$('histLegend');
-  legend.innerHTML='';
-  (data.accounts||[]).forEach((a,i)=>{
-    const button=document.createElement('button');
-    button.className='legend-item'+(histVisible[i]?'':' off');
-    button.style.setProperty('--series',COLORS[i%COLORS.length]);
-    button.textContent=a.name||'Account '+(i+1);button.setAttribute('aria-pressed',String(histVisible[i]));
-    button.onclick=()=>{histVisible[i]=!histVisible[i];renderHistory(lastHistData);$('histLegend').children[i].focus({preventScroll:true})};
-    legend.appendChild(button);
+  const signature=series.map(item=>item.name+'\0'+histLabels[item.name]).join('\n');
+  if(legend.dataset.series!==signature){
+    legend.replaceChildren();legend.dataset.series=signature;
+    series.forEach((item,index)=>{
+      const button=document.createElement('button');button.className='legend-item';button.dataset.series=item.name;
+      button.dataset.dashed=String(index%2===1);button.textContent=histLabels[item.name];
+      button.onclick=()=>histChart?.dispatchAction({type:'legendToggleSelect',name:item.name});
+      legend.appendChild(button);
+    });
+  }
+  Array.from(legend.children).forEach((button,index)=>{
+    const selected=histSelected[button.dataset.series]!==false;
+    button.style.setProperty('--series',series[index].lineStyle.color);
+    button.classList.toggle('off',!selected);button.setAttribute('aria-pressed',String(selected));
   });
+}
+function historyZoom(start,end){
+  if(!histChart||!lastHistData)return;
+  const minSpan=100/Math.max(1,(lastHistData.cols||168)-1);
+  const span=Math.max(minSpan,Math.min(100,end-start));
+  start=Math.max(0,Math.min(100-span,start));
+  histChart.dispatchAction({type:'dataZoom',start,end:start+span});
+}
+function zoomHistoryBy(factor,center=(histZoom.start+histZoom.end)/2){
+  const span=(histZoom.end-histZoom.start)*factor;
+  historyZoom(center-span/2,center+span/2);
+}
+function toggleHistoryZoomAt(clientX,clientY){
+  if(!histChart)return;
+  const box=$('histChart').getBoundingClientRect(),point=[clientX-box.left,clientY-box.top];
+  if(!histChart.containPixel({gridIndex:0},point))return;
+  if(histZoom.end-histZoom.start<99.9)historyZoom(0,100);
+  else{
+    const col=histChart.convertFromPixel({xAxisIndex:0},point[0]);
+    zoomHistoryBy(0.5,100*col/Math.max(1,(lastHistData?.cols||168)-1));
+  }
+}
+function bindHistoryZoomGestures(){
+  const target=$('histChart'),pointers=new Map();let lastTap=null,lastTouch=-Infinity;
+  target.addEventListener('dblclick',event=>{
+    // Ignore compatibility mouse events generated by touch gestures.
+    if(performance.now()-lastTouch<600)return;
+    toggleHistoryZoomAt(event.clientX,event.clientY);event.preventDefault();
+  });
+  target.addEventListener('pointerdown',event=>{
+    if(event.pointerType!=='touch')return;
+    lastTouch=performance.now();
+    pointers.set(event.pointerId,{x:event.clientX,y:event.clientY,time:lastTouch,moved:false});
+    if(pointers.size>1){lastTap=null;pointers.forEach(tap=>tap.moved=true)}
+  },{passive:true});
+  window.addEventListener('pointermove',event=>{
+    const tap=pointers.get(event.pointerId);
+    if(tap&&Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>10){tap.moved=true;lastTap=null}
+  },{passive:true});
+  window.addEventListener('pointerup',event=>{
+    const tap=pointers.get(event.pointerId);if(!tap)return;
+    pointers.delete(event.pointerId);lastTouch=performance.now();
+    if(tap.moved||lastTouch-tap.time>350||Math.hypot(event.clientX-tap.x,event.clientY-tap.y)>10){lastTap=null;return}
+    if(lastTap&&lastTouch-lastTap.time<=350&&Math.hypot(event.clientX-lastTap.x,event.clientY-lastTap.y)<=24){
+      lastTap=null;toggleHistoryZoomAt(event.clientX,event.clientY);
+    }else lastTap={x:event.clientX,y:event.clientY,time:lastTouch};
+  },{passive:true});
+  window.addEventListener('pointercancel',event=>{
+    if(pointers.delete(event.pointerId)){lastTap=null;lastTouch=performance.now()}
+  },{passive:true});
+}
+$('btnChartRetry').onclick=()=>{if(lastHistData)renderHistory(lastHistData)};
+$('histChart').addEventListener('keydown',event=>{
+  if(event.key==='+'||event.key==='=')zoomHistoryBy(0.5);
+  else if(event.key==='-')zoomHistoryBy(2);
+  else if(event.key==='0')historyZoom(0,100);
+  else if(event.key==='ArrowLeft'||event.key==='ArrowRight'){
+    const move=(histZoom.end-histZoom.start)*0.2*(event.key==='ArrowLeft'?-1:1);
+    historyZoom(histZoom.start+move,histZoom.end+move);
+  }else return;
+  event.preventDefault();
+});
+async function renderHistory(data){
+  if($('view-usage').classList.contains('hidden'))return;
+  const status=$('chartStatus');status.textContent=histChart?'':'Loading your history…';$('btnChartRetry').hidden=true;
+  try{
+    const engine=await loadHistoryEngine();
+    if($('view-usage').classList.contains('hidden'))return;
+    data=lastHistData||data;
+    if(!histChart){
+      histChart=engine.init($('histChart'),null,{renderer:'canvas',devicePixelRatio:Math.min(devicePixelRatio||1,2)});
+      histChart.on('legendselectchanged',event=>{
+        histSelected={...event.selected};updateHistoryLegend(histChart.getOption().series);
+      });
+      histChart.on('datazoom',()=>{
+        const zoom=histChart.getOption().dataZoom[0];histZoom={start:zoom.start,end:zoom.end};
+        cancelAnimationFrame(histAxisFrame);histAxisFrame=requestAnimationFrame(()=>histChart.setOption({xAxis:histChart.getOption().xAxis.map(()=>({axisLabel:{interval:historyTicks,formatter:historyAxisLabel},axisTick:{interval:historyTicks}}))}));
+      });
+      bindHistoryZoomGestures();
+    }
+    const css=getComputedStyle(document.documentElement),color=name=>css.getPropertyValue(name).trim();
+    const dim=color('--dim'),line=color('--line'),text=color('--text'),card=color('--card'),colors=[color('--blue'),color('--green')];
+    const cols=data.cols||168,step=data.col_seconds||3600;
+    const lastEpoch=Math.floor(data.newest_epoch||deviceNow||Date.now()/1000)-1;
+    const newest=Math.floor(lastEpoch/60)*60-(+zonedParts(lastEpoch).minute)*60;
+    const dates=Array.from({length:cols},(_,i)=>newest-(cols-1-i)*step);
+    const series=[];histLabels={};
+    (data.accounts||[]).forEach((account,i)=>{
+      ['h5','d7'].forEach((key,j)=>{
+        const id='account-'+i+'-'+key;histLabels[id]=(account.name||'Account '+(i+1))+' · '+(j?'7d':'5h');
+        series.push({id,name:id,type:'line',xAxisIndex:0,yAxisIndex:0,
+          data:Array.from({length:cols},(_,k)=>{const v=account[key]?.[k];return typeof v==='number'&&Number.isFinite(v)?Math.max(0,Math.min(100,v)):null}),
+          showSymbol:false,connectNulls:false,symbolSize:6,
+          lineStyle:{color:colors[i%colors.length],width:j?1:1.6,type:j?'dashed':'solid'},
+          itemStyle:{color:colors[i%colors.length]},emphasis:mobileSidebar.matches?{disabled:true,focus:'none'}:{focus:'series'}});
+      });
+    });
+    const hasSamples=series.some(item=>item.data.some(v=>v!==null));
+    $('historyEmpty').classList.toggle('hidden',hasSamples);
+    const axis={type:'category',data:dates,boundaryGap:false,
+      axisLine:{lineStyle:{color:dim}},axisTick:{alignWithLabel:true,interval:historyTicks,lineStyle:{color:dim}},
+      axisPointer:mobileSidebar.matches?{show:true,type:'line',snap:true,triggerEmphasis:false,lineStyle:{width:1},
+        handle:{show:true,size:16,margin:0,color:dim},
+        label:{show:false}}:{},
+      axisLabel:{color:dim,fontSize:11,interval:historyTicks,formatter:historyAxisLabel,margin:10},splitLine:{show:false}};
+    const yAxis={type:'value',min:0,max:100,interval:25,axisLabel:{color:dim,fontSize:11,formatter:'{value}%'},
+      splitLine:{lineStyle:{color:line,width:1}},axisLine:{show:false},axisTick:{show:false}};
+    const indexes=[0];
+    histChart.resize();
+    const legendContext=document.createElement('canvas').getContext('2d');
+    legendContext.font='11px '+getComputedStyle(document.body).fontFamily;
+    const legendLabel=name=>{
+      const label=histLabels[name]||name,maxWidth=Math.max(60,histChart.getWidth()-78);
+      if(legendContext.measureText(label).width<=maxWidth)return label;
+      const suffix=label.slice(label.lastIndexOf(' · '));let account=label.slice(0,-suffix.length);
+      while(account.length&&legendContext.measureText(account+'\u2026'+suffix).width>maxWidth)account=account.slice(0,-1);
+      return account+'\u2026'+suffix;
+    };
+    histChart.setOption({animation:false,backgroundColor:'transparent',
+      aria:{enabled:true,label:{description:hasSamples?'Seven-day usage history. Solid lines show 5-hour usage; dashed lines show 7-day usage. Use the series buttons to show or hide lines. Use plus/minus keys to zoom, arrow keys to pan, and 0 to reset.':'No usage history recorded yet.'}},
+      title:{text:'7 days usage history',left:0,top:0,padding:0,textStyle:{color:text,fontFamily:getComputedStyle(document.body).fontFamily,fontSize:matchMedia('(max-width:480px)').matches?16:18,fontWeight:600}},
+      legend:{show:true,left:0,right:38,top:mobileSidebar.matches?46:50,itemWidth:18,itemHeight:8,itemGap:10,textStyle:{color:text,fontSize:11,fontFamily:getComputedStyle(document.body).fontFamily},formatter:legendLabel,data:series.map(item=>item.name),selected:histSelected},
+      toolbox:{right:4,top:0,padding:0,itemSize:18,showTitle:false,iconStyle:{borderColor:dim,borderWidth:1.5,borderCap:'round',borderJoin:'round'},emphasis:{iconStyle:{borderColor:text}},feature:{saveAsImage:{show:true,icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 12a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M20 17l-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22',title:'Save image',name:'claude-meter-usage-history',type:'png',pixelRatio:2,backgroundColor:card,excludeComponents:['toolbox']}}},
+      tooltip:{trigger:'axis',triggerOn:'mousemove|click',confine:true,renderMode:'html',formatter:historyTooltip,
+        backgroundColor:card,borderColor:line,textStyle:{color:text,fontSize:12},extraCssText:'max-width:280px;white-space:normal;box-shadow:0 4px 20px #0002;'},
+      axisPointer:{link:[{xAxisIndex:'all'}],lineStyle:{color:dim,type:'dashed'}},
+      grid:[{left:44,right:14,top:50,bottom:32}],xAxis:indexes.map((_,i)=>({...axis,gridIndex:i})),yAxis:indexes.map((_,i)=>({...yAxis,gridIndex:i})),
+      dataZoom:[{type:'inside',xAxisIndex:indexes,filterMode:'none',start:histZoom.start,end:histZoom.end,minSpan:100/Math.max(1,cols-1),zoomOnMouseWheel:true,moveOnMouseMove:true,moveOnMouseWheel:false}],
+      series},{notMerge:true});
+    const legendView=histChart.getViewOfComponentModel(histChart.getModel().getComponent('legend'));
+    const legendRect=legendView.group.getBoundingRect();
+    const legendBottom=legendView.group.transformCoordToGlobal(legendRect.x,legendRect.y+legendRect.height)[1];
+    const titleView=histChart.getViewOfComponentModel(histChart.getModel().getComponent('title'));
+    const exportIcon=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group.children().find(item=>item.__title==='Save image');
+    let exportTop=0;
+    if(titleView&&exportIcon){
+      const rect=titleView.group.getBoundingRect(),iconRect=exportIcon.getBoundingRect();
+      const center=titleView.group.transformCoordToGlobal(rect.x,rect.y+rect.height/2);
+      const iconCenter=exportIcon.transformCoordToGlobal(iconRect.x,iconRect.y+iconRect.height/2);
+      exportTop=center[1]-iconCenter[1];
+    }
+    histChart.setOption({grid:[{top:Math.max(88,legendBottom+18)}],toolbox:{top:exportTop}});
+    $('histChart').closest('.history-card').classList.add('chart-ready');
+    updateHistoryLegend(series);status.textContent='';
+  }catch(_){status.textContent='Your history chart could not load. Try again.';$('btnChartRetry').hidden=false;}
 }
 
 function showLogin(){clearTimeout(newsTimer);$('login').classList.remove('hidden');$('dash').classList.add('hidden');document.title='Sign in · Claude Meter';document.querySelector('.skip').href='#loginMain';$('pin').focus()}

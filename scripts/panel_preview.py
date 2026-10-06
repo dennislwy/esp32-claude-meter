@@ -57,14 +57,16 @@ def history():
 
 class PreviewHandler(BaseHTTPRequestHandler):
     def reply(self, status, payload, cookie=None):
+        encoded = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
         self.send_response(status)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Type", "text/html; charset=utf-8" if isinstance(payload, bytes)
                          else "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
         if cookie:
             self.send_header("Set-Cookie", cookie)
         self.end_headers()
-        self.wfile.write(payload if isinstance(payload, bytes) else json.dumps(payload).encode())
+        self.wfile.write(encoded)
 
     def authenticated(self):
         return "sid=preview" in self.headers.get("Cookie", "")
@@ -73,6 +75,15 @@ class PreviewHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/":
             return self.reply(200, panel_html())
+        if path == "/assets/echarts-6.1.0-v2.js":
+            asset = (ROOT / "assets/echarts/echarts.min.js.gz").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(asset)))
+            self.end_headers()
+            self.wfile.write(asset)
+            return
         if not self.authenticated():
             return self.reply(401, {"error": "auth"})
         if path == "/api/state":

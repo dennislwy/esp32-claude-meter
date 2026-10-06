@@ -19,6 +19,8 @@
 
 namespace
 {
+  extern const uint8_t echartsStart[] asm("_binary_assets_echarts_echarts_min_js_gz_start");
+  extern const uint8_t echartsEnd[] asm("_binary_assets_echarts_echarts_min_js_gz_end");
   WebServer *server = nullptr;
   bool active = false;
   char pinCode[7] = {0};
@@ -671,6 +673,15 @@ namespace
   {
     server->send(404, "text/plain", "not found");
   }
+
+  void handleChartAsset()
+  {
+    // Static library only; usage/history endpoints retain their session checks.
+    server->sendHeader("Content-Encoding", "gzip");
+    server->sendHeader("Cache-Control", "public, max-age=31536000, immutable");
+    server->sendHeader("X-Content-Type-Options", "nosniff");
+    server->send_P(200, "application/javascript", reinterpret_cast<const char *>(echartsStart), echartsEnd - echartsStart);
+  }
 } // namespace
 
 void panelBegin(PanelDisplay &out)
@@ -691,6 +702,7 @@ void panelBegin(PanelDisplay &out)
   const char *trackedHeaders[] = {"Cookie", "Content-Type"};
   server->collectHeaders(trackedHeaders, sizeof(trackedHeaders) / sizeof(trackedHeaders[0]));
   server->on("/", HTTP_GET, handleRoot);
+  server->on("/assets/echarts-6.1.0-v2.js", HTTP_GET, handleChartAsset);
   server->on("/api/login", HTTP_POST, handleLogin);
   server->on("/api/logout", HTTP_POST, handleLogout);
   server->on("/api/state", HTTP_GET, handleState);

@@ -66,7 +66,8 @@ login resets the counter.
 
 ## Routes
 
-All routes except `GET /` require a valid `sid` cookie. State-changing
+The HTML, chart asset, and login route are public. Other routes require a
+valid `sid` cookie. State-changing
 routes require `Content-Type: application/json` on the request body.
 
 | Method | Path                 | Request                                                                                                                                                                                                                                                                                                    | Response                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -155,18 +156,23 @@ using the device's selected time zone and the same x-coordinate for both.
 
 ## UI sections
 
-Rendered client-side from a single HTML blob, organised into **Usage**,
+Rendered client-side from an embedded HTML blob, organised into **Usage**,
 **Accounts**, **Device**, **Polling & alerts**, and **News** views. The
 sidebar becomes a scrollable navigation row on phones. System/light/dark
 appearance is saved per browser and resolved in the head before the first
 paint. Both footers link to the GitHub repository. See [PANEL_DESIGN.md](PANEL_DESIGN.md)
 for the reference analysis and a simulated local preview.
 
+`GET /assets/echarts-6.1.0-v2.js` serves the embedded Apache ECharts bundle
+with `Content-Encoding: gzip` and an immutable one-year cache. It contains
+202,957 compressed bytes and loads on demand after sign-in. No CDN or
+LittleFS upload is required; the public asset contains no device data.
+
 | Card                       | Purpose                                                                                                                                                                                                                                                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Sign in**                | PIN prompt; typing or pasting six digits automatically calls `/api/login`. Replaced by the dashboard on success; manual retry is available.                                                                                                                                                                                                                  |
 | **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: battery, last poll, uptime, IP, Wi-Fi (SSID, dBm, quality word), Wi-Fi MAC address immediately after Wi-Fi, heap free / low-water mark, firmware release version + git revision, and the full device diagnostics.                                                        |
-| **7-day history**          | Responsive inline SVG line chart in Usage, 168 cols, blue = account 1, green = account 2 (solid = 5h, dashed = 7d). Keyboard-accessible legend buttons toggle each account's series. Weekday labels are centered under their midnight ticks in the device's time zone; y-axis ticks every 25 %. Empty samples preserve gaps; no samples show an empty state. |
+| **7-day history**          | Local Apache ECharts canvas chart, 168 hourly columns; blue = account 1, green = account 2, solid = 5h, dashed = 7d. One combined graph with four independent in-chart legend toggles and hover/tap tooltips. Double-click/double-tap toggles closer/full-week zoom; wheel/pinch, drag, and keyboard provide zoom/pan/reset. Save image aligns with the chart title and downloads the current chart, including its title and legend, as a PNG. Selections and zoom survive refreshes and view/theme changes. Weekdays align with device-local midnight ticks; missing samples remain gaps. |
 | **Anthropic news**         | 10 latest headlines (13px date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. Successful-fetch status links to anthropic.com/news.                                                                                                                                            |
 | **Accounts**               | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token.                                                                                                                                                                                                             |
 | **Wi-Fi**                  | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID.                                                                                                                                                                                                                                                              |

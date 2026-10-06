@@ -76,18 +76,47 @@ below one minute, then whole minutes rounded down, such as `Updated 120m ago`.
 
 ## 7-day history
 
-168-column responsive inline SVG line chart in Usage.
+Apache ECharts 6.1.0 chart in Usage, with 168 hourly columns. Its compressed
+library is served locally from firmware flash and loaded after sign-in.
 
 - Blue = account 1, green = account 2; colors adapt to the theme
-- Solid line = 5 H series, dashed line = 7 D series
-- Click a legend button (or use Enter/Space) to toggle that account's
-  series on/off
+- Solid line = 5 H series (1.6 px), dashed line = 7 D series (1 px)
+- The in-chart legend independently toggles each account's 5-hour/7-day
+  series and is included in saved images. Long account names are shortened
+  to fit the chart. Equivalent keyboard controls appear when focused; use
+  Enter/Space to show/hide each series
+- Compact series labels use `account 1 · 5h`, `account 1 · 7d`,
+  `account 2 · 5h`, and `account 2 · 7d`, with the saved account names
+- All account/window series share one combined graph
+- The chart's **Save image** control sits beside the chart title and
+  downloads the current visible graph as
+  `claude-meter-usage-history.png`, at 2x resolution with the current theme's
+  background. The title is included in the PNG; the toolbox control
+  itself is omitted
+- Hover or tap for device-local time, account, usage window, and percentage.
+  Account names are rendered as text, including inside tooltips. Mobile
+  taps preserve line colors, widths, and opacity without focusing one
+  series or dimming the others
+- On mobile (up to 760 px), the x-axis pointer snaps to hourly samples,
+  uses a 1 px line, and hides its time label. Tap tooltips still show
+  device-local time.
+  A visible 16 px handle is centered on the x-axis and can be dragged
+  to inspect samples without changing zoom
+- Double-click or double-tap the plot to toggle between a closer view
+  centered on the selected point and the full week. Single clicks/taps
+  show tooltips without changing zoom; dragging and pinching are not taps
+- Scroll or pinch to zoom; drag to pan. When the chart is focused,
+  `+`/`-` zoom, arrow keys pan,
+  and `0` resets
+- Zoom and hidden series survive history polling, theme changes,
+  and switching panel pages within the session
 - Weekday labels are centered directly below their 00:00 midnight ticks
   in the device's time zone, using the exact same x-coordinate. A partial
   day without a visible midnight tick has no extra label. Y-axis ticks
-  appear every 25 %
+  appear every 25 %. Zoomed views also show hourly labels
 - Empty slots render as broken segments (JSON `null`)
 - No recorded samples show an explicit empty state
+- A library-loading failure shows a Retry chart button; other views remain usable
 
 Downsampled server-side from the 336-slot, 30-min ring to 168 one-hour
 columns (max of the two 30-min samples per hour).

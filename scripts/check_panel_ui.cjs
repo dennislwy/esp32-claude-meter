@@ -29,6 +29,11 @@ const initialState = {
   let finishThemeResponse;
   const mainScriptOffset = html.lastIndexOf('<script>');
   const server = http.createServer((req, res) => {
+    if (req.url === '/assets/echarts-6.1.0-v2.js') {
+      const asset = fs.readFileSync(path.join(__dirname, '../assets/echarts/echarts.min.js.gz'));
+      res.writeHead(200, { 'Content-Type': 'application/javascript', 'Content-Encoding': 'gzip', 'Content-Length': asset.length });
+      return res.end(asset);
+    }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (req.url === '/first-paint') {
       // Hold back app initialization while the actual page paints, as on a slow LAN response.
@@ -45,7 +50,7 @@ const initialState = {
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', req => { if (!req.url().startsWith('http://127.0.0.1:')) external.push(req.url()); });
-  await page.route('**/api/**', async route => {
+  const routeApi = async route => {
     const request = route.request(), url = new URL(request.url()), endpoint = url.pathname;
     const body = request.postDataJSON() || {};
     const reply = (payload, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(payload) });
@@ -60,20 +65,159 @@ const initialState = {
     if (!signedIn) return reply({ error: 'auth' }, 401);
     if (endpoint === '/api/logout') { signedIn = false; return reply({ ok: true }); }
     if (endpoint === '/api/state') return reply(state);
-    if (endpoint === '/api/history') return reply({ cols: 168, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: [null, 10, 25, null, 40], d7: clearHistory ? [null, null] : [20, 30, null, 40, 50] })).map(a => clearHistory ? { ...a, h5: [null, null] } : a) });
+    if (endpoint === '/api/history') return reply({ cols: 168, col_seconds: 3600, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: Array.from({length:168},(_,i)=>clearHistory||i===50?null:i%40), d7: Array.from({length:168},(_,i)=>clearHistory||i===50?null:20+i%50) })) });
     if (endpoint === '/api/news') return reply({ ok: true, fetching: newsFetching, fetched_epoch: now, items: Array.from({ length: 8 }, (_, i) => ({ title: i ? 'Preview headline ' + i : '<img src=x onerror="window.injected=true">', date: 'Oct 5, 2026', link: i ? 'https://www.anthropic.com/news' : 'javascript:alert(1)' })) });
     if (endpoint === '/api/settings') { Object.assign(state, body); return reply({ ok: true }); }
     if (endpoint === '/api/tokens') { state.accounts.forEach((a, i) => a.name = body['name' + (i + 1)]); return reply({ ok: true, probes: [{ account: 1, ok: true, http: 200, h5: 29, d7: 60 }] }); }
     if (endpoint === '/api/wifi/scan') return reply({ networks: [{ ssid: '<img src=x onerror="window.injected=true">', rssi: -45, channel: 6, secure: true, saved: false }] });
     if (endpoint === '/api/history/clear') clearHistory = true;
     return reply({ ok: true });
-  });
+  };
+  await page.route('**/api/**', routeApi);
   const waitFor = async (selector, text) => {
     await page.waitForFunction(({ selector, text }) => document.querySelector(selector)?.textContent.includes(text), { selector, text });
   };
   const select = async name => page.locator('[data-view="' + name + '"]').click();
   const latestPost = endpoint => posts.filter(p => p.endpoint === endpoint).at(-1)?.body;
+  const checkPointerHandle = async target => {
+    await target.locator('#histChart').scrollIntoViewIfNeeded();
+    const box=await target.locator('#histChart').boundingBox();
+    const handle=await target.evaluate(()=>{
+      const view=histChart.getViewOfComponentModel(histChart.getModel().getComponent('xAxis'))._axisPointer;
+      const element=view._handle,rect=element.getBoundingRect();
+      const grid=histChart.getModel().getComponent('grid').coordinateSystem.getRect();
+      const start=element.transformCoordToGlobal(rect.x,rect.y),end=element.transformCoordToGlobal(rect.x+rect.width,rect.y+rect.height);
+      return {visible:!element.ignore,draggable:element.draggable,size:view._axisPointerModel.get(['handle','size']),value:view._axisPointerModel.get('value'),
+        left:Math.min(start[0],end[0]),right:Math.max(start[0],end[0]),top:Math.min(start[1],end[1]),bottom:Math.max(start[1],end[1]),
+        x:element.x,y:element.y,axisY:grid.y+grid.height,zoom:{...histZoom},scroll:scrollY};
+    });
+    assert.equal(handle.visible,true);assert.equal(handle.draggable,true);
+    assert.equal(handle.size,16,'Mobile pointer handle is 16px');
+    assert(Math.abs(handle.y-handle.axisY)<1,'Mobile handle is centered on the x-axis');
+    assert(handle.left>=0&&handle.right<=box.width&&handle.top>=0&&handle.bottom<=box.height,'Pointer handle fits inside the chart: '+JSON.stringify(handle));
+    const cdp=await target.context().newCDPSession(target);
+    try{
+      const point={id:1,x:box.x+handle.x,y:box.y+handle.y};
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+      for(const offset of [16,32,48]){
+        await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...point,x:point.x-offset}]});
+        await target.waitForTimeout(50);
+      }
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      await target.waitForFunction(value=>histChart.getViewOfComponentModel(histChart.getModel().getComponent('xAxis'))._axisPointer._axisPointerModel.get('value')!==value,handle.value);
+      assert.deepEqual(await target.evaluate(()=>({...histZoom})),handle.zoom,'Dragging the pointer handle preserves zoom');
+      assert.equal(await target.evaluate(()=>scrollY),handle.scroll,'Handle drag does not scroll the page');
+    }finally{await cdp.detach()}
+  };
+  const checkMobileLineTap = async target => {
+    await target.locator('#histChart').scrollIntoViewIfNeeded();
+    const box=await target.locator('#histChart').boundingBox();
+    const point=await target.evaluate(()=>histChart.convertToPixel({gridIndex:0},[87,histChart.getOption().series[0].data[87]]));
+    await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
+    await target.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const styles=await target.evaluate(()=>histChart.getModel().getSeries().map(model=>{
+      const line=histChart.getViewOfSeriesModel(model)._polyline;
+      return {states:line.currentStates,opacity:line.style.opacity??1,width:line.style.lineWidth,color:line.style.stroke,
+        normalWidth:model.get(['lineStyle','width']),normalColor:model.get(['lineStyle','color'])};
+    }));
+    for(const style of styles){
+      assert.deepEqual(style.states,[],'Tapping a mobile line does not focus or blur any series');
+      assert.equal(style.opacity,1,'All mobile lines retain full opacity');
+      assert.equal(style.width,style.normalWidth,'Tap does not thicken a line');
+      assert.equal(style.color,style.normalColor,'Tap preserves each line color');
+    }
+    await target.locator('.history-tooltip').waitFor({state:'visible'});
+  };
+  const checkChartLayout = async target => {
+    const layout = await target.evaluate(() => {
+      const model=histChart.getModel();
+      const legend=histChart.getViewOfComponentModel(model.getComponent('legend'));
+      const items=legend.getContentGroup().children().filter(item=>item.__legendDataIndex!==undefined);
+      const center=element=>{
+        const rect=element.getBoundingRect();
+        return element.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2)[1];
+      };
+      const toolbox=histChart.getViewOfComponentModel(model.getComponent('toolbox'));
+      const icon=toolbox.group.children().find(item=>item.__title==='Save image');
+      const title=histChart.getViewOfComponentModel(model.getComponent('title'));
+      const titleRect=title.group.getBoundingRect(),titleTop=title.group.transformCoordToGlobal(titleRect.x,titleRect.y);
+      const rect=legend.group.getBoundingRect(),top=legend.group.transformCoordToGlobal(rect.x,rect.y);
+      return {zoomTypes:histChart.getOption().dataZoom.map(item=>item.type),items:items.length,
+        titleText:model.getComponent('title').get('text'),titleBottom:titleTop[1]+titleRect.height,
+        legendTop:top[1],legendBottom:top[1]+rect.height,plotTop:model.getComponent('grid').coordinateSystem.getRect().y,
+        titleCenter:center(title.group),iconCenter:center(icon)};
+    });
+    assert.deepEqual(layout.zoomTypes,['inside'],'Zoom slider is removed; gesture zoom remains');
+    assert.equal(layout.items,4);
+    assert.equal(layout.titleText,'7 days usage history');
+    assert(layout.titleBottom<layout.legendTop,'Legend stays below the title');
+    assert(layout.legendBottom<layout.plotTop,'Legend stays above the plot');
+    assert(Math.abs(layout.titleCenter-layout.iconCenter)<1,'Save image is vertically centered with the chart title: '+JSON.stringify(layout));
+  };
+  const checkMobileXAxisSpacing = async target => {
+    const spacing=await target.evaluate(()=>{
+      const axis=histChart.getModel().getComponent('xAxis').axis,extent=axis.getExtent();
+      const low=Math.min(...extent),high=Math.max(...extent);
+      const coords=axis.getViewLabels().filter(label=>!label.tick.offInterval)
+        .map(label=>axis.dataToCoord(label.tick.value)).filter(coord=>coord>=low&&coord<=high).sort((a,b)=>a-b);
+      return {count:coords.length,minGap:Math.min(...coords.slice(1).map((coord,index)=>coord-coords[index]))};
+    });
+    assert(spacing.count>=2,'Mobile x-axis retains useful time labels');
+    assert(spacing.minGap>=48,'Mobile x-axis labels have at least 48px between centers: '+JSON.stringify(spacing));
+  };
+  const saveChartImage = async target => {
+    await target.locator('#histChart').scrollIntoViewIfNeeded();
+    const box = await target.locator('#histChart').boundingBox();
+    const point = await target.evaluate(() => {
+      const group=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group;
+      const rect=group.getBoundingRect();
+      return group.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2);
+    });
+    const pending=target.waitForEvent('download');
+    if (await target.evaluate(()=>navigator.maxTouchPoints>0)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
+    else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
+    const download=await pending;
+    assert.equal(download.suggestedFilename(),'claude-meter-usage-history.png');
+    assert.equal(await download.failure(),null);
+    const png=fs.readFileSync(await download.path());
+    assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+    assert.equal(png.readUInt32BE(16),Math.round(box.width*2));
+    assert.equal(png.readUInt32BE(20),Math.round(box.height*2));
+    const background=await target.evaluate(async encoded=>{
+      const image=new Image();image.src='data:image/png;base64,'+encoded;await image.decode();
+      const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
+      const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+      const expected=getComputedStyle(document.documentElement).getPropertyValue('--card').trim();
+      const strip=document.createElement('canvas');strip.width=image.width;strip.height=84;
+      const stripContext=strip.getContext('2d');stripContext.drawImage(image,0,0);
+      const pixels=stripContext.getImageData(0,0,Math.min(430,image.width),84).data;
+      const base=expected==='#fff'?[255,255,255]:[34,35,31];let titlePixels=0;
+      for(let i=0;i<pixels.length;i+=4)if(pixels[i]!==base[0]||pixels[i+1]!==base[1]||pixels[i+2]!==base[2])titlePixels++;
+      return {pixel:[...ctx.getImageData(0,0,1,1).data],expected,titlePixels};
+    },png.toString('base64'));
+    assert.deepEqual(background.pixel,background.expected==='#fff'?[255,255,255,255]:[34,35,31,255], 'Saved PNG has an opaque background matching the theme');
+    assert(background.titlePixels>100,'Saved PNG includes the chart title');
+    if(process.env.PANEL_LAYOUT_CAPTURE){
+      const theme=await target.locator('html').getAttribute('data-theme');
+      const output=path.join(__dirname,'../foobar/panel-redesign');
+      fs.writeFileSync(path.join(output,'local-chart-export-'+theme+'.png'),png);
+      await target.locator('.history-card').screenshot({path:path.join(output,'local-history-'+theme+'.png')});
+    }
+  };
   try {
+  const clickChartLegend = async (target,index) => {
+    await target.locator('#histChart').scrollIntoViewIfNeeded();
+    const point=await target.evaluate(index=>{
+      const model=histChart.getModel().getComponent('legend');
+      const group=histChart.getViewOfComponentModel(model).getContentGroup().children().find(item=>item.__legendDataIndex===index);
+      const rect=group.getBoundingRect();
+      return group.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2);
+    },index);
+    if(await target.evaluate(()=>navigator.maxTouchPoints>0)){
+      const box=await target.locator('#histChart').boundingBox();
+      await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
+    }else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
+  };
     const address = 'http://127.0.0.1:' + server.address().port;
     for (const test of [
       { saved: 'dark', system: 'light', expected: 'dark' },
@@ -169,13 +313,165 @@ const initialState = {
     assert.equal(await page.locator('#view-usage .summary,#view-usage .overview-stats').count(), 0, 'Usage contains account cards and history without removed sections');
     const reset = await page.evaluate(() => ({ actual: document.querySelector('.resetline').textContent, expected: new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(1791227200 * 1000)) }));
     assert.ok(reset.actual.includes(reset.expected), 'Reset times use the device zone instead of the browser zone');
+    await page.waitForFunction(() => histChart && histChart.getOption().series.length === 4);
+    assert.equal(await page.locator('.history-card').evaluate(card=>card.classList.contains('chart-ready')),true);
     await page.locator('#histLegend button').first().focus(); await page.keyboard.press('Space');
     assert.equal(await page.locator('#histLegend button').first().getAttribute('aria-pressed'), 'false');
-    assert.equal(await page.locator('#histSvg path').count(), 2);
-    await page.keyboard.press('Space'); assert.equal(await page.locator('#histSvg path').count(), 4);
+    assert.equal(await page.evaluate(() => histChart.getOption().legend[0].selected['account-0-h5']), false);
+    await page.keyboard.press('Space'); assert.equal(await page.evaluate(() => histChart.getOption().legend[0].selected['account-0-h5']), true);
+    // Exercise the real local ECharts engine and interactions, not a mocked chart.
+    assert.equal(await page.evaluate(() => echarts.version), '6.1.0');
+    assert.deepEqual(await page.locator('#histLegend button').allTextContents(),['Personal · 5h','Personal · 7d','Studio · 5h','Studio · 7d']);
+  assert.equal(await page.evaluate(()=>histChart.getOption().legend[0].show),true);
+  assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].itemSize),18);
+  assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].showTitle),false);
+  assert.match(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.icon),/^M15 2H6/);
+  await checkChartLayout(page);
+  await clickChartLegend(page,0);
+  assert.equal(await page.evaluate(()=>histChart.getOption().legend[0].selected['account-0-h5']),false);
+  await clickChartLegend(page,0);
+  assert.equal(await page.evaluate(()=>histChart.getOption().legend[0].selected['account-0-h5']),true);
+
+    assert.equal(await page.locator('.chart-key').count(),0, 'History card has no extra chart key');
+    assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.title),'Save image');
+    await saveChartImage(page);
+    const samples = await page.evaluate(() => histChart.getOption().series.map(s => ({count:s.data.length,gap:s.data[50],style:s.lineStyle.type,width:s.lineStyle.width})));
+    assert.deepEqual(samples, [0,1,2,3].map(i => ({count:168,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.6})));
+    for (const zone of ['Asia/Kuala_Lumpur', 'Asia/Kolkata', 'Asia/Kathmandu', 'America/New_York']) {
+      await page.evaluate(async zone => { deviceTimeZone=zone; await renderHistory(lastHistData); }, zone);
+      const midnight = await page.evaluate(() => {
+        const axis=histChart.getModel().getComponent('xAxis',0).axis;
+        const values=histChart.getOption().xAxis[0].data;
+        const ticks=axis.getTicksCoords();
+        return axis.getViewLabels().filter(label=>!label.tick.offInterval).map(label=>({hour:zonedParts(+values[label.tick.value]).hour,minute:zonedParts(+values[label.tick.value]).minute,aligned:ticks.some(tick=>tick.tickValue===label.tick.value&&Math.abs(tick.coord-axis.dataToCoord(label.tick.value))<0.01)}));
+      });
+      assert(midnight.length>=6&&midnight.every(label=>label.hour==='00'&&label.minute==='00'&&label.aligned), zone+': weekdays align with device-local midnight ticks: '+JSON.stringify(midnight));
+    }
+    await page.evaluate(async () => { deviceTimeZone='Asia/Kuala_Lumpur'; await renderHistory(lastHistData); });
+    await page.locator('#histChart').scrollIntoViewIfNeeded();
+    let chartBox=await page.locator('#histChart').boundingBox();
+    const hover=await page.evaluate(()=>histChart.convertToPixel({gridIndex:0},[80,10]));
+    await page.mouse.move(chartBox.x+hover[0],chartBox.y+hover[1]);
+    await page.locator('.history-tooltip').waitFor({state:'visible'});
+    assert((await page.locator('.history-tooltip').textContent()).includes('Personal · 5h'));
+    await page.locator('#histChart').click({position:{x:hover[0],y:hover[1]}});
+    assert.deepEqual(await page.evaluate(()=>({...histZoom})),{start:0,end:100}, 'Single click leaves zoom unchanged');
+    assert.equal(await page.locator('#histLayout').count(),0, 'History has no layout selector');
+    await page.locator('#histChart').dblclick({position:{x:hover[0],y:hover[1]}});
+    await page.waitForFunction(()=>histZoom.end-histZoom.start<99);
+    await page.locator('#histChart').dblclick({position:{x:hover[0],y:hover[1]}});
+    await page.waitForFunction(()=>histZoom.start===0&&histZoom.end===100);
+    await page.locator('#histChart').dblclick({position:{x:70,y:2}});
+    assert.deepEqual(await page.evaluate(()=>({...histZoom})),{start:0,end:100}, 'Double click outside plot leaves zoom unchanged');
+    await page.locator('#histChart').focus();await page.keyboard.press('+');
+    await page.waitForFunction(()=>histZoom.end-histZoom.start<99);
+    const zoom=await page.evaluate(()=>({...histZoom}));
+    await page.locator('#histLegend button').last().focus();await page.locator('#histLegend button').last().click();
+    await page.evaluate(()=>refreshHistory());
+    assert.deepEqual(await page.evaluate(()=>({...histZoom})),zoom, 'Polling preserves zoom');
+    assert.equal(await page.locator('#histLegend button').last().getAttribute('aria-pressed'),'false');
+    assert.equal(await page.evaluate(()=>histChart.getOption().grid.length),1);
+    assert.deepEqual(await page.evaluate(()=>histChart.getOption().series.map(s=>s.xAxisIndex)),[0,0,0,0]);
+    await select('device'); await select('usage');
+    assert.deepEqual(await page.evaluate(()=>({...histZoom})),zoom, 'View switching preserves zoom');
+    await page.locator('#histChart').focus();await page.keyboard.press('-');
+    await page.waitForFunction(span=>histZoom.end-histZoom.start>span,zoom.end-zoom.start);
+    await page.keyboard.press('0');
+    assert.deepEqual(await page.evaluate(()=>({...histZoom})),{start:0,end:100});
+    await page.locator('#histLegend button').last().focus();await page.locator('#histLegend button').last().click();
+    // Real mobile touch events exercise double-tap detection and ECharts' pinch recognizer.
+    const touchContext=await browser.newContext({viewport:{width:360,height:780},isMobile:true,hasTouch:true});
+    try{
+      const touchPage=await touchContext.newPage();await touchPage.route('**/api/**',routeApi);
+      touchPage.on('pageerror',error=>errors.push(error.message));
+      await touchPage.goto(address,{waitUntil:'domcontentloaded'});
+      await touchPage.waitForFunction(()=>histChart&&histChart.getOption().series.length===4);
+      await touchPage.locator('[data-theme=dark]').click();
+      await checkChartLayout(touchPage);
+      await checkMobileXAxisSpacing(touchPage);
+      await touchPage.evaluate(()=>historyZoom(46.4,53.6));
+      await touchPage.waitForFunction(()=>histZoom.end-histZoom.start<8);
+      await checkMobileXAxisSpacing(touchPage);
+      await touchPage.evaluate(()=>historyZoom(0,100));
+      await touchPage.waitForFunction(()=>histZoom.start===0&&histZoom.end===100);
+      await checkPointerHandle(touchPage);
+      await clickChartLegend(touchPage,0);
+      assert.equal(await touchPage.evaluate(()=>histChart.getOption().legend[0].selected['account-0-h5']),false);
+      await clickChartLegend(touchPage,0);
+      await checkMobileLineTap(touchPage);
+      await saveChartImage(touchPage);
+      await touchPage.locator('#histChart').scrollIntoViewIfNeeded();
+      const box=await touchPage.locator('#histChart').boundingBox();
+      const cdp=await touchContext.newCDPSession(touchPage);
+      const plot=await touchPage.evaluate(()=>histChart.getModel().getComponent('grid').coordinateSystem.getRect());
+      const center={x:box.x+plot.x+plot.width/2,y:box.y+plot.y+plot.height/2};
+      const finger=[{id:1,...center}];
+      const tap=async()=>{
+        await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:finger});
+        await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      };
+      await tap();
+      assert.deepEqual(await touchPage.evaluate(()=>({...histZoom})),{start:0,end:100}, 'Single tap leaves zoom unchanged');
+      const pointer=await touchPage.evaluate(()=>{
+        const axis=histChart.getModel().getComponent('xAxis');
+        const view=histChart.getViewOfComponentModel(axis)._axisPointer;
+        const model=view._axisPointerModel,group=view._group;
+        const line=group.children().find(item=>item.type.toLowerCase()==='line');
+        const label=group.children().find(item=>item.type==='text');
+        return {snap:model.get('snap'),status:model.get('status'),width:line?.style.lineWidth,
+          visible:!group.ignore,value:model.get('value'),labelVisible:!!label&&!label.ignore,
+          expectedX:axis.axis.toGlobalCoord(axis.axis.dataToCoord(model.get('value'))),x:line?.shape.x1,
+          elementTypes:group.children().map(item=>item.type)};
+      });
+      assert.equal(pointer.snap,true);
+      assert.equal(pointer.status,'show');assert.equal(pointer.visible,true);
+      assert.equal(pointer.width,1,JSON.stringify(pointer));
+      assert(Number.isInteger(pointer.value),'Mobile pointer snaps to an hourly sample');
+      assert(Math.abs(pointer.x-pointer.expectedX)<1,'Pointer aligns with its snapped x-axis tick');
+      assert.equal(pointer.labelVisible,false,'Mobile pointer time label is hidden');
+      await checkPointerHandle(touchPage);
+      await touchPage.waitForTimeout(400);
+      await tap();await touchPage.waitForTimeout(80);await tap();
+      await touchPage.waitForFunction(()=>histZoom.end-histZoom.start<99);
+      await touchPage.waitForTimeout(400);
+      await tap();await touchPage.waitForTimeout(80);await tap();
+      await touchPage.waitForFunction(()=>histZoom.start===0&&histZoom.end===100);
+      await touchPage.waitForTimeout(400);
+      await tap();
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:finger});
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{id:1,x:center.x+35,y:center.y}]});
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      await tap();
+      assert.deepEqual(await touchPage.evaluate(()=>({...histZoom})),{start:0,end:100}, 'Dragging between taps does not trigger double-tap zoom');
+      const points=spread=>[{id:1,x:center.x-spread,y:center.y},{id:2,x:center.x+spread,y:center.y}];
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:points(20)});
+      for(const spread of [24,30,36,42,48]){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:points(spread)});await touchPage.waitForTimeout(50)}
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      await touchPage.waitForFunction(()=>histZoom.end-histZoom.start<95);
+      await touchPage.waitForTimeout(400);
+      await tap();await touchPage.waitForTimeout(80);await tap();
+      await touchPage.waitForFunction(()=>histZoom.start===0&&histZoom.end===100);
+      await cdp.detach();
+      assert.equal(await touchPage.evaluate(()=>document.documentElement.scrollWidth),360);
+    }finally{await touchContext.close()}
+    const retryContext=await browser.newContext();
+    try{
+      const retryPage=await retryContext.newPage();let failAsset=true;
+      await retryPage.route('**/api/**',routeApi);
+      await retryPage.route('**/assets/echarts-6.1.0-v2.js',route=>failAsset?route.abort('failed'):route.continue());
+      await retryPage.goto(address,{waitUntil:'domcontentloaded'});
+      await retryPage.locator('#btnChartRetry').waitFor({state:'visible'});
+      assert.equal(await retryPage.locator('.history-card').evaluate(card=>card.classList.contains('chart-ready')),false);
+      assert((await retryPage.locator('.history-card .card-head').boundingBox()).width>100,'History heading remains visible when chart loading fails');
+      failAsset=false;await retryPage.locator('#btnChartRetry').click();
+      await retryPage.waitForFunction(()=>histChart&&document.querySelector('#chartStatus').textContent==='');
+      assert.equal(await retryPage.locator('.history-card').evaluate(card=>card.classList.contains('chart-ready')),true);
+      assert.equal(await retryPage.locator('#btnChartRetry').isVisible(),false);
+    }finally{await retryContext.close()}
+    console.log('PASS: local ECharts, actual PNG downloads on desktop/mobile in light/dark, independent series, safe hover tooltips, midnight ticks, double-click/double-tap zoom toggle, single-click/tap and drag safety, keyboard/pinch zoom, persistent selections/zoom, and asset retry');
     await page.locator('[data-theme=dark]').click();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
-    const colors = await page.evaluate(() => ({ bar: getComputedStyle(document.querySelector('.bar i')).backgroundColor, line: document.querySelector('#histSvg path').getAttribute('stroke') }));
+    const colors = await page.evaluate(() => ({ bar: getComputedStyle(document.querySelector('.bar i')).backgroundColor, line: histChart.getOption().series[0].lineStyle.color }));
     assert.equal(colors.line, '#7daef0', 'Chart recolors for dark mode');
     await page.reload(); await page.locator('.usage-account').first().waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark', 'Theme persists after reload');
@@ -192,6 +488,8 @@ const initialState = {
         assert.ok(geometry.width <= geometry.viewport, 'No horizontal overflow: ' + view + ' at ' + width + 'px');
         assert.equal(geometry.views, 1, 'One focused view at a time');
         if (width <= 760) assert.ok(geometry.brand <= geometry.actions, 'Mobile header controls must not overlap');
+        if(view==='usage')assert.equal(await page.evaluate(()=>histChart.getOption().xAxis[0].axisPointer.snap===true),width<=760,'Snapping pointer follows the mobile breakpoint');
+        if(view==='usage')assert.equal(await page.evaluate(()=>histChart.getOption().series.every(series=>series.emphasis.disabled===true)),width<=760,'Series emphasis is disabled on mobile and restored on desktop');
         if (view === 'device' || view === 'alerts') {
           for (const buttonSelector of view === 'device' ? ['#btnDisplay'] : ['#btnPolling', '#btnSettings']) {
             const separators = await page.locator(buttonSelector).evaluate(button => {
@@ -226,8 +524,13 @@ const initialState = {
     await page.evaluate(() => refreshState());
     assert.equal(await page.locator('#accounts img').count(), 0, 'Account names are plain text');
     assert.equal(await page.locator('#histLegend img').count(), 0);
+    await select('usage');
     await page.evaluate(() => refreshHistory());
-    assert.equal(await page.locator('#histLegend button').first().textContent(), unsafeName, 'Legend names are plain text');
+    assert.equal(await page.locator('#histLegend button').first().textContent(), unsafeName + ' · 5h', 'Legend names are plain text');
+    await page.evaluate(()=>histChart.dispatchAction({type:'showTip',seriesIndex:0,dataIndex:80}));
+    await page.locator('.history-tooltip').waitFor({state:'visible'});
+    assert((await page.locator('.history-tooltip').textContent()).includes(unsafeName));
+    assert.equal(await page.locator('.history-tooltip img').count(),0,'Tooltip names remain plain text');
     await select('device');
     assert.equal(await page.locator('#fw').textContent(), '0.0.9-preview', 'Firmware shows the release version and git revision');
     await page.locator('#btnScan').click();
