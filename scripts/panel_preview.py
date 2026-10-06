@@ -17,16 +17,18 @@ STATE = {
     "ip": "192.168.1.42", "hostname": "claude-meter", "uptime_s": 93642,
     "fw_rev": "preview", "fw_built": "Simulated device", "heap_free": 148480,
     "heap_min": 102400, "battery_mv": 4120, "battery_pct": 94,
-    "wifi_rssi": -52, "wifi_ssid": "Studio Wi-Fi", "poll_min": 2,
+    "wifi_rssi": -52, "wifi_ssid": "Studio Wi-Fi", "wifi_mac": "02:00:00:12:34:56", "poll_min": 2,
     "warn5": 80, "warn7": 90, "quiet_start_h": 22, "quiet_start_m": 30,
     "quiet_end_h": 7, "quiet_end_m": 15, "quiet_on": True, "audio_vol": 65,
+    "break_start_h": 1, "break_start_m": 0, "break_end_h": 6,
+    "break_end_m": 0, "break_on": False, "break_active": False, "break_resume_epoch": 0,
     "tz": "<+08>-8", "tz_name": "Asia/Kuala_Lumpur", "rotation": 0,
     "poll_age_s": 42,
     "accounts": [
         {"name": "Personal", "configured": True, "has_data": True,
-         "h5": 29, "d7": 60, "age": "1 m ago"},
+         "h5": 29, "d7": 60, "age": "1m ago"},
         {"name": "Studio", "configured": True, "has_data": True,
-         "h5": 12, "d7": 38, "age": "1 m ago"},
+         "h5": 12, "d7": 38, "age": "1m ago"},
     ],
 }
 HISTORY_CLEARED = False

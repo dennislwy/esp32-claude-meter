@@ -13,25 +13,34 @@ scroll and used the same visual weight for usage, configuration, and resets.
 All ten supplied images in `claude-ui-samples/` were inspected. These are
 local references, not runtime assets.
 
-| Reference | Observed pattern | Applied to the panel |
-| --- | --- | --- |
-| `claude-website1.png` | Warm paper background, large serif headline, compact dark primary buttons, generous negative space | PIN welcome screen and view headings use Georgia with warm neutral surfaces; actions have a clear hierarchy |
-| `claude-console-website1.png` | A focused sign-in card, quiet background texture, strongly separated primary action | One PIN field, clear instructions, one primary action, and a subtle terracotta rule above the card |
-| `claude-website-footer.png` | Near-black surface, muted metadata, fine serif wordmark, restrained terracotta accent | Dark theme, compact connection metadata, serif brand, independent-project attribution |
-| `settings-light.png`, `settings-dark.png` | Stable sidebar, selected navigation surface, divided setting rows, three-way theme selector | Five focused views, consistent selected state, setting descriptions beside controls, persistent System / Light / Dark controls |
-| `account-light.png` | Account settings presented as labelled rows with understated borders | Two clearly labelled account groups; masked tokens; save feedback next to the form |
-| `usage-light.png`, `usage-dark.png` | Session and weekly usage separated; blue bars; reset copy below labels; restrained numeric emphasis | Two account cards with distinct session / weekly rows, blue and green account colors, readable percentages and device-time-zone resets |
-| `skills-light.png`, `skills-dark.png` | A contextual introductory surface, grouped content, generous spacing, consistent theme pairing | Introductory view headings; grouped sound previews; editorial headline list; matching geometry in both themes |
+| Reference                                 | Observed pattern                                                                                    | Applied to the panel                                                                                                                                                            |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claude-website1.png`                     | Warm paper background, large serif headline, compact dark primary buttons, generous negative space  | PIN welcome screen and view headings prefer locally installed Anthropic Serif, with Georgia and other serif fallbacks, on warm neutral surfaces; actions have a clear hierarchy |
+| `claude-console-website1.png`             | A focused sign-in card, quiet background texture, strongly separated primary action                 | One PIN field, clear instructions, one primary action, and a subtle terracotta rule above the card                                                                              |
+| `claude-website-footer.png`               | Near-black surface, muted metadata, fine serif wordmark, restrained terracotta accent               | Dark theme, compact connection metadata, serif brand, independent-project attribution                                                                                           |
+| `settings-light.png`, `settings-dark.png` | Stable sidebar, selected navigation surface, divided setting rows, three-way theme selector         | Five focused views, consistent selected state, setting descriptions beside controls, persistent System / Light / Dark controls                                                  |
+| `account-light.png`                       | Account settings presented as labelled rows with understated borders                                | Two clearly labelled account groups; masked tokens; save feedback next to the form                                                                                              |
+| `usage-light.png`, `usage-dark.png`       | Session and weekly usage separated; blue bars; reset copy below labels; restrained numeric emphasis | Two account cards with distinct session / weekly rows, blue and green account colors, readable percentages and device-time-zone resets                                          |
+| `skills-light.png`, `skills-dark.png`     | A contextual introductory surface, grouped content, generous spacing, consistent theme pairing      | Introductory view headings; grouped sound previews; editorial headline list; matching geometry in both themes                                                                   |
 
 The screenshots describe two complementary visual styles: editorial
 typography on public pages and practical sidebar navigation in the app.
 The redesign combines those patterns using locally available fonts and
 inline SVG. It does not depend on proprietary fonts or remote assets.
+The shared serif stack is `"Anthropic Serif", Georgia, "Times New Roman", serif`.
+Anthropic Serif is an optional local preference: no font file is bundled or
+downloaded. A webfont loaded on Claude's website is not available to the panel;
+devices without the named installed font use the remaining fallbacks.
 
 The Claude mark uses the actual irregular vector path from the inline
 header SVG on [Claude's website](https://claude.com/), captured on
 2026-10-05 in `assets/claude-mark.svg` and embedded in the shared brand
 symbol. It replaces the previous symmetrical spoke approximation.
+
+The Usage navigation icon uses [Lucide's Gauge](https://lucide.dev/icons/gauge)
+paths with the panel's shared icon styling. Lucide publishes the icon under
+the ISC license; its [notice](THIRD_PARTY_NOTICES.md) accompanies the source.
+It needs no runtime download or icon library.
 
 ## Award benchmarks
 
@@ -55,19 +64,24 @@ the page has been judged.
 
 ## Interaction and layout
 
-| View | Purpose |
-| --- | --- |
-| Usage | Both accounts, usage bars, responsive seven-day chart, manual refresh |
-| Accounts | Account names and masked token replacement, including save-time API probe results |
-| Device | Display/time zone, rotation, Wi-Fi and network scan, complete diagnostics, destructive maintenance |
-| Alerts & sound | Poll interval, warning thresholds, quiet hours, volume, six speaker previews |
-| News | Feed headlines, publication dates, source link, fetch/stale feedback |
+| View             | Purpose                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Usage            | Both accounts, usage bars, responsive seven-day chart, manual refresh                                                |
+| Accounts         | Account names and masked token replacement, including save-time API probe results                                    |
+| Device           | Display/time zone, rotation, Wi-Fi and network scan, complete diagnostics, destructive maintenance                   |
+| Polling & alerts | Polling & breaks: interval and break schedule. Alerts & sound: warning thresholds, speaker controls, and quiet hours |
+| News             | Feed headlines, publication dates, source link, fetch/stale feedback                                                 |
 
 Desktop uses a 224px sidebar and a constrained content column. The sidebar
 narrows at 1100px and becomes a sticky header with a scrollable navigation
 row at 760px. Below 480px, usage cards stack. Settings rows stack before
 controls become cramped. Device diagnostics live in Device details.
 Sidebar navigation uses icons and labels without index numbers.
+Sign out sits right of the theme switch on mobile and left of it on desktop,
+with keyboard order matching the visible arrangement. Device details shows
+the Wi-Fi station MAC address immediately after Wi-Fi. Both footers include
+a GitHub link to this repository. News dates use 13px text and the fetch
+status links to anthropic.com/news.
 The topbar is hidden at 760px and below, recovering its 48px mobile height.
 
 The sign-in screen has compact typography and spacing below 480px. At
@@ -82,7 +96,7 @@ Quiet hours uses a native checkbox styled as an accessible switch: a
 supplied notification-settings snapshot. A 44px label target keeps touch
 operation comfortable. The label and description sit left of the switch
 in both desktop and mobile layouts; the time fields sit below. Its draft
-survives polling and is applied with Save settings.
+survives polling and is applied with Save alerts.
 Alert sounds uses the same blue for the volume slider and playback
 icons, hover/focus outlines, and playing states. Its soft blue surfaces
 adapt to light and dark themes through shared CSS variables.
@@ -97,10 +111,25 @@ previously appeared in Display & time and Polling & alerts.
 
 Theme colors are CSS variables shared by chart paths and interface
 surfaces. Theme choice persists in localStorage when available; blocked
-storage falls back safely. Reduced-motion preference removes transitions
+storage falls back safely. A small inline script in the head resolves the
+saved or system theme before styles and body paint, keeping the page canvas,
+native controls, and browser theme color aligned without a light-mode flash
+on dark-mode loads. First-paint checks stream the actual embedded page while
+holding back app initialization, including invalid and unavailable storage.
+Reduced-motion preference removes transitions
 and view-entry motion. Native buttons provide keyboard operation for the
 chart legend and Wi-Fi scan results. Form labels, focus outlines, live
 messages, and an adaptive skip link support keyboard navigation.
+Navigation moves focus to the page heading for assistive technology. These
+noninteractive headings suppress the visible outline; buttons, links, and
+form controls retain their keyboard focus indicators.
+
+The seven-day chart gives each visible midnight tick and its weekday label
+the same x-coordinate, with the text anchored in the middle. Labels sit
+below 00:00 in the device's time zone rather than halfway through a day.
+The partial day at the chart's left edge gets no label unless its midnight
+tick is visible. Theme changes, resizing, and account toggles rebuild both
+the ticks and labels together.
 
 Account names and feed/SSID text are rendered with textContent. Headlines
 only become links for plain HTTPS URLs. Missing usage is a dash and chart
@@ -153,13 +182,13 @@ installed, `node scripts/check_panel_ui.cjs` also works. This task reused
 the workstation's cached installation and added no npm dependencies.
 
 The PlatformIO firmware build passed. The embedded page is approximately
-81 kB; the compiled firmware uses about 46% of the application partition
+84 kB; the compiled firmware uses about 46% of the application partition
 and 39% of static RAM. Browser screenshots were inspected in light/dark,
 desktop/mobile, and the settings views.
 
 On 2026-10-05, the firmware was uploaded to the ESP32-S3-PICO-1 on COM5;
 the uploader verified the flash hash. Serial output confirmed a successful
-boot, Wi-Fi connection, HTTP 200 polls for both accounts, and LAN panel
+boot, Wi-Fi connection, HTTP 200 polls for both accounts, and Web Panel
 startup. The page retrieved from the board matched the embedded HTML
 byte-for-byte (78,516 bytes) for the initial redesign.
 
@@ -193,11 +222,71 @@ topbar visibility, and matching blue sound controls. Four authenticated
 state responses over 30 seconds passed without script errors. Light/dark
 desktop and mobile screenshots were also inspected after the theme change.
 
-The pending refinements restore the standard percentage text color,
+The subsequent refinements restored the standard percentage text color,
 share the 6px progress-bar height with the slider track, and remove the
 sidebar navigation index numbers and their styling.
 Chromium inspection measured the rendered native track at 6px and checked
 0%, 50%, and 100% fill/value rendering in both themes. The browser suite
 and firmware build passed; the binary contains the exact 80,387-byte page.
-These refinements have not yet been flashed: COM5 was absent at upload time
-and no USB ports returned during the three-minute board-specific retry.
+These refinements were not flashed at that attempt: COM5 was absent and
+no USB ports returned during the three-minute board-specific retry. They
+were included in the later successful uploads described below.
+
+Break Hours was added on 2026-10-06 alongside Quiet hours with the same blue
+switch, keyboard/touch behavior, and From/Until arrangement. It is disabled
+by default, initially 01:00-06:00, and pauses automatic usage requests during
+a daily local-time window; equal times disable it and overnight windows are supported. Normal
+mode sleeps until polling resumes, preserving cached usage and button
+wakeups. Quiet hours remains independent. An explicit Refresh now or serial
+usage command overrides the pause. Usage shows the scheduled pause and
+resume time without concealing the last figures.
+
+The browser regression suite passed draft preservation, save/disable,
+external state synchronization, pause-notice behavior, and both schedule
+layouts at all six widths. The production daily-window code also passed
+host tests for every minute of the day, exact second boundaries, overnight
+and year rollover, and daylight-saving gaps/repeats; MSVC compiled these
+tests with warnings treated as errors. The final ESP32 build passed and
+the binary contains the exact 81,959-byte embedded page. This version has
+not been flashed at that stage; physical sleep/wake and current-draw verification remain
+pending. See [the host test instructions](../test/break_hours/README.md).
+
+The navigation item, breadcrumb, and page title now use Polling & alerts.
+Its two cards are Polling & breaks (Poll interval, then Break hours) and
+Alerts & sound (Warning thresholds, Alert sounds, then the retained Quiet
+hours controls). Each card saves only its own settings; volume continues
+to save on release. Browser regressions verified both save payloads and
+preservation of unsaved edits in the other card, along with both switches
+and one divider per save area at all six widths. Desktop/mobile light/dark
+previews were inspected. The ESP32 build passed and embeds the exact
+82,711-byte page. This layout was subsequently flashed with the heading
+outline fix, as recorded below.
+
+On 2026-10-06, the heading-outline firmware was flashed to the ESP32-S3-PICO-1 on
+COM5 and the uploader verified its flash hash. The live board served the
+exact 82,760-byte embedded page at its then-current LAN IP, 10.62.231.167.
+Chromium verified automatic sign-in, 360 x 780 at DPR 3 in both themes,
+the reordered cards/navigation, both switches and draft preservation,
+neutral volume text and matching 6px tracks, and heading focus without an
+outline. Four authenticated state checks over 30 seconds passed without
+browser script errors. The board reported Break Hours 01:00-06:00,
+disabled, and cached usage for both accounts. These are live page/runtime
+checks; scheduled sleep/wake and current draw have not been measured.
+
+A later upload on 2026-10-06 included the optional local serif stack,
+Lucide Gauge, larger news dates and source link, Wi-Fi MAC address, mobile
+Sign out order, GitHub footer links, and the first-paint theme fix. The
+uploader verified the flash hash, and the live board served the exact
+84,033-byte build snapshot. Chromium confirmed saved light/dark and system
+dark preferences on the first frame, mobile sign-in fit, the MAC field and
+footer links, and four authenticated state responses over 30 seconds with
+no browser script errors. The serial wake connection stayed open for testing.
+
+The subsequent weekday-label alignment change is verified locally and has
+not yet been flashed. A focused Chromium check passed 40 combinations of
+mobile/desktop widths, light/dark appearance, Kuala Lumpur/New York device
+time zones, and hourly offsets including midnight. Every weekday label had
+the same x-coordinate as its tick and a centered text anchor. Desktop and
+mobile chart screenshots were inspected. The current compact age strings (`25s ago`, `12m ago`,
+`3h ago`) are documented in [PANEL_FEATURES.md](PANEL_FEATURES.md) and
+[WEB_SERVER.md](WEB_SERVER.md).

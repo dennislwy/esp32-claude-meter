@@ -7,16 +7,23 @@ underlying REST surface.
 ## Navigation and appearance
 
 The panel has five views: **Usage**, **Accounts**, **Device**,
-**Alerts & sound**, and **News**. Desktop uses a fixed sidebar; phones use
+**Polling & alerts**, and **News**. Desktop uses a fixed sidebar; phones use
 a horizontally scrollable navigation row. Only the selected view is shown.
 The topbar is hidden at mobile widths (760px and below) to give the page
 content more room.
+On mobile, Sign out sits to the right of the theme switch; desktop keeps
+it on the left. Keyboard order follows the displayed order.
 Switching views keeps unsaved field edits. Automatic state updates also
 preserve edits until they are saved.
 
 Choose **System**, **Light**, or **Dark** beside Sign out. The selection is
 saved in this browser; System follows the operating system's appearance.
+The preference is applied before the first render, avoiding a light flash
+when loading in dark mode. Blocked storage falls back to the system theme.
 The complete UI loads from the meter, with no external fonts or scripts.
+Serif text prefers locally installed Anthropic Serif, then Georgia,
+Times New Roman, and the browser's default serif. No font file is shipped.
+Both the sign-in footer and page footer link to the project's GitHub repository.
 Keyboard focus, labelled controls, live feedback, and reduced-motion
 preferences are supported.
 
@@ -48,6 +55,7 @@ complete diagnostics.
 - IP, hostname, uptime (`Xd Yh Zm`), battery %, last-poll age
 - Wi-Fi: SSID, RSSI and a quality word (`GSFwifi  ·  -55 dBm (excellent)`;
   ≥ -55 excellent, ≥ -67 good, ≥ -75 fair, below that weak)
+- MAC address: the device's Wi-Fi station address, shown after Wi-Fi
 - Heap: internal-SRAM free and low-water mark (`142 KB free (min 96 KB)`)
 - Firmware: git revision + build time (`82dc70e  ·  2026-10-05 16:42 +0800`),
   generated per build by `scripts/build_info.py`
@@ -59,6 +67,12 @@ complete diagnostics.
   re-polls Claude, re-renders ePaper, re-connects Wi-Fi after the poll
   drops it). Expect a 3–5 s stall.
 
+Last poll and the news fetch status use compact relative ages: `25s ago`
+below one minute, `12m ago` below one hour, and `3h ago` thereafter.
+Minutes and hours are rounded; there is no day unit (`48h ago` for two
+days). Missing poll data displays a dash. Account cards use `Updated just now`
+below one minute, then whole minutes rounded down, such as `Updated 120m ago`.
+
 ## 7-day history
 
 168-column responsive inline SVG line chart in Usage.
@@ -67,8 +81,10 @@ complete diagnostics.
 - Dashed line = 5 H series, solid line = 7 D series
 - Click a legend button (or use Enter/Space) to toggle that account's
   series on/off
-- Day names aligned to midnight in the device's time zone; y-axis ticks
-  every 25 %
+- Weekday labels are centered directly below their 00:00 midnight ticks
+  in the device's time zone, using the exact same x-coordinate. A partial
+  day without a visible midnight tick has no extra label. Y-axis ticks
+  appear every 25 %
 - Empty slots render as broken segments (JSON `null`)
 - No recorded samples show an explicit empty state
 
@@ -80,6 +96,9 @@ columns (max of the two 30-min samples per hour).
 In News, the 10 latest headlines from anthropic.com/news: date and title, each a
 link that opens in a new tab. The first 5 show; scroll the list for the
 next 5.
+
+Dates use 13px text. The successful-fetch status links `anthropic.com/news`
+to the source page in a new tab.
 
 - Fetched **once per panel session**: the device asks for a fetch when
   panel mode opens and runs it right after the PIN is drawn (~2–5 s,
@@ -120,15 +139,21 @@ Under Device → Wi-Fi connection.
 - **Save Wi-Fi** persists to NVS; takes effect at the next poll (the
   current session stays on the old network).
 
-## Alert sounds
+## Alerts &amp; sound
 
-Under Alerts & sound → Polling & alerts, Quiet hours uses a compact blue
+Under Polling & alerts > Alerts & sound. Warning thresholds for the 5-hour
+and 7-day windows each accept 50-99%.
+
+Quiet hours uses a compact blue
 switch beside its label and description, with the From/Until fields below.
 The gray off state and white thumb follow the supplied Claude snapshot.
 It supports keyboard operation and preserves unsaved changes during state
-updates; **Save settings** applies the switch and time window together.
+updates; **Save alerts** applies the warning thresholds, switch, and time
+window together. Quiet hours supports overnight windows; equal start/end
+times disable the window.
 
-Under Alerts & sound → Alert sounds.
+Alert sounds appears below Warning thresholds in this card, with Quiet hours
+below the sound controls.
 
 The Alert sounds slider, playback icons, and button hover, focus, and
 playing states share the quiet-hours switch's blue accent. The volume value
@@ -166,20 +191,29 @@ Under Device → Display & time.
   labels, quiet hours, and reset times follow. A rotation change redraws
   with a full (flashing) e-paper refresh to avoid ghosting.
 
-## Polling &amp; alerts
+## Polling &amp; breaks
 
-Under Alerts & sound → Polling & alerts.
+Under Polling & alerts > Polling & breaks.
 
 - Poll interval, 1–5 min
-- 5 H warn %, 7 D warn %, each 50–99
-- Quiet-hours start / end as `<input type="time">` with HH:MM
-  precision. Wraps past midnight (e.g. `22:30`–`07:15` is overnight).
-  Setting start = end disables the window.
-- Quiet-hours enabled on/off
-- **Save settings** persists to NVS
+- **Break Hours**: a matching blue switch and From/Until fields pause automatic
+  usage requests during a daily local-time window. Disabled by default, with
+  `01:00`-`06:00` as the initial times. Overnight windows are supported; equal
+  times disable the window. Independent of Quiet hours, which only silences sounds.
+- **Save polling &amp; breaks** persists these settings to NVS. Each card
+  submits only its own settings and preserves unsaved drafts in the other card.
 
 Settings changes do not force a re-poll; the UI picks them up on its
-next `/api/state` tick.
+next `/api/state` tick. Break Hours changes re-evaluate the next poll on exit
+from panel mode, including when a break is disabled or shortened.
+
+During Break Hours, Usage shows a pause notice and keeps the last cached
+figures. Normal mode sleeps until the window ends without periodic Wi-Fi
+connections or duplicate history samples. Button wakeups and an explicit
+**Refresh now** (or serial `usage`) remain available. Panel and debug modes
+remain awake as usual; deep-sleep power savings apply in Normal mode with
+debug off. If the clock is unset, the firmware establishes time over NTP
+first and checks the window before sending usage requests.
 
 ## Sign out
 

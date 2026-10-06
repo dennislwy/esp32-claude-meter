@@ -49,6 +49,19 @@ void setQuietHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint
 // True when the given local time is inside the quiet window
 bool isQuietTime(uint8_t localHour, uint8_t localMinute);
 
+// Break hours: pause automatic usage polls and sleep until the window ends.
+// Defaults to 01:00-06:00, disabled; same local-time/overnight rules as quiet hours.
+bool breakHoursEnabled();
+uint8_t breakHoursStart();
+uint8_t breakMinuteStart();
+uint8_t breakHoursEnd();
+uint8_t breakMinuteEnd();
+void setBreakHoursEnabled(bool enabled);
+void setBreakHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute);
+// Zero outside Break Hours, otherwise the epoch at which automatic polls resume.
+// The caller must have a valid clock before consulting the schedule.
+time_t breakHoursResumeAt(time_t now);
+
 // Audio playback volume as 0-100 (0 = near-mute, 100 = full). Mapped linearly to
 // [-40, 0] dB when the codec is configured. Writes outside the range are clamped.
 constexpr uint8_t AUDIO_VOLUME_DEFAULT = 80;

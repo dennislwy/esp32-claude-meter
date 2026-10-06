@@ -3,12 +3,12 @@
 The firmware runs in one of four **modes** at a time, plus an orthogonal
 **debug** flag that only matters in Normal mode.
 
-| # | Mode | Wi-Fi radio | MCU | LED | When |
-| --- | --- | --- | --- | --- | --- |
-| 1 | **Normal** | Off between polls, STA for ~5 s per poll | Deep-sleeps between polls | Off (or solid if debug on) | Default on battery and USB |
-| 2 | **LAN panel** | STA, always on | Always awake | 1 Hz blink | User-triggered: long BOOT, serial `panel` |
-| 3 | **AP provisioning** | SoftAP + DNS, always on | Always awake | 4 Hz blink | Boot with no Wi-Fi SSID stored |
-| 4 | **Powered off** | Off | Chip is off (VBAT latch dropped) | Off | Long PWR on battery |
+| #   | Mode                | Wi-Fi radio                              | MCU                              | LED                        | When                                      |
+| --- | ------------------- | ---------------------------------------- | -------------------------------- | -------------------------- | ----------------------------------------- |
+| 1   | **Normal**          | Off between polls, STA for ~5 s per poll | Deep-sleeps between polls        | Off (or solid if debug on) | Default on battery and USB                |
+| 2   | **Web Panel**       | STA, always on                           | Always awake                     | 1 Hz blink                 | User-triggered: long BOOT, serial `panel` |
+| 3   | **AP provisioning** | SoftAP + DNS, always on                  | Always awake                     | 4 Hz blink                 | Boot with no Wi-Fi SSID stored            |
+| 4   | **Powered off**     | Off                                      | Chip is off (VBAT latch dropped) | Off                        | Long PWR on battery                       |
 
 ## 1 — Normal
 
@@ -17,9 +17,21 @@ polls both Claude accounts, draws the ePaper, triggers any alerts, and
 deep-sleeps again. Averages ~1 mA on battery (~17 days on a 400 mAh
 pack).
 
+**Break Hours** (Polling & alerts > Polling & breaks) optionally pauses automatic
+usage checks for a daily local-time window. It is off by default. Normal
+mode defers its next timer wake until the window ends, retaining cached
+usage and leaving Wi-Fi off; it does not wake every poll interval just to
+skip a request. Overnight windows work, and equal start/end times disable
+the window. Button wakeups still work. An explicit panel **Refresh now** or
+serial `usage` overrides the pause. Quiet hours only mutes alerts and remains
+independent. Panel/debug modes keep their existing awake behavior.
+
+Serial configuration: `break on`, `break off`, and `break 22:30-7:15` (or
+`break 22-8`). `status` shows the saved window and enabled state.
+
 Button behaviour (awake only):
 - Short **BOOT** → cycle to the next view
-- Long **BOOT** (≥ 1 s alone) → enter LAN panel mode
+- Long **BOOT** (≥ 1 s alone) → enter Web Panel mode
 - Long **PWR** (≥ 1 s alone, battery) → power off
 - Long **BOOT + PWR** (≥ 1 s together) → toggle debug flag
 
@@ -32,10 +44,10 @@ directly, PWR = power off (any duration), BOOT+PWR held = toggle debug.
 
 Orthogonal to mode: changes behaviour **within Normal mode** only.
 
-| Debug on | Debug off |
-| --- | --- |
-| Serial console at 115200 | `Serial.end()` |
-| Green LED solid while awake | LED off |
+| Debug on                       | Debug off                 |
+| ------------------------------ | ------------------------- |
+| Serial console at 115200       | `Serial.end()`            |
+| Green LED solid while awake    | LED off                   |
 | Stays awake, polls on schedule | Deep-sleeps between polls |
 
 Auto-detected at cold boot: USB attached → on, battery boot → off.
@@ -45,7 +57,7 @@ In practice: "I'm working on it over USB" vs "it's on my desk doing its
 job." Panel and Provisioning modes keep the MCU fully awake regardless
 of this flag, so the flag is only meaningful in Normal mode.
 
-## 2 — LAN panel
+## 2 — Web Panel
 
 A STA-mode HTTP server on `claude-meter.local` for editing settings,
 reviewing history, playing alert sounds, and triggering a refresh. See
@@ -108,7 +120,7 @@ Exit: single press of either button (re-latches VBAT, cold-boot).
           → restart │              │   │ (battery)    │
                    │              ▼   │               │
                    │        ┌──────────────┐          │
-                   │        │  LAN panel   │          │
+                   │        │  Web Panel   │          │
                    │        │  (1 Hz LED)  │          │
                    │        └──────┬───────┘          │
                    │               │ long BOOT /      │

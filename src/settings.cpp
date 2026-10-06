@@ -1,6 +1,7 @@
 #include "settings.h"
 
 #include <Preferences.h>
+#include "daily_window.h"
 
 namespace
 {
@@ -11,6 +12,11 @@ const char *const KEY_QUIET_START = "quiet_start";
 const char *const KEY_QUIET_END = "quiet_end";
 const char *const KEY_QUIET_START_MIN = "quiet_startM";
 const char *const KEY_QUIET_END_MIN = "quiet_endM";
+const char *const KEY_BREAK_ENABLED = "break_on";
+const char *const KEY_BREAK_START = "break_start";
+const char *const KEY_BREAK_END = "break_end";
+const char *const KEY_BREAK_START_MIN = "break_startM";
+const char *const KEY_BREAK_END_MIN = "break_endM";
 const char *const KEY_AUDIO_VOLUME = "audio_vol";
 const char *const KEY_TIME_ZONE = "tz";
 const char *const KEY_TIME_ZONE_NAME = "tz_name";
@@ -158,13 +164,46 @@ bool isQuietTime(uint8_t localHour, uint8_t localMinute)
   }
   const uint16_t start = quietHoursStart() * 60 + quietMinuteStart();
   const uint16_t end = quietHoursEnd() * 60 + quietMinuteEnd();
-  if (start == end)
-  {
-    return false;
-  }
   const uint16_t now = (uint16_t)localHour * 60 + localMinute;
-  // The window wraps past midnight when end is earlier than start
-  return start < end ? (now >= start && now < end) : (now >= start || now < end);
+  return dailyWindowContains(start, end, now);
+}
+
+bool breakHoursEnabled()
+{
+  Preferences prefs;
+  prefs.begin(NAMESPACE, false);
+  const bool enabled = prefs.isKey(KEY_BREAK_ENABLED) ? prefs.getBool(KEY_BREAK_ENABLED) : false;
+  prefs.end();
+  return enabled;
+}
+
+uint8_t breakHoursStart() { return loadByte(KEY_BREAK_START, 1, 0, 23); }
+uint8_t breakMinuteStart() { return loadByte(KEY_BREAK_START_MIN, 0, 0, 59); }
+uint8_t breakHoursEnd() { return loadByte(KEY_BREAK_END, 6, 0, 23); }
+uint8_t breakMinuteEnd() { return loadByte(KEY_BREAK_END_MIN, 0, 0, 59); }
+
+void setBreakHoursEnabled(bool enabled)
+{
+  Preferences prefs;
+  prefs.begin(NAMESPACE, false);
+  prefs.putBool(KEY_BREAK_ENABLED, enabled);
+  prefs.end();
+}
+
+void setBreakHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute)
+{
+  storeByte(KEY_BREAK_START, startHour, 0, 23);
+  storeByte(KEY_BREAK_START_MIN, startMinute, 0, 59);
+  storeByte(KEY_BREAK_END, endHour, 0, 23);
+  storeByte(KEY_BREAK_END_MIN, endMinute, 0, 59);
+}
+
+time_t breakHoursResumeAt(time_t now)
+{
+  if (!breakHoursEnabled())
+    return 0;
+  return dailyWindowResumeAt(now, true, breakHoursStart() * 60 + breakMinuteStart(),
+                            breakHoursEnd() * 60 + breakMinuteEnd());
 }
 
 uint8_t audioVolume() { return loadByte(KEY_AUDIO_VOLUME, AUDIO_VOLUME_DEFAULT, 0, 100); }

@@ -13,17 +13,29 @@ const initialState = {
   ip: '192.168.1.42', hostname: 'claude-meter', uptime_s: 93642,
   fw_rev: 'preview', fw_built: 'Simulated device', heap_free: 148480, heap_min: 102400,
   battery_mv: 4120, battery_pct: 94, wifi_rssi: -52, wifi_ssid: 'Studio Wi-Fi',
+  wifi_mac: '02:00:00:12:34:56',
   poll_min: 2, warn5: 80, warn7: 90, quiet_start_h: 22, quiet_start_m: 30,
   quiet_end_h: 7, quiet_end_m: 15, quiet_on: true, audio_vol: 65,
+  break_start_h: 1, break_start_m: 0, break_end_h: 6, break_end_m: 0,
+  break_on: false, break_active: false, break_resume_epoch: 0,
   tz: '<+08>-8', tz_name: 'Asia/Kuala_Lumpur', rotation: 0, now_epoch: now,
   poll_age_s: 42, accounts: [
-    { name: 'Personal', configured: true, has_data: true, h5: 29, d7: 60, age: '1 m ago', h5_reset: now + 7200, d7_reset: now + 172800 },
-    { name: 'Studio', configured: true, has_data: true, h5: 12, d7: 38, age: '1 m ago', h5_reset: now + 7200, d7_reset: now + 172800 }
+    { name: 'Personal', configured: true, has_data: true, h5: 29, d7: 60, age: '1m ago', h5_reset: now + 7200, d7_reset: now + 172800 },
+    { name: 'Studio', configured: true, has_data: true, h5: 12, d7: 38, age: '1m ago', h5_reset: now + 7200, d7_reset: now + 172800 }
   ]
 };
 
 (async () => {
-  const server = http.createServer((_, res) => { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); });
+  let finishThemeResponse;
+  const mainScriptOffset = html.lastIndexOf('<script>');
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (req.url === '/first-paint') {
+      // Hold back app initialization while the actual page paints, as on a slow LAN response.
+      res.write(html.slice(0, mainScriptOffset));
+      finishThemeResponse = () => res.end(html.slice(mainScriptOffset));
+    } else res.end(html);
+  });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
   const errors = [], posts = [], external = [];
@@ -63,6 +75,44 @@ const initialState = {
   const latestPost = endpoint => posts.filter(p => p.endpoint === endpoint).at(-1)?.body;
   try {
     const address = 'http://127.0.0.1:' + server.address().port;
+    for (const test of [
+      { saved: 'dark', system: 'light', expected: 'dark' },
+      { saved: 'light', system: 'dark', expected: 'light' },
+      { saved: null, system: 'dark', expected: 'dark' },
+      { saved: null, system: 'light', expected: 'light' },
+      { saved: 'system', system: 'dark', expected: 'dark' },
+      { saved: 'invalid', system: 'dark', expected: 'dark' },
+      { saved: null, system: 'dark', expected: 'dark', blocked: true }
+    ]) {
+      const paintContext = await browser.newContext({ colorScheme: test.system });
+      try {
+        await paintContext.addInitScript(({ saved, blocked }) => {
+          if (blocked) Storage.prototype.getItem = () => { throw new Error('Storage unavailable'); };
+          else if (saved !== null) localStorage.setItem('meter-theme', saved);
+        }, test);
+        const paintPage = await paintContext.newPage();
+        await paintPage.route('**/api/**', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"auth"}' }));
+        await paintPage.goto(address + '/first-paint', { waitUntil: 'commit' });
+        await paintPage.waitForFunction(() => document.body && performance.getEntriesByType('paint').length);
+        const first = await paintPage.evaluate(() => ({
+          theme: document.documentElement.dataset.theme,
+          background: getComputedStyle(document.body).backgroundColor,
+          colorScheme: getComputedStyle(document.documentElement).colorScheme,
+          chrome: document.querySelector('meta[name=theme-color]').content
+        }));
+        assert.equal(first.theme, test.expected, 'First painted frame follows saved/system preference');
+        assert.equal(first.background, test.expected === 'dark' ? 'rgb(28, 29, 26)' : 'rgb(250, 249, 246)');
+        assert.equal(first.colorScheme, test.expected);
+        assert.equal(first.chrome, test.expected === 'dark' ? '#1c1d1a' : '#faf9f6');
+        finishThemeResponse(); finishThemeResponse = null;
+        await paintPage.waitForLoadState('domcontentloaded');
+        assert.equal(await paintPage.locator('html').getAttribute('data-theme'), test.expected, 'App initialization preserves the first-paint theme');
+      } finally {
+        if (finishThemeResponse) { finishThemeResponse(); finishThemeResponse = null; }
+        await paintContext.close();
+      }
+    }
+    console.log('PASS: first paint uses saved/system light/dark before app initialization, including invalid or unavailable storage');
     const mobileContext = await browser.newContext({ viewport: { width: 360, height: 780 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
     const mobile = await mobileContext.newPage();
     await mobile.route('**/api/**', route => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'auth' }) }));
@@ -143,21 +193,25 @@ const initialState = {
         assert.equal(geometry.views, 1, 'One focused view at a time');
         if (width <= 760) assert.ok(geometry.brand <= geometry.actions, 'Mobile header controls must not overlap');
         if (view === 'device' || view === 'alerts') {
-          const separators = await page.locator(view === 'device' ? '#btnDisplay' : '#btnSettings').evaluate(button => {
-            const actions = button.parentElement, lastRow = actions.previousElementSibling;
-            return Number(parseFloat(getComputedStyle(lastRow).borderBottomWidth) > 0) + Number(parseFloat(getComputedStyle(actions).borderTopWidth) > 0);
-          });
-          assert.equal(separators, 1, 'One separator above save actions: ' + view + ' at ' + width + 'px');
+          for (const buttonSelector of view === 'device' ? ['#btnDisplay'] : ['#btnPolling', '#btnSettings']) {
+            const separators = await page.locator(buttonSelector).evaluate(button => {
+              const actions = button.parentElement, lastRow = actions.previousElementSibling;
+              return Number(parseFloat(getComputedStyle(lastRow).borderBottomWidth) > 0) + Number(parseFloat(getComputedStyle(actions).borderTopWidth) > 0);
+            });
+            assert.equal(separators, 1, 'One separator above save actions: ' + view + ' at ' + width + 'px');
+          }
         }
         if (view === 'alerts') {
-          const quietLayout = await page.locator('.quiet-setting').evaluate(row => {
-            const copy = row.querySelector('.setting-copy').getBoundingClientRect();
-            const toggle = row.querySelector('.quiet-switch').getBoundingClientRect();
-            const times = row.querySelector('.quiet-row').getBoundingClientRect();
-            return { beside: copy.right <= toggle.left, centered: Math.abs((copy.top + copy.bottom - toggle.top - toggle.bottom) / 2) < 1, below: times.top >= Math.max(copy.bottom, toggle.bottom), targetHeight: toggle.height };
-          });
-          assert.ok(quietLayout.beside && quietLayout.centered && quietLayout.below, 'Quiet-hours description and switch share a row above the times at ' + width + 'px');
-          assert.ok(quietLayout.targetHeight >= 44, 'Compact switch keeps a usable touch target');
+          for (const rowSelector of ['.quiet-setting', '.break-setting']) {
+            const quietLayout = await page.locator(rowSelector).evaluate(row => {
+              const copy = row.querySelector('.setting-copy').getBoundingClientRect();
+              const toggle = row.querySelector('.quiet-switch').getBoundingClientRect();
+              const times = row.querySelector('.quiet-row').getBoundingClientRect();
+              return { beside: copy.right <= toggle.left, centered: Math.abs((copy.top + copy.bottom - toggle.top - toggle.bottom) / 2) < 1, below: times.top >= Math.max(copy.bottom, toggle.bottom), targetHeight: toggle.height };
+            });
+            assert.ok(quietLayout.beside && quietLayout.centered && quietLayout.below, rowSelector + ' description and switch share a row above the times at ' + width + 'px');
+            assert.ok(quietLayout.targetHeight >= 44, 'Compact switch keeps a usable touch target');
+          }
         }
       }
     }
@@ -188,6 +242,8 @@ const initialState = {
     assert.equal(latestPost('/api/settings').tz_name, 'Asia/Tokyo');
     assert.equal(latestPost('/api/settings').rotation, 90);
     await select('alerts');
+    assert.equal(await page.locator('[data-view=alerts]').textContent(), 'Polling & alerts');
+    assert.equal(await page.locator('#currentView').textContent(), 'Polling & alerts');
     const quietSwitch = page.getByRole('switch', { name: 'Quiet hours' });
     assert.equal(await quietSwitch.isChecked(), true, 'Switch reflects the enabled device setting');
     await quietSwitch.focus(); await page.keyboard.press('Space');
@@ -203,6 +259,47 @@ const initialState = {
     assert.equal(latestPost('/api/settings').quiet_on, true, 'Switch can save both disabled and enabled states');
     state.quiet_on = false; await page.evaluate(() => refreshState());
     assert.equal(await quietSwitch.isChecked(), false, 'A clean switch follows external device changes');
+    const breakSwitch = page.getByRole('switch', { name: 'Break hours' });
+    assert.equal(await breakSwitch.isChecked(), false, 'Break Hours defaults off');
+    assert.equal(await page.locator('#bstart').inputValue(), '01:00', 'Default break starts at 1am');
+    assert.equal(await page.locator('#bend').inputValue(), '06:00', 'Default break ends at 6am');
+    await breakSwitch.focus(); await page.keyboard.press('Space');
+    await page.locator('#bstart').fill('22:30');
+    await page.locator('#bend').fill('07:15');
+    await page.evaluate(() => refreshState());
+    assert.equal(await breakSwitch.isChecked(), true, 'Unsaved Break Hours switch survives polling');
+    assert.equal(await page.locator('#bstart').inputValue(), '22:30', 'Unsaved break times survive polling');
+    await page.locator('#pollMin').selectOption('3');
+    await page.locator('#warn7').fill('95');
+    await page.locator('#btnPolling').click();
+    await page.waitForFunction(() => !document.querySelector('#bon').dataset.dirty);
+    const breakPost = latestPost('/api/settings');
+    assert.deepEqual([breakPost.break_on, breakPost.break_start_h, breakPost.break_start_m, breakPost.break_end_h, breakPost.break_end_m], [true, 22, 30, 7, 15]);
+    assert.equal(breakPost.poll_min, 3);
+    assert.equal(breakPost.quiet_on, undefined, 'Polling save excludes Quiet hours');
+    assert.equal(breakPost.warn7, undefined, 'Polling save excludes unsaved warning thresholds');
+    assert.equal(await page.locator('#warn7').inputValue(), '95', 'Polling save preserves the other card draft');
+    await page.locator('#btnSettings').click();
+    await page.waitForFunction(() => !document.querySelector('#warn7').dataset.dirty);
+    assert.equal(latestPost('/api/settings').warn7, 95);
+    assert.equal(latestPost('/api/settings').break_on, undefined, 'Alert save excludes Break hours');
+    assert.equal(latestPost('/api/settings').poll_min, undefined, 'Alert save excludes the poll interval');
+    await breakSwitch.uncheck(); await page.locator('#btnPolling').click();
+    await page.waitForFunction(() => !document.querySelector('#bon').dataset.dirty);
+    assert.equal(latestPost('/api/settings').break_on, false, 'Break Hours can be disabled');
+    state.break_on = true; state.break_start_h = 12; state.break_start_m = 45;
+    state.break_active = true; state.break_resume_epoch = now + 3600;
+    await page.evaluate(() => refreshState());
+    assert.equal(await breakSwitch.isChecked(), true, 'A clean break switch follows device changes');
+    assert.equal(await page.locator('#bstart').inputValue(), '12:45');
+    await select('usage');
+    await page.locator('#breakNotice').waitFor({ state: 'visible' });
+    assert.ok((await page.locator('#breakNotice').textContent()).includes('Showing the last update'));
+    assert.equal(await page.locator('#btnRefresh').isEnabled(), true, 'Manual refresh is available during breaks');
+    state.break_active = false; await page.evaluate(() => refreshState());
+    assert.equal(await page.locator('#breakNotice').isVisible(), false, 'Pause notice clears when the break ends');
+    await select('alerts');
+    console.log('PASS: Break Hours keyboard switch, overnight times, dirty drafts, save/disable, external sync, and pause notice');
     await page.locator('#vol').fill('40'); await page.locator('#vol').dispatchEvent('change'); await waitFor('#sndStatus', 'Volume saved');
     assert.equal(latestPost('/api/settings').audio_vol, 40);
     for (const file of ['5h-warning', '5h-depleted', '5h-reset', '7d-warning', '7d-depleted', '7d-reset']) {
