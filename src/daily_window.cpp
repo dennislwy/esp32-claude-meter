@@ -12,6 +12,13 @@ bool localTime(time_t epoch, struct tm &local)
 }
 }
 
+bool dailyWindowValid(int startHour, int startMinute, int endHour, int endMinute)
+{
+  return startHour >= 0 && startHour <= 23 && endHour >= 0 && endHour <= 23 &&
+         startMinute >= 0 && startMinute <= 59 && endMinute >= 0 && endMinute <= 59 &&
+         (startHour != endHour || startMinute != endMinute);
+}
+
 bool dailyWindowContains(uint16_t start, uint16_t end, uint16_t minute)
 {
   if (start == end || start >= 1440 || end >= 1440 || minute >= 1440)

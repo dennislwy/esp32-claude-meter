@@ -25,14 +25,14 @@ struct PollReport
   int8_t wifiRssi;    // dBm, when connected
   uint8_t wifiStatus; // wl_status_t when the connection failed, e.g. WL_NO_SSID_AVAIL
   bool clockSynced;   // NTP ran and succeeded
-  bool paused;        // Break Hours: no usage requests; cached accounts are untouched
+  bool paused;        // Pause Hours: no usage requests; cached accounts are untouched
   int accountsOk;
   int accountsFailed;
 };
 
 // Connects to Wi-Fi, syncs the clock over NTP when syncClock is set, reads every account that has a
 // token, then turns Wi-Fi off. Accounts that fail keep their previous data.
-// force bypasses Break Hours for an explicit user refresh. An unset clock syncs
+// force bypasses Pause Hours for an explicit user refresh. An unset clock syncs
 // first, then checks the schedule before sending any usage request.
 PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf85063 &rtc, bool syncClock, bool force = false);
 

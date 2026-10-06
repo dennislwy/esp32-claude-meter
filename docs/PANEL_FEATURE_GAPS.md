@@ -24,7 +24,7 @@ and get a strike-through.
 
 | #             | Gap                                 | What they do                                                                                                                                                                                                                                                                        |
 | ------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ~~**OBS-1**~~ | ~~**Firmware version + codename**~~ | **Closed 2026-10-05:** Device > Device details shows git revision + build time (`fw_rev`, `fw_built`). No codename.                                                                                                                                                                             |
+| ~~**OBS-1**~~ | ~~**Firmware version + codename**~~ | **Closed 2026-10-05:** Device > Device details shows release version + git revision (`fw_version`, `fw_rev`); build timestamps were removed on 2026-10-06. No codename.                                                                                                                                                                             |
 | ~~**OBS-2**~~ | ~~**RSSI on a card**~~              | **Closed 2026-10-05:** Device > Device details shows SSID, dBm, and a quality word (excellent / good / fair / weak).                                                                                                                                                                            |
 | ~~**OBS-3**~~ | ~~**Heap free + heap min**~~        | **Closed 2026-10-05:** Device > Device details shows internal-SRAM free + low-water mark (`heap_free`, `heap_min`).                                                                                                                                                                             |
 | **OBS-4**     | **Model health**                    | Haiku / Sonnet / Opus / Fable up/down indicator in `/api/state`. We don't poll model status.                                                                                                                                                                                        |
@@ -72,14 +72,14 @@ during trimming decisions ("do we really need PLUS-5?").
 | **PLUS-6** | User-settable poll interval (1–5 min)                                                                              |
 | **PLUS-7** | Explicit Reboot button (theirs only reboots as a side effect of Wi-Fi change or factory reset)                     |
 | **PLUS-8** | "Clear 7-day history" as a standalone action (theirs only wipes it inside factory reset)                           |
-| **PLUS-9** | Break Hours: optional daily polling pause with HH:MM precision, overnight windows, and sleep until polling resumes |
+| **PLUS-9** | Pause Hours: optional daily polling pause with HH:MM precision, overnight windows, and sleep until polling resumes |
 
 ## High-value asks (if we close gaps)
 
 Ranked by return on effort for this project. Each line is one of the gap
 codes above:
 
-1. ~~**OBS-1** — Firmware version + build timestamp on Status card.~~ Done.
+1. ~~**OBS-1** — Firmware release version + git revision in Device details.~~ Done.
 2. ~~**API-1** — Async Wi-Fi scan.~~ Done.
 3. ~~**OBS-3** — Heap free / min on Status card.~~ Done.
 4. ~~**SEC-5** — Token-save probe.~~ Done.

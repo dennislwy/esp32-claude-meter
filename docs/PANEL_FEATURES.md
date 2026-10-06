@@ -1,6 +1,6 @@
 # Panel features
 
-Everything a signed-in user can do in the LAN control panel, by feature.
+Everything a signed-in user can do in the Web control panel, by feature.
 See [WEB_SERVER.md](WEB_SERVER.md) for how to reach it and the
 underlying REST surface.
 
@@ -57,8 +57,9 @@ complete diagnostics.
   ≥ -55 excellent, ≥ -67 good, ≥ -75 fair, below that weak)
 - MAC address: the device's Wi-Fi station address, shown after Wi-Fi
 - Heap: internal-SRAM free and low-water mark (`142 KB free (min 96 KB)`)
-- Firmware: git revision + build time (`82dc70e  ·  2026-10-05 16:42 +0800`),
-  generated per build by `scripts/build_info.py`
+- Firmware: release version + git revision (`0.0.9-aae7f66-dirty`).
+  `FW_VERSION` is set in `src/build_info.h`; `scripts/build_info.py`
+  generates the git revision. No build timestamp is shown.
 - Per-account 5 H / 7 D bars with a `resets Sun 4 Oct 17:01 in 1h 4m`
   line each, formatted in the device's selected time zone. Missing usage
   displays a dash instead of a fabricated percentage. Warning and exhausted
@@ -78,7 +79,7 @@ below one minute, then whole minutes rounded down, such as `Updated 120m ago`.
 168-column responsive inline SVG line chart in Usage.
 
 - Blue = account 1, green = account 2; colors adapt to the theme
-- Dashed line = 5 H series, solid line = 7 D series
+- Solid line = 5 H series, dashed line = 7 D series
 - Click a legend button (or use Enter/Space) to toggle that account's
   series on/off
 - Weekday labels are centered directly below their 00:00 midnight ticks
@@ -149,8 +150,8 @@ switch beside its label and description, with the From/Until fields below.
 The gray off state and white thumb follow the supplied Claude snapshot.
 It supports keyboard operation and preserves unsaved changes during state
 updates; **Save alerts** applies the warning thresholds, switch, and time
-window together. Quiet hours supports overnight windows; equal start/end
-times disable the window.
+window together. Quiet hours supports overnight windows; matching From/Until
+times are rejected before saving, including when the switch is off.
 
 Alert sounds appears below Warning thresholds in this card, with Quiet hours
 below the sound controls.
@@ -191,23 +192,29 @@ Under Device → Display & time.
   labels, quiet hours, and reset times follow. A rotation change redraws
   with a full (flashing) e-paper refresh to avoid ghosting.
 
-## Polling &amp; breaks
+## Polling &amp; pauses
 
-Under Polling & alerts > Polling & breaks.
+Under Polling & alerts > Polling & pauses.
 
 - Poll interval, 1–5 min
-- **Break Hours**: a matching blue switch and From/Until fields pause automatic
+- **Pause Hours**: a matching blue switch and From/Until fields pause automatic
   usage requests during a daily local-time window. Disabled by default, with
-  `01:00`-`06:00` as the initial times. Overnight windows are supported; equal
-  times disable the window. Independent of Quiet hours, which only silences sounds.
-- **Save polling &amp; breaks** persists these settings to NVS. Each card
+  `00:00`-`06:00` (12:00am-6:00am) as the initial times. Overnight windows are
+  supported; matching From/Until times are rejected even while disabled.
+  Independent of Quiet hours, which only silences sounds.
+- **Save polling &amp; pauses** persists these settings to NVS. Each card
   submits only its own settings and preserves unsaved drafts in the other card.
 
-Settings changes do not force a re-poll; the UI picks them up on its
-next `/api/state` tick. Break Hours changes re-evaluate the next poll on exit
-from panel mode, including when a break is disabled or shortened.
+Pause Hours replaces Break Hours in the panel, API (`pause_*`), and serial
+commands (`pause`). Existing saved Break Hours values migrate to the new
+NVS keys without resetting the window or switch; the midnight default only
+applies when no schedule has been saved.
 
-During Break Hours, Usage shows a pause notice and keeps the last cached
+Settings changes do not force a re-poll; the UI picks them up on its
+next `/api/state` tick. Pause Hours changes re-evaluate the next poll on exit
+from panel mode, including when a pause is disabled or shortened.
+
+During Pause Hours, Usage shows a pause notice and keeps the last cached
 figures. Normal mode sleeps until the window ends without periodic Wi-Fi
 connections or duplicate history samples. Button wakeups and an explicit
 **Refresh now** (or serial `usage`) remain available. Panel and debug modes

@@ -82,6 +82,9 @@ with keyboard order matching the visible arrangement. Device details shows
 the Wi-Fi station MAC address immediately after Wi-Fi. Both footers include
 a GitHub link to this repository. News dates use 13px text and the fetch
 status links to anthropic.com/news.
+Firmware details show release version `0.0.9` and the generated git revision;
+the build timestamp has been removed. The release constant lives in
+`src/build_info.h`.
 The topbar is hidden at 760px and below, recovering its 48px mobile height.
 
 The sign-in screen has compact typography and spacing below 480px. At
@@ -249,7 +252,7 @@ and year rollover, and daylight-saving gaps/repeats; MSVC compiled these
 tests with warnings treated as errors. The final ESP32 build passed and
 the binary contains the exact 81,959-byte embedded page. This version has
 not been flashed at that stage; physical sleep/wake and current-draw verification remain
-pending. See [the host test instructions](../test/break_hours/README.md).
+pending. See [the host test instructions](../test/pause_hours/README.md).
 
 The navigation item, breadcrumb, and page title now use Polling & alerts.
 Its two cards are Polling & breaks (Poll interval, then Break hours) and
@@ -290,3 +293,39 @@ the same x-coordinate as its tick and a centered text anchor. Desktop and
 mobile chart screenshots were inspected. The current compact age strings (`25s ago`, `12m ago`,
 `3h ago`) are documented in [PANEL_FEATURES.md](PANEL_FEATURES.md) and
 [WEB_SERVER.md](WEB_SERVER.md).
+
+
+On 2026-10-06, Break Hours was renamed to Pause Hours throughout the current
+panel, firmware settings, API (`pause_*`), and serial commands (`pause`).
+The card and save button now say Polling & pauses. The initial window is
+00:00-06:00 (12:00am-6:00am), disabled. Existing saved Break Hours schedules
+migrate to new NVS keys and retain their times and enabled state.
+
+Pause Hours and Quiet hours reject matching From/Until times, including
+while disabled. The panel reports an accessible error and retains the draft;
+the API validates merged partial updates before applying any settings, and
+firmware setters/serial commands reject invalid windows. Legacy empty
+windows remain inactive until corrected. Overnight windows still work.
+
+The 7 days usage history chart uses solid 5-hour lines and dashed 7-day
+lines, with matching legend samples and an updated accessible description.
+Earlier Break Hours names, defaults, and board reports above are historical.
+
+Browser regressions passed equality rejection for both schedules with switches
+on/off, correction of invalid drafts, midnight defaults, overnight saves,
+draft preservation, and the existing responsive/theme checks. Native tests
+passed schedule validation, wake boundaries, and DST behavior with warnings
+treated as errors. A temporary host harness exercised the production JSON
+validator and settings helpers using simulated NVS, including legacy migration
+and preservation of newer saves. Desktop light/mobile dark previews confirmed
+the chart line styles and renamed card. The ESP32 firmware build passed.
+
+The Pause Hours firmware was subsequently flashed on 2026-10-06 to the
+ESP32-S3-PICO-1 on COM5, with the uploader verifying the flash hash. Live
+checks confirmed exact embedded HTML, sign-in at 360 x 780/DPR 3 in both
+themes, firmware version 0.0.9, Quiet/Pause equal-time rejection with switches
+on/off, merged partial-update validation without changing saved settings,
+and solid 5-hour/dashed 7-day paths with matching legend samples. Four
+authenticated state checks over 30 seconds passed without browser errors.
+Physical sleep/wake and current draw remain unmeasured. The later removal
+of the PIN input placeholder has not been flashed.

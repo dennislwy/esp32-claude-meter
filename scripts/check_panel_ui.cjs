@@ -11,13 +11,13 @@ const html = source.split('R"HTML(')[1].split(')HTML";')[0];
 const now = 1791220000;
 const initialState = {
   ip: '192.168.1.42', hostname: 'claude-meter', uptime_s: 93642,
-  fw_rev: 'preview', fw_built: 'Simulated device', heap_free: 148480, heap_min: 102400,
+  fw_version: '0.0.9', fw_rev: 'preview', heap_free: 148480, heap_min: 102400,
   battery_mv: 4120, battery_pct: 94, wifi_rssi: -52, wifi_ssid: 'Studio Wi-Fi',
   wifi_mac: '02:00:00:12:34:56',
   poll_min: 2, warn5: 80, warn7: 90, quiet_start_h: 22, quiet_start_m: 30,
   quiet_end_h: 7, quiet_end_m: 15, quiet_on: true, audio_vol: 65,
-  break_start_h: 1, break_start_m: 0, break_end_h: 6, break_end_m: 0,
-  break_on: false, break_active: false, break_resume_epoch: 0,
+  pause_start_h: 0, pause_start_m: 0, pause_end_h: 6, pause_end_m: 0,
+  pause_on: false, pause_active: false, pause_resume_epoch: 0,
   tz: '<+08>-8', tz_name: 'Asia/Kuala_Lumpur', rotation: 0, now_epoch: now,
   poll_age_s: 42, accounts: [
     { name: 'Personal', configured: true, has_data: true, h5: 29, d7: 60, age: '1m ago', h5_reset: now + 7200, d7_reset: now + 172800 },
@@ -202,7 +202,7 @@ const initialState = {
           }
         }
         if (view === 'alerts') {
-          for (const rowSelector of ['.quiet-setting', '.break-setting']) {
+          for (const rowSelector of ['.quiet-setting', '.pause-setting']) {
             const quietLayout = await page.locator(rowSelector).evaluate(row => {
               const copy = row.querySelector('.setting-copy').getBoundingClientRect();
               const toggle = row.querySelector('.quiet-switch').getBoundingClientRect();
@@ -228,7 +228,9 @@ const initialState = {
     assert.equal(await page.locator('#histLegend img').count(), 0);
     await page.evaluate(() => refreshHistory());
     assert.equal(await page.locator('#histLegend button').first().textContent(), unsafeName, 'Legend names are plain text');
-    await select('device'); await page.locator('#btnScan').click();
+    await select('device');
+    assert.equal(await page.locator('#fw').textContent(), '0.0.9-preview', 'Firmware shows the release version and git revision');
+    await page.locator('#btnScan').click();
     await page.locator('#scanList button').waitFor();
     assert.equal(await page.locator('#scanList img').count(), 0, 'SSID names are plain text');
     await page.locator('#scanList button').press('Enter');
@@ -245,6 +247,30 @@ const initialState = {
     assert.equal(await page.locator('[data-view=alerts]').textContent(), 'Polling & alerts');
     assert.equal(await page.locator('#currentView').textContent(), 'Polling & alerts');
     const quietSwitch = page.getByRole('switch', { name: 'Quiet hours' });
+    // Invalid times must never reach the API, even when the schedule is off.
+    async function checkEqualTimes(prefix, button, status, scheduleSwitch) {
+      const savedStart = await page.locator('#' + prefix + 'start').inputValue();
+      const savedEnd = await page.locator('#' + prefix + 'end').inputValue();
+      const savedEnabled = await scheduleSwitch.isChecked();
+      for (const enabled of [false, true]) {
+        await scheduleSwitch.setChecked(enabled);
+        for (const time of ['00:00', '22:30']) {
+          await page.locator('#' + prefix + 'start').fill(time);
+          await page.locator('#' + prefix + 'end').fill(time);
+          const count = posts.length;
+          await page.locator('#' + button).click();
+          assert.equal(await page.locator('#' + status).textContent(), 'From and Until must be different times.');
+          assert.equal(posts.length, count, 'Equal times do not submit settings');
+          await page.evaluate(() => refreshState());
+          assert.equal(await page.locator('#' + prefix + 'end').inputValue(), time, 'Invalid drafts survive polling');
+        }
+      }
+      await scheduleSwitch.setChecked(savedEnabled);
+      await page.locator('#' + prefix + 'start').fill(savedStart);
+      await page.locator('#' + prefix + 'end').fill(savedEnd);
+      assert.equal(await page.locator('#' + prefix + 'end').evaluate(el => el.validity.customError), false, 'Editing clears the equality error');
+    }
+    await checkEqualTimes('q', 'btnSettings', 'setStatus', quietSwitch);
     assert.equal(await quietSwitch.isChecked(), true, 'Switch reflects the enabled device setting');
     await quietSwitch.focus(); await page.keyboard.press('Space');
     await page.locator('#warn5').fill('85');
@@ -259,47 +285,54 @@ const initialState = {
     assert.equal(latestPost('/api/settings').quiet_on, true, 'Switch can save both disabled and enabled states');
     state.quiet_on = false; await page.evaluate(() => refreshState());
     assert.equal(await quietSwitch.isChecked(), false, 'A clean switch follows external device changes');
-    const breakSwitch = page.getByRole('switch', { name: 'Break hours' });
-    assert.equal(await breakSwitch.isChecked(), false, 'Break Hours defaults off');
-    assert.equal(await page.locator('#bstart').inputValue(), '01:00', 'Default break starts at 1am');
-    assert.equal(await page.locator('#bend').inputValue(), '06:00', 'Default break ends at 6am');
-    await breakSwitch.focus(); await page.keyboard.press('Space');
-    await page.locator('#bstart').fill('22:30');
-    await page.locator('#bend').fill('07:15');
+    const pauseSwitch = page.getByRole('switch', { name: 'Pause hours' });
+    assert.equal(await pauseSwitch.isChecked(), false, 'Pause Hours defaults off');
+    assert.equal(await page.locator('#pstart').inputValue(), '00:00', 'Default pause starts at midnight');
+    assert.equal(await page.locator('#pend').inputValue(), '06:00', 'Default pause ends at 6am');
+    await checkEqualTimes('p', 'btnPolling', 'pollStatus', pauseSwitch);
+    await page.locator('#pstart').fill('00:00');
+    await page.locator('#pend').fill('00:01');
+    await page.locator('#btnPolling').click();
+    await page.waitForFunction(() => !document.querySelector('#pend').dataset.dirty);
+    assert.equal(latestPost('/api/settings').pause_end_m, 1, 'Same hour with different minutes is valid');
+    await page.locator('#pend').fill('06:00');
+    await pauseSwitch.focus(); await page.keyboard.press('Space');
+    await page.locator('#pstart').fill('22:30');
+    await page.locator('#pend').fill('07:15');
     await page.evaluate(() => refreshState());
-    assert.equal(await breakSwitch.isChecked(), true, 'Unsaved Break Hours switch survives polling');
-    assert.equal(await page.locator('#bstart').inputValue(), '22:30', 'Unsaved break times survive polling');
+    assert.equal(await pauseSwitch.isChecked(), true, 'Unsaved Pause Hours switch survives polling');
+    assert.equal(await page.locator('#pstart').inputValue(), '22:30', 'Unsaved pause times survive polling');
     await page.locator('#pollMin').selectOption('3');
     await page.locator('#warn7').fill('95');
     await page.locator('#btnPolling').click();
-    await page.waitForFunction(() => !document.querySelector('#bon').dataset.dirty);
-    const breakPost = latestPost('/api/settings');
-    assert.deepEqual([breakPost.break_on, breakPost.break_start_h, breakPost.break_start_m, breakPost.break_end_h, breakPost.break_end_m], [true, 22, 30, 7, 15]);
-    assert.equal(breakPost.poll_min, 3);
-    assert.equal(breakPost.quiet_on, undefined, 'Polling save excludes Quiet hours');
-    assert.equal(breakPost.warn7, undefined, 'Polling save excludes unsaved warning thresholds');
+    await page.waitForFunction(() => !document.querySelector('#pon').dataset.dirty);
+    const pausePost = latestPost('/api/settings');
+    assert.deepEqual([pausePost.pause_on, pausePost.pause_start_h, pausePost.pause_start_m, pausePost.pause_end_h, pausePost.pause_end_m], [true, 22, 30, 7, 15]);
+    assert.equal(pausePost.poll_min, 3);
+    assert.equal(pausePost.quiet_on, undefined, 'Polling save excludes Quiet hours');
+    assert.equal(pausePost.warn7, undefined, 'Polling save excludes unsaved warning thresholds');
     assert.equal(await page.locator('#warn7').inputValue(), '95', 'Polling save preserves the other card draft');
     await page.locator('#btnSettings').click();
     await page.waitForFunction(() => !document.querySelector('#warn7').dataset.dirty);
     assert.equal(latestPost('/api/settings').warn7, 95);
-    assert.equal(latestPost('/api/settings').break_on, undefined, 'Alert save excludes Break hours');
+    assert.equal(latestPost('/api/settings').pause_on, undefined, 'Alert save excludes Pause hours');
     assert.equal(latestPost('/api/settings').poll_min, undefined, 'Alert save excludes the poll interval');
-    await breakSwitch.uncheck(); await page.locator('#btnPolling').click();
-    await page.waitForFunction(() => !document.querySelector('#bon').dataset.dirty);
-    assert.equal(latestPost('/api/settings').break_on, false, 'Break Hours can be disabled');
-    state.break_on = true; state.break_start_h = 12; state.break_start_m = 45;
-    state.break_active = true; state.break_resume_epoch = now + 3600;
+    await pauseSwitch.uncheck(); await page.locator('#btnPolling').click();
+    await page.waitForFunction(() => !document.querySelector('#pon').dataset.dirty);
+    assert.equal(latestPost('/api/settings').pause_on, false, 'Pause Hours can be disabled');
+    state.pause_on = true; state.pause_start_h = 12; state.pause_start_m = 45;
+    state.pause_active = true; state.pause_resume_epoch = now + 3600;
     await page.evaluate(() => refreshState());
-    assert.equal(await breakSwitch.isChecked(), true, 'A clean break switch follows device changes');
-    assert.equal(await page.locator('#bstart').inputValue(), '12:45');
+    assert.equal(await pauseSwitch.isChecked(), true, 'A clean pause switch follows device changes');
+    assert.equal(await page.locator('#pstart').inputValue(), '12:45');
     await select('usage');
-    await page.locator('#breakNotice').waitFor({ state: 'visible' });
-    assert.ok((await page.locator('#breakNotice').textContent()).includes('Showing the last update'));
-    assert.equal(await page.locator('#btnRefresh').isEnabled(), true, 'Manual refresh is available during breaks');
-    state.break_active = false; await page.evaluate(() => refreshState());
-    assert.equal(await page.locator('#breakNotice').isVisible(), false, 'Pause notice clears when the break ends');
+    await page.locator('#pauseNotice').waitFor({ state: 'visible' });
+    assert.ok((await page.locator('#pauseNotice').textContent()).includes('Showing the last update'));
+    assert.equal(await page.locator('#btnRefresh').isEnabled(), true, 'Manual refresh is available during pauses');
+    state.pause_active = false; await page.evaluate(() => refreshState());
+    assert.equal(await page.locator('#pauseNotice').isVisible(), false, 'Pause notice clears when the pause ends');
     await select('alerts');
-    console.log('PASS: Break Hours keyboard switch, overnight times, dirty drafts, save/disable, external sync, and pause notice');
+    console.log('PASS: Pause Hours midnight default, distinct Quiet/Pause times on/off, keyboard switch, overnight times, dirty drafts, save/disable, external sync, and pause notice');
     await page.locator('#vol').fill('40'); await page.locator('#vol').dispatchEvent('change'); await waitFor('#sndStatus', 'Volume saved');
     assert.equal(latestPost('/api/settings').audio_vol, 40);
     for (const file of ['5h-warning', '5h-depleted', '5h-reset', '7d-warning', '7d-depleted', '7d-reset']) {

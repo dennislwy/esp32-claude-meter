@@ -15,13 +15,13 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 STATE = {
     "ip": "192.168.1.42", "hostname": "claude-meter", "uptime_s": 93642,
-    "fw_rev": "preview", "fw_built": "Simulated device", "heap_free": 148480,
+    "fw_version": "0.0.9", "fw_rev": "preview", "heap_free": 148480,
     "heap_min": 102400, "battery_mv": 4120, "battery_pct": 94,
     "wifi_rssi": -52, "wifi_ssid": "Studio Wi-Fi", "wifi_mac": "02:00:00:12:34:56", "poll_min": 2,
     "warn5": 80, "warn7": 90, "quiet_start_h": 22, "quiet_start_m": 30,
     "quiet_end_h": 7, "quiet_end_m": 15, "quiet_on": True, "audio_vol": 65,
-    "break_start_h": 1, "break_start_m": 0, "break_end_h": 6,
-    "break_end_m": 0, "break_on": False, "break_active": False, "break_resume_epoch": 0,
+    "pause_start_h": 0, "pause_start_m": 0, "pause_end_h": 6,
+    "pause_end_m": 0, "pause_on": False, "pause_active": False, "pause_resume_epoch": 0,
     "tz": "<+08>-8", "tz_name": "Asia/Kuala_Lumpur", "rotation": 0,
     "poll_age_s": 42,
     "accounts": [
@@ -111,6 +111,16 @@ class PreviewHandler(BaseHTTPRequestHandler):
         if path == "/api/logout":
             return self.reply(200, {"ok": True}, "sid=; Max-Age=0; Path=/")
         if path == "/api/settings":
+            for prefix in ("quiet", "pause"):
+                keys = [prefix + suffix for suffix in ("_start_h", "_start_m", "_end_h", "_end_m")]
+                enabled_key = prefix + "_on"
+                if enabled_key in body and type(body[enabled_key]) is not bool:
+                    return self.reply(400, {"error": "bad_" + prefix + "_hours"})
+                if any(key in body for key in keys) or body.get(enabled_key) is True:
+                    times = [body.get(key, STATE[key]) for key in keys]
+                    if (any(type(value) is not int or not 0 <= value <= (23 if i % 2 == 0 else 59)
+                            for i, value in enumerate(times)) or times[:2] == times[2:]):
+                        return self.reply(400, {"error": "bad_" + prefix + "_hours"})
             STATE.update({key: value for key, value in body.items() if key in STATE and key != "accounts"})
         elif path == "/api/tokens":
             for i, account in enumerate(STATE["accounts"], 1):

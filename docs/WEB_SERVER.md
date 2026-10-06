@@ -1,4 +1,4 @@
-# LAN control panel
+# Web control panel
 
 Phase 1 of **R8**. A STA-mode HTTP server that lets you edit the device's
 settings from a browser on the same Wi-Fi, triggered on demand.
@@ -75,7 +75,7 @@ routes require `Content-Type: application/json` on the request body.
 | POST   | `/api/login`         | `{"pin":"123456"}`                                                                                                                                                                                                                                                                                         | `{"ok":true}` + Set-Cookie, or `401 {"error":"auth"}`, or `429 {"error":"throttled","retry_s":N}`                                                                                                                                                                                                                                                                                                   |
 | POST   | `/api/logout`        | —                                                                                                                                                                                                                                                                                                          | `{"ok":true}` + clears cookie                                                                                                                                                                                                                                                                                                                                                                       |
 | GET    | `/api/state`         | —                                                                                                                                                                                                                                                                                                          | full dashboard payload (see below)                                                                                                                                                                                                                                                                                                                                                                  |
-| POST   | `/api/settings`      | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, break_start_h, break_start_m, break_end_h, break_end_m, break_on, audio_vol, tz, tz_name, rotation}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270 | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` / `400 {"error":"bad_break_hours"}` (nothing is applied)                                                                                                                                                                                                                                                         |
+| POST   | `/api/settings`      | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, pause_start_h, pause_start_m, pause_end_h, pause_end_m, pause_on, audio_vol, tz, tz_name, rotation}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270 | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` / `400 {"error":"bad_pause_hours"}` / `400 {"error":"bad_quiet_hours"}` (nothing is applied)                                                                                                                                                                                                                                                         |
 | POST   | `/api/tokens`        | `{token1, token2, name1, name2}` (empty token = unchanged)                                                                                                                                                                                                                                                 | `{"ok":true, "probes":[{account, ok, http, h5?, d7?}]}` — each newly saved token is checked against the API (blocks ~2-3 s per token)                                                                                                                                                                                                                                                               |
 | POST   | `/api/wifi`          | `{ssid, pass}` (empty pass = unchanged)                                                                                                                                                                                                                                                                    | `{"ok":true}`                                                                                                                                                                                                                                                                                                                                                                                       |
 | POST   | `/api/refresh`       | —                                                                                                                                                                                                                                                                                                          | triggers an on-demand poll; `{"ok":true}`                                                                                                                                                                                                                                                                                                                                                           |
@@ -94,8 +94,8 @@ routes require `Content-Type: application/json` on the request body.
   "ip": "192.168.0.203",
   "hostname": "claude-meter",
   "uptime_s": 1234,
-  "fw_rev": "82dc70e-dirty",
-  "fw_built": "2026-10-05 16:42 +0800",
+  "fw_version": "0.0.9",
+  "fw_rev": "aae7f66-dirty",
   "heap_free": 145320,
   "heap_min": 98112,
   "now_epoch": 1759619826,
@@ -110,9 +110,9 @@ routes require `Content-Type: application/json` on the request body.
   "quiet_start_h": 22, "quiet_start_m": 30,
   "quiet_end_h": 7,   "quiet_end_m": 15,
   "quiet_on": true,
-  "break_start_h": 1, "break_start_m": 0,
-  "break_end_h": 6,   "break_end_m": 0,
-  "break_on": false, "break_active": false, "break_resume_epoch": 0,
+  "pause_start_h": 0, "pause_start_m": 0,
+  "pause_end_h": 6,   "pause_end_m": 0,
+  "pause_on": false, "pause_active": false, "pause_resume_epoch": 0,
   "audio_vol": 80,
   "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
   "tz_name": "Europe/Amsterdam",
@@ -129,6 +129,10 @@ routes require `Content-Type: application/json` on the request body.
 
 Clients should prefer `now_epoch` over the browser clock when computing
 "resets in" countdowns.
+
+`fw_version` is the release version from `FW_VERSION` in `src/build_info.h`.
+`fw_rev` remains the generated git description. The former `fw_built` field
+and `FW_BUILD_TIME` constant have been removed.
 
 `wifi_mac` is the Wi-Fi station MAC address. Per-account `age` is `no data`
 when unavailable, `just now` below 60 seconds, then whole minutes rounded
@@ -158,19 +162,19 @@ appearance is saved per browser and resolved in the head before the first
 paint. Both footers link to the GitHub repository. See [PANEL_DESIGN.md](PANEL_DESIGN.md)
 for the reference analysis and a simulated local preview.
 
-| Card                       | Purpose                                                                                                                                                                                                                                                                                                             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sign in**                | PIN prompt; typing or pasting six digits automatically calls `/api/login`. Replaced by the dashboard on success; manual retry is available.                                                                                                                                                                         |
-| **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: battery, last poll, uptime, IP, Wi-Fi (SSID, dBm, quality word), Wi-Fi MAC address immediately after Wi-Fi, heap free / low-water mark, firmware revision + build time, and the full device diagnostics.                                                          |
-| **7-day history**          | Responsive inline SVG line chart in Usage, 168 cols, blue = account 1, green = account 2 (dashed = 5h, solid = 7d). Keyboard-accessible legend buttons toggle each account's series. Weekday labels are centered under their midnight ticks in the device's time zone; y-axis ticks every 25 %. Empty samples preserve gaps; no samples show an empty state. |
-| **Anthropic news**         | 10 latest headlines (13px date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. Successful-fetch status links to anthropic.com/news.                                                                                                                                                             |
-| **Accounts**               | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token.                                                                                                                                                                    |
-| **Wi-Fi**                  | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID.                                                                                                                                                                                                                     |
-| **Alerts & sound**         | Warning thresholds (50-99%), Alert sounds (volume slider saves on release + six WAV previews), then Quiet hours with an accessible switch and HH:MM times. Save alerts applies thresholds and Quiet hours.                                                                                                          |
-| **Display & time**         | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°.                                                                                                                                     |
-| **Polling & breaks**       | Poll interval (1-5 min), then Break hours with an accessible switch and HH:MM times (01:00-06:00, disabled by default). Save polling & breaks applies this card only. Break hours pauses automatic requests and sleeps through the window in Normal mode.                                                           |
-| **Appearance / Sign out**  | Controls select System, Light, or Dark theme and clear the session cookie. Sign out is right of the theme switch on mobile only, with matching keyboard order. The theme applies before first paint. Any authenticated endpoint returning 401 opens the PIN screen.                                                                                                                                                                   |
-| **Device management**      | In Device: Clear 7-day history / Restart device / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes).                                                                                                                                              |
+| Card                       | Purpose                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Sign in**                | PIN prompt; typing or pasting six digits automatically calls `/api/login`. Replaced by the dashboard on success; manual retry is available.                                                                                                                                                                                                                  |
+| **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: battery, last poll, uptime, IP, Wi-Fi (SSID, dBm, quality word), Wi-Fi MAC address immediately after Wi-Fi, heap free / low-water mark, firmware release version + git revision, and the full device diagnostics.                                                        |
+| **7-day history**          | Responsive inline SVG line chart in Usage, 168 cols, blue = account 1, green = account 2 (solid = 5h, dashed = 7d). Keyboard-accessible legend buttons toggle each account's series. Weekday labels are centered under their midnight ticks in the device's time zone; y-axis ticks every 25 %. Empty samples preserve gaps; no samples show an empty state. |
+| **Anthropic news**         | 10 latest headlines (13px date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. Successful-fetch status links to anthropic.com/news.                                                                                                                                            |
+| **Accounts**               | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token.                                                                                                                                                                                                             |
+| **Wi-Fi**                  | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID.                                                                                                                                                                                                                                                              |
+| **Alerts & sound**         | Warning thresholds (50-99%), Alert sounds (volume slider saves on release + six WAV previews), then Quiet hours with an accessible switch and HH:MM times. Save alerts applies thresholds and Quiet hours.                                                                                                                                                   |
+| **Display & time**         | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°.                                                                                                                                                                              |
+| **Polling & pauses**       | Poll interval (1-5 min), then Pause hours with an accessible switch and HH:MM times (00:00-06:00, disabled by default). Save polling & pauses applies this card only. Pause hours pauses automatic requests and sleeps through the window in Normal mode.                                                                                                    |
+| **Appearance / Sign out**  | Controls select System, Light, or Dark theme and clear the session cookie. Sign out is right of the theme switch on mobile only, with matching keyboard order. The theme applies before first paint. Any authenticated endpoint returning 401 opens the PIN screen.                                                                                          |
+| **Device management**      | In Device: Clear 7-day history / Restart device / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes).                                                                                                                                                                                       |
 
 ## State and side effects
 
@@ -180,8 +184,8 @@ action flags drained by `loop()`:
 
 | Flag                       | Set by                                    | Handled in `loop()`                                                                                                                              |
 | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Calls `pollAndShow(true)` (explicitly overrides Break Hours), reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
-| `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens`            | Resets the next poll deadline so changed/disabled Break Hours take effect when Normal mode resumes; client polls `/api/state` on a timer         |
+| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Calls `pollAndShow(true)` (explicitly overrides Pause Hours), reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
+| `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens`            | Resets the next poll deadline so changed/disabled Pause Hours take effect when Normal mode resumes; client polls `/api/state` on a timer         |
 | `PANEL_ACT_TIME_ZONE`      | `/api/settings` with a changed `tz`       | `clockApplyTimeZone()`: `setenv("TZ")` + `tzset()`, rewrite the RTC (which holds local time) in the new zone, redraw                             |
 | `PANEL_ACT_ROTATION`       | `/api/settings` with a changed `rotation` | `lvglPortSetRotation()`, then redraw with a full e-paper refresh                                                                                 |
 | `PANEL_ACT_REBOOT`         | `/api/reboot`, `/api/factory-reset`       | `delay(800)` to let the response flush, then `ESP.restart()`                                                                                     |
@@ -190,11 +194,20 @@ Wi-Fi stays up the entire time panel mode is active. Each refresh
 cycles through `pollUsage()` (which internally disconnects) and then
 reconnects — expect a ~3-5 s stall during a refresh.
 
-Break Hours fields accept individual partial updates: omitted times keep their
-saved values. Hours must be integers 0-23, minutes 0-59, and `break_on` a
-boolean; invalid values reject the whole settings request before any changes.
-`break_active` describes the current local-time window, and
-`break_resume_epoch` is the next allowed automatic poll (0 when inactive).
+Pause Hours and Quiet hours fields accept individual partial updates: omitted
+times keep their saved values. Hours must be integers 0-23, minutes 0-59,
+and `pause_on`/`quiet_on` booleans. Matching From/Until times, including those
+created by a partial update, reject the whole request before settings change.
+This applies to submitted times even when disabled. Enabling a legacy empty
+window is also rejected; disabling it is allowed. Errors are `bad_pause_hours`
+or `bad_quiet_hours`. Overnight windows remain valid.
+
+The former `break_*` API fields and `break` serial command are now `pause_*`
+and `pause`. Existing NVS `break_*` keys are lazily copied to `pause_*` keys;
+saved times and enabled states take precedence over the new 00:00-06:00,
+disabled default. Invalid legacy empty windows remain inactive until corrected.
+`pause_active` describes the current local-time window, and
+`pause_resume_epoch` is the next allowed automatic poll (0 when inactive).
 An unset clock reports inactive until time is established. Usage displays a
 pause notice using this state, while **Refresh now** and token-save probes
 remain explicit user actions.
@@ -205,7 +218,7 @@ Normal operation averages ~1 mA (deep sleep + 2-min wake). Panel mode
 keeps the radio and MCU continuously awake and running Wi-Fi — call it
 **~70-100 mA**. At 400 mAh this would drain the pack in roughly 4-6
 hours of continuous panel use. The 5-minute idle auto-exit guards
-against leaving it on by accident. Break Hours saves power in Normal mode
+against leaving it on by accident. Pause Hours saves power in Normal mode
 with debug off by deferring timer wakes and keeping Wi-Fi off until the
 window ends. It does not put an active panel session to sleep.
 

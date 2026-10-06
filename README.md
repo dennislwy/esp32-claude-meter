@@ -5,9 +5,11 @@ board. The device polls `api.anthropic.com` over verified HTTPS for the
 5-hour and 7-day usage of up to two Claude accounts, and shows the result 
 on the 200×200 black & white ePaper panel. Audible alerts play from an 
 onboard speaker when a window crosses a configurable warning threshold or 
-depletes, with optional quiet hours. Break Hours can pause automatic polling
+depletes, with optional quiet hours. Pause Hours can pause automatic polling
 and keep the board asleep through a daily window; it defaults to disabled,
-with a saved window of 01:00-06:00.
+with a saved window of 00:00-06:00.
+
+Firmware version: **0.0.9**, set in `src/build_info.h`.
 
 ## Hardware
 
@@ -56,15 +58,15 @@ Type `help` for the full list. Highlights:
 
 | Command                               | Purpose                                                                 |
 | ------------------------------------- | ----------------------------------------------------------------------- |
-| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet/break hours |
+| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet/pause hours |
 | `usage`                               | Poll now, print the result, redraw, trigger any alerts                  |
 | `view`                                | Switch to the next view (dual / account 1 / account 2)                  |
 | `interval <1-5>`                      | Minutes between polls                                                   |
 | `warn5h <50-99>` / `warn7d <50-99>`   | Warning threshold per window                                            |
 | `quiet on \| off`                     | Enable or disable quiet hours                                           |
 | `quiet <start>-<end>`                 | Set quiet hours, 24-h local time (e.g. `quiet 22-8`)                    |
-| `break on \| off` | Enable or disable Break Hours |
-| `break <start>-<end>` | Set the local polling-pause window (e.g. `break 01:00-06:00`) |
+| `pause on \| off` | Enable or disable Pause Hours |
+| `pause <start>-<end>` | Set the local polling-pause window (e.g. `pause 00:00-06:00`) |
 | `alerts` / `alerts clear`             | Inspect / reset the per-window alert state                              |
 | `history` / `history clear`           | Inspect / wipe the 7-day usage ring                                     |
 | `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock                                           |
@@ -79,7 +81,7 @@ Type `help` for the full list. Highlights:
   toggle at any time (awake, asleep, or on battery).
 - **Normal mode** (battery): serial and LED off to save power. The board
   wakes on its poll timer, polls, draws, and deep-sleeps again. During enabled
-  Break Hours it sleeps until the window ends without automatic usage
+  Pause Hours it sleeps until the window ends without automatic usage
   requests; manual Refresh now and serial `usage` override the pause. A short
   `BOOT` press wakes it to show the next view; a long `PWR` press powers
   it off (full refresh to white first, then VBAT_PWR is cut).
@@ -117,7 +119,7 @@ src/           firmware (main, poll loop, UI, alerts, history, settings)
 include/       lv_conf.h and other build-only headers
 lib/           local libraries (Battery, Epaper154, ES8311, PCF85063, ClaudeUsage)
 assets/certs/  pinned root CAs for api.anthropic.com and the news feed (embedded at build time)
-scripts/       build_info.py: writes src/build_info.cpp (git revision + build time) before each build
+scripts/       build_info.py: generates git revision; FW_VERSION is set in src/build_info.h
 data/          LittleFS payload: WAV alert sounds (gitignored)
 docs/          design notes: modes, buttons, battery, alert sounds, web panel
 ```

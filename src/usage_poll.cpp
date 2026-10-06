@@ -65,10 +65,10 @@ void printWindow(const char *name, float percent, uint32_t reset)
 PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf85063 &rtc, bool syncClock, bool force)
 {
   PollReport report = {};
-  if (!force && clockValid() && settings::breakHoursResumeAt(time(nullptr)))
+  if (!force && clockValid() && settings::pauseHoursResumeAt(time(nullptr)))
   {
     report.paused = true;
-    return report; // Don't even power up Wi-Fi during a known break.
+    return report; // Don't even power up Wi-Fi during a known pause.
   }
   String tokens[settings::CLAUDE_TOKEN_COUNT];
   bool anyToken = false;
@@ -102,8 +102,8 @@ PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf850
     Serial.println(report.clockSynced ? "Clock synced over NTP" : "NTP sync failed");
   }
 
-  // NTP may have established/corrected local time into Break Hours.
-  if (!force && clockValid() && settings::breakHoursResumeAt(time(nullptr)))
+  // NTP may have established/corrected local time into Pause Hours.
+  if (!force && clockValid() && settings::pauseHoursResumeAt(time(nullptr)))
   {
     report.paused = true;
     wifiOff();
@@ -116,9 +116,9 @@ PollReport pollUsage(AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], Pcf850
     {
       continue;
     }
-    // A slow connection or the first account request may cross the break start.
+    // A slow connection or the first account request may cross the pause start.
     // Finish any request already sent, but never start another one in the window.
-    if (!force && clockValid() && settings::breakHoursResumeAt(time(nullptr)))
+    if (!force && clockValid() && settings::pauseHoursResumeAt(time(nullptr)))
     {
       report.paused = report.accountsOk == 0 && report.accountsFailed == 0;
       break;

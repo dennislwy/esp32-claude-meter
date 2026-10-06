@@ -11,6 +11,7 @@
 #include "board_pins.h"
 #include "build_info.h"
 #include "clock.h"
+#include "daily_window.h"
 #include "history.h"
 #include "news.h"
 #include "panel_html.h"
@@ -231,8 +232,8 @@ namespace
     d["ip"] = WiFi.localIP().toString();
     d["hostname"] = "claude-meter";
     d["uptime_s"] = (uint32_t)(millis() / 1000);
+    d["fw_version"] = FW_VERSION;
     d["fw_rev"] = FW_GIT_REV;
-    d["fw_built"] = FW_BUILD_TIME;
     // Internal SRAM only: PSRAM is plentiful, internal heap is what TLS and the web server exhaust
     d["heap_free"] = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     d["heap_min"] = (uint32_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
@@ -251,14 +252,14 @@ namespace
     d["quiet_end_h"] = settings::quietHoursEnd();
     d["quiet_end_m"] = settings::quietMinuteEnd();
     d["quiet_on"] = settings::quietHoursEnabled();
-    d["break_start_h"] = settings::breakHoursStart();
-    d["break_start_m"] = settings::breakMinuteStart();
-    d["break_end_h"] = settings::breakHoursEnd();
-    d["break_end_m"] = settings::breakMinuteEnd();
-    d["break_on"] = settings::breakHoursEnabled();
-    const time_t breakResume = clockValid() ? settings::breakHoursResumeAt(time(nullptr)) : 0;
-    d["break_active"] = breakResume != 0;
-    d["break_resume_epoch"] = (uint32_t)breakResume;
+    d["pause_start_h"] = settings::pauseHoursStart();
+    d["pause_start_m"] = settings::pauseMinuteStart();
+    d["pause_end_h"] = settings::pauseHoursEnd();
+    d["pause_end_m"] = settings::pauseMinuteEnd();
+    d["pause_on"] = settings::pauseHoursEnabled();
+    const time_t pauseResume = clockValid() ? settings::pauseHoursResumeAt(time(nullptr)) : 0;
+    d["pause_active"] = pauseResume != 0;
+    d["pause_resume_epoch"] = (uint32_t)pauseResume;
     d["audio_vol"] = settings::audioVolume();
     d["tz"] = settings::timeZone();
     d["tz_name"] = settings::timeZoneName();
@@ -285,6 +286,28 @@ namespace
     sendJson(200, d);
   }
 
+  bool readWindowSettings(JsonDocument &body, const char *const keys[4], const char *onKey,
+                          int (&times)[4], bool &hasTimes)
+  {
+    hasTimes = false;
+    for (int i = 0; i < 4; i++)
+    {
+      const JsonVariant value = body[keys[i]];
+      if (value.isUnbound())
+        continue;
+      if (!value.is<int>())
+        return false;
+      times[i] = value.as<int>();
+      hasTimes = true;
+    }
+    const JsonVariant enabled = body[onKey];
+    if (!enabled.isUnbound() && !enabled.is<bool>())
+      return false;
+    // Validate the complete resulting window, including omitted saved values.
+    return !(hasTimes || (enabled.is<bool>() && enabled.as<bool>())) ||
+           dailyWindowValid(times[0], times[1], times[2], times[3]);
+  }
+
   void handleSettings()
   {
     if (!requireAuth())
@@ -293,19 +316,22 @@ namespace
     if (!readJsonBody(body))
       return;
     // Validate everything that can be rejected before applying any of it
-    const char *const breakKeys[] = {"break_start_h", "break_start_m", "break_end_h", "break_end_m"};
-    for (int i = 0; i < 4; i++)
+    const char *const quietKeys[] = {"quiet_start_h", "quiet_start_m", "quiet_end_h", "quiet_end_m"};
+    int quietTimes[] = {settings::quietHoursStart(), settings::quietMinuteStart(),
+                        settings::quietHoursEnd(), settings::quietMinuteEnd()};
+    bool hasQuietTimes;
+    if (!readWindowSettings(body, quietKeys, "quiet_on", quietTimes, hasQuietTimes))
     {
-      const JsonVariant value = body[breakKeys[i]];
-      if (!value.isNull() && (!value.is<int>() || value.as<int>() < 0 || value.as<int>() > (i % 2 == 0 ? 23 : 59)))
-      {
-        sendErr(400, "bad_break_hours");
-        return;
-      }
+      sendErr(400, "bad_quiet_hours");
+      return;
     }
-    if (!body["break_on"].isNull() && !body["break_on"].is<bool>())
+    const char *const pauseKeys[] = {"pause_start_h", "pause_start_m", "pause_end_h", "pause_end_m"};
+    int pauseTimes[] = {settings::pauseHoursStart(), settings::pauseMinuteStart(),
+                        settings::pauseHoursEnd(), settings::pauseMinuteEnd()};
+    bool hasPauseTimes;
+    if (!readWindowSettings(body, pauseKeys, "pause_on", pauseTimes, hasPauseTimes))
     {
-      sendErr(400, "bad_break_hours");
+      sendErr(400, "bad_pause_hours");
       return;
     }
     const bool hasRotation = !body["rotation"].isNull();
@@ -341,26 +367,14 @@ namespace
       settings::setWarningPercent5h(body["warn5"].as<int>());
     if (body["warn7"].is<int>())
       settings::setWarningPercent7d(body["warn7"].as<int>());
-    if (body["quiet_start_h"].is<int>() && body["quiet_end_h"].is<int>())
-    {
-      const int sh = body["quiet_start_h"].as<int>();
-      const int sm = body["quiet_start_m"].is<int>() ? body["quiet_start_m"].as<int>() : 0;
-      const int eh = body["quiet_end_h"].as<int>();
-      const int em = body["quiet_end_m"].is<int>() ? body["quiet_end_m"].as<int>() : 0;
-      settings::setQuietHours(sh, sm, eh, em);
-    }
+    if (hasQuietTimes)
+      settings::setQuietHours(quietTimes[0], quietTimes[1], quietTimes[2], quietTimes[3]);
     if (!body["quiet_on"].isNull())
       settings::setQuietHoursEnabled(body["quiet_on"].as<bool>());
-    if (!body["break_start_h"].isNull() || !body["break_start_m"].isNull() ||
-        !body["break_end_h"].isNull() || !body["break_end_m"].isNull())
-    {
-      settings::setBreakHours(body["break_start_h"] | settings::breakHoursStart(),
-                              body["break_start_m"] | settings::breakMinuteStart(),
-                              body["break_end_h"] | settings::breakHoursEnd(),
-                              body["break_end_m"] | settings::breakMinuteEnd());
-    }
-    if (!body["break_on"].isNull())
-      settings::setBreakHoursEnabled(body["break_on"].as<bool>());
+    if (hasPauseTimes)
+      settings::setPauseHours(pauseTimes[0], pauseTimes[1], pauseTimes[2], pauseTimes[3]);
+    if (!body["pause_on"].isNull())
+      settings::setPauseHoursEnabled(body["pause_on"].as<bool>());
     if (body["audio_vol"].is<int>())
       settings::setAudioVolume(body["audio_vol"].as<int>());
     pendingActions |= PANEL_ACT_SETTINGS_SAVED;

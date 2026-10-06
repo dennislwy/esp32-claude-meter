@@ -17,17 +17,18 @@ polls both Claude accounts, draws the ePaper, triggers any alerts, and
 deep-sleeps again. Averages ~1 mA on battery (~17 days on a 400 mAh
 pack).
 
-**Break Hours** (Polling & alerts > Polling & breaks) optionally pauses automatic
-usage checks for a daily local-time window. It is off by default. Normal
+**Pause Hours** (Polling & alerts > Polling & pauses) optionally pauses automatic
+usage checks for a daily local-time window. It defaults to 00:00-06:00,
+disabled, and preserves existing saved schedules after the Break Hours rename. Normal
 mode defers its next timer wake until the window ends, retaining cached
 usage and leaving Wi-Fi off; it does not wake every poll interval just to
-skip a request. Overnight windows work, and equal start/end times disable
-the window. Button wakeups still work. An explicit panel **Refresh now** or
+skip a request. Overnight windows work; matching From/Until times are rejected.
+Button wakeups still work. An explicit panel **Refresh now** or
 serial `usage` overrides the pause. Quiet hours only mutes alerts and remains
 independent. Panel/debug modes keep their existing awake behavior.
 
-Serial configuration: `break on`, `break off`, and `break 22:30-7:15` (or
-`break 22-8`). `status` shows the saved window and enabled state.
+Serial configuration: `pause on`, `pause off`, and `pause 22:30-7:15` (or
+`pause 22-8`). `status` shows the saved window and enabled state.
 
 Button behaviour (awake only):
 - Short **BOOT** → cycle to the next view

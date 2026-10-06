@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include "usage_poll.h"
 
-// LAN control panel (R8 Phase 1). STA-mode HTTP server on :80, started on
+// Web control panel (R8 Phase 1). STA-mode HTTP server on :80, started on
 // demand by a long BOOT press. The server runs single-threaded: handlers
 // execute inside panelService(), which the main loop() pumps. Entry/exit
 // is the caller's responsibility — this module owns the server lifecycle
@@ -12,17 +12,17 @@
 
 struct PanelDisplay
 {
-  String ip;        // dotted IPv4, "" when not connected
-  String hostname;  // "<name>.local" for mDNS
-  String pin;       // 6-digit login PIN, regenerated each entry
+  String ip;       // dotted IPv4, "" when not connected
+  String hostname; // "<name>.local" for mDNS
+  String pin;      // 6-digit login PIN, regenerated each entry
 };
 
 // Action flags returned by panelTakeAction() once a handler has queued them
-constexpr uint8_t PANEL_ACT_REFRESH = 0x01;         // poll Claude usage now
-constexpr uint8_t PANEL_ACT_SETTINGS_SAVED = 0x02;  // re-evaluate polling after a settings POST
-constexpr uint8_t PANEL_ACT_REBOOT = 0x04;          // ESP.restart() after a short delay
-constexpr uint8_t PANEL_ACT_TIME_ZONE = 0x08;       // apply the new time zone, rewrite the RTC, redraw
-constexpr uint8_t PANEL_ACT_ROTATION = 0x10;        // apply the new rotation with a full refresh
+constexpr uint8_t PANEL_ACT_REFRESH = 0x01;        // poll Claude usage now
+constexpr uint8_t PANEL_ACT_SETTINGS_SAVED = 0x02; // re-evaluate polling after a settings POST
+constexpr uint8_t PANEL_ACT_REBOOT = 0x04;         // ESP.restart() after a short delay
+constexpr uint8_t PANEL_ACT_TIME_ZONE = 0x08;      // apply the new time zone, rewrite the RTC, redraw
+constexpr uint8_t PANEL_ACT_ROTATION = 0x10;       // apply the new rotation with a full refresh
 
 // Brings up the server. Caller must have Wi-Fi connected and mDNS available.
 // Generates a fresh random PIN and fills `out` so the display can show it.
