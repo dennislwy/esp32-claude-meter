@@ -13,8 +13,10 @@ Apache ECharts uses Apache-2.0, ZRender uses BSD-3-Clause, and tslib uses 0BSD.
 The `i-usage` SVG in `src/panel_html.h` uses the
 [Lucide Gauge](https://lucide.dev/icons/gauge) paths. The chart's Save image
 toolbox control uses the [Lucide File Image](https://lucide.dev/icons/file-image)
-paths. The following notice applies to both icons; the project's own code is
-covered by [LICENSE](../LICENSE).
+paths, and its Export CSV control uses the
+[Lucide File Down](https://lucide.dev/icons/file-down) paths. The following
+notice applies to these icons; the project's own code is covered by
+[LICENSE](../LICENSE).
 
 ```text
 ISC License

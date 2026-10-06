@@ -93,6 +93,15 @@ library is served locally from firmware flash and loaded after sign-in.
   `claude-meter-usage-history.png`, at 2x resolution with the current theme's
   background. The title is included in the PNG; the toolbox control
   itself is omitted
+- The **Export CSV** control (Lucide file-down), right of Save image,
+  downloads the raw 7-day history as
+  `claude-meter-<first-timestamp>-<last-timestamp>.csv`. Columns:
+  `timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d`, where `timestamp` is the
+  start of the 30-minute sample slot in epoch seconds and the values are
+  usage %. It is the device's full 30-minute resolution, not the chart's
+  hourly maximum. Slots with no sample for either account (device off) are
+  left out; a value missing for one account is an empty cell. With no
+  history yet, the chart status says "No history to export yet."
 - Hover or tap for device-local time, account, usage window, and percentage.
   Account names are rendered as text, including inside tooltips. Mobile
   taps preserve line colors, widths, and opacity without focusing one
