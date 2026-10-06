@@ -360,7 +360,7 @@ the compressed chart asset byte-for-byte.
 The ECharts firmware, including the current icon edits, was flashed on
 2026-10-06 to the ESP32-S3-PICO-1 on COM5. The uploader verified the flash
 hash. Live Chromium checks confirmed the exact embedded HTML and chart
-bundle, sign-in at 360 x 780/DPR 3 in both themes, four 168-sample series,
+bundle, sign-in at 360 x 780/DPR 3 in both themes, four 336-sample series,
 solid/dashed styles, independent legend toggles, combined/separate graphs,
 tooltips, click/button/pinch zoom, and preserved zoom across page changes.
 The first chart-initialization check timed out; a fresh browser session
@@ -440,7 +440,7 @@ with a 1 px line and a device-local weekday/time label. Desktop pointer
 behavior is preserved, and resizing re-applies the appropriate options.
 The firmware was flashed to COM5 on 2026-10-06 with hash verification.
 Local Chromium regressions and live checks at 360 x 780/DPR 3 passed touch
-pointer visibility, snapping to an hourly tick, line width, and time label.
+pointer visibility, snapping to a sample tick, line width, and time label.
 Live checks also verified slider removal, legend/export-icon alignment,
 PNG exports, gesture/keyboard zoom, exact HTML/chart bundle, and four
 authenticated state requests over 30 seconds without browser errors.

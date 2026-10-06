@@ -502,11 +502,11 @@ namespace
   {
     if (!requireAuth())
       return;
-    constexpr int COLS = HIST_SLOTS / 2; // 168 one-hour columns
+    constexpr int COLS = HIST_SLOTS; // 336 half-hour columns, the device's full resolution
     HistSlot buf[HIST_SLOTS];
     JsonDocument d;
     d["cols"] = COLS;
-    d["col_seconds"] = 3600;
+    d["col_seconds"] = HIST_SLOT_SEC;
     JsonArray accounts = d["accounts"].to<JsonArray>();
     uint32_t newestAny = 0;
     for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
@@ -523,29 +523,14 @@ namespace
       JsonArray d7 = a["d7"].to<JsonArray>();
       for (int c = 0; c < COLS; c++)
       {
-        // Max of the two 30-min samples per hour-column, matching the ePaper chart
-        const HistSlot &aSlot = buf[c * 2];
-        const HistSlot &bSlot = buf[c * 2 + 1];
-        const auto pickMax = [](uint8_t x, uint8_t y) -> int
-        {
-          if (x == HIST_EMPTY && y == HIST_EMPTY)
-            return -1;
-          if (x == HIST_EMPTY)
-            return (int)y;
-          if (y == HIST_EMPTY)
-            return (int)x;
-          return (int)(x > y ? x : y);
-        };
-        const int v5 = pickMax(aSlot.h5, bSlot.h5);
-        const int v7 = pickMax(aSlot.d7, bSlot.d7);
-        if (v5 < 0)
+        if (buf[c].h5 == HIST_EMPTY)
           h5.add(nullptr);
         else
-          h5.add(v5);
-        if (v7 < 0)
+          h5.add(buf[c].h5);
+        if (buf[c].d7 == HIST_EMPTY)
           d7.add(nullptr);
         else
-          d7.add(v7);
+          d7.add(buf[c].d7);
       }
     }
     d["newest_epoch"] = newestAny;

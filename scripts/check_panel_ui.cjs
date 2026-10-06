@@ -45,7 +45,12 @@ const initialState = {
   const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
   const errors = [], posts = [], external = [];
   let signedIn = false, state = structuredClone(initialState), loginThrottle = false, offline = false, clearHistory = false, newsFetching = false, csvEmpty = false;
+  const HIST_COLS = 336; // the device's full resolution: 7 days of 30-minute slots
   const csvBody = 'timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d\r\n1791000000,12,40,3,\r\n1791001800,14,41,,\r\n';
+  // The device sends epoch seconds; the browser prepends datetime in its own zone, so the two
+  // contexts below must produce different clock times from the identical response body.
+  const csvWithDatetime = local => 'datetime,timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d\r\n'
+    + local[0] + ',1791000000,12,40,3,\r\n' + local[1] + ',1791001800,14,41,,\r\n';
   let loginGate = null;
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, timezoneId: 'America/New_York', reducedMotion: 'reduce' });
   const page = await context.newPage();
@@ -66,7 +71,7 @@ const initialState = {
     if (!signedIn) return reply({ error: 'auth' }, 401);
     if (endpoint === '/api/logout') { signedIn = false; return reply({ ok: true }); }
     if (endpoint === '/api/state') return reply(state);
-    if (endpoint === '/api/history') return reply({ cols: 168, col_seconds: 3600, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: Array.from({length:168},(_,i)=>clearHistory||i===50?null:i%40), d7: Array.from({length:168},(_,i)=>clearHistory||i===50?null:20+i%50) })) });
+    if (endpoint === '/api/history') return reply({ cols: HIST_COLS, col_seconds: 1800, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:i%40), d7: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:20+i%50) })) });
     if (endpoint === '/api/news') return reply({ ok: true, fetching: newsFetching, fetched_epoch: now, items: Array.from({ length: 8 }, (_, i) => ({ title: i ? 'Preview headline ' + i : '<img src=x onerror="window.injected=true">', date: 'Oct 5, 2026', link: i ? 'https://www.anthropic.com/news' : 'javascript:alert(1)' })) });
     if (endpoint === '/api/settings') { Object.assign(state, body); return reply({ ok: true }); }
     if (endpoint === '/api/tokens') { state.accounts.forEach((a, i) => a.name = body['name' + (i + 1)]); return reply({ ok: true, probes: [{ account: 1, ok: true, http: 200, h5: 29, d7: 60 }] }); }
@@ -185,7 +190,7 @@ const initialState = {
     if (await target.evaluate(()=>'ontouchstart' in window)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
     else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
   };
-  const exportChartCsv = async target => {
+  const exportChartCsv = async (target, expected) => {
     await target.locator('#histChart').scrollIntoViewIfNeeded();
     const image = await toolboxIconCenter(target,'Save image'), csv = await toolboxIconCenter(target,'Export CSV');
     assert(csv[0] > image[0] + 18, 'Export CSV sits to the right of Save image: '+JSON.stringify({image,csv}));
@@ -194,7 +199,7 @@ const initialState = {
     await tapChart(target, csv);
     const download = await pending;
     assert.equal(download.suggestedFilename(), 'claude-meter-1791000000-1791001800.csv');
-    assert.equal(fs.readFileSync(await download.path(), 'utf8'), csvBody);
+    assert.equal(fs.readFileSync(await download.path(), 'utf8'), csvWithDatetime(expected));
     csvEmpty = true;
     await tapChart(target, csv);
     await target.waitForFunction(() => document.querySelector('#chartStatus').textContent === 'No history to export yet.');
@@ -367,9 +372,9 @@ const initialState = {
     assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.title),'Save image');
     await saveChartImage(page);
     assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.myExportCsv.title),'Export CSV');
-    await exportChartCsv(page);
+    await exportChartCsv(page, ['03-Oct-2026 00:00:00', '03-Oct-2026 00:30:00']);
     const samples = await page.evaluate(() => histChart.getOption().series.map(s => ({count:s.data.length,gap:s.data[50],style:s.lineStyle.type,width:s.lineStyle.width})));
-    assert.deepEqual(samples, [0,1,2,3].map(i => ({count:168,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.6})));
+    assert.deepEqual(samples, [0,1,2,3].map(i => ({count:HIST_COLS,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.6})));
     for (const zone of ['Asia/Kuala_Lumpur', 'Asia/Kolkata', 'Asia/Kathmandu', 'America/New_York']) {
       await page.evaluate(async zone => { deviceTimeZone=zone; await renderHistory(lastHistData); }, zone);
       const midnight = await page.evaluate(() => {
@@ -413,7 +418,7 @@ const initialState = {
     assert.deepEqual(await page.evaluate(()=>({...histZoom})),{start:0,end:100});
     await page.locator('#histLegend button').last().focus();await page.locator('#histLegend button').last().click();
     // Real mobile touch events exercise double-tap detection and ECharts' pinch recognizer.
-    const touchContext=await browser.newContext({viewport:{width:360,height:780},isMobile:true,hasTouch:true});
+    const touchContext=await browser.newContext({viewport:{width:360,height:780},isMobile:true,hasTouch:true,timezoneId:'Asia/Kuala_Lumpur'});
     try{
       const touchPage=await touchContext.newPage();await touchPage.route('**/api/**',routeApi);
       touchPage.on('pageerror',error=>errors.push(error.message));
@@ -433,7 +438,7 @@ const initialState = {
       await clickChartLegend(touchPage,0);
       await checkMobileLineTap(touchPage);
       await saveChartImage(touchPage);
-      await exportChartCsv(touchPage);
+      await exportChartCsv(touchPage, ['03-Oct-2026 12:00:00', '03-Oct-2026 12:30:00']);
       await touchPage.locator('#histChart').scrollIntoViewIfNeeded();
       const box=await touchPage.locator('#histChart').boundingBox();
       const cdp=await touchContext.newCDPSession(touchPage);
@@ -506,7 +511,7 @@ const initialState = {
     await page.locator('[data-theme=dark]').click();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     const colors = await page.evaluate(() => ({ bar: getComputedStyle(document.querySelector('.bar i')).backgroundColor, line: histChart.getOption().series[0].lineStyle.color }));
-    assert.equal(colors.line, '#7daef0', 'Chart recolors for dark mode');
+    assert.equal(colors.line, '#e99b7d', 'Chart recolors for dark mode');
     await page.reload(); await page.locator('.usage-account').first().waitFor();
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark', 'Theme persists after reload');
     await page.locator('[data-theme=system]').click(); await page.emulateMedia({ colorScheme: 'light' });
