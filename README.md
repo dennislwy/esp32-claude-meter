@@ -143,11 +143,23 @@ docs/          design notes: modes, buttons, battery, alert sounds, web panel
 - Thanks to [Olshansk/rss-feeds](https://github.com/Olshansk/rss-feeds)
   for maintaining the RSS feed of Anthropic news that the panel's news card
   reads.
+- Thanks to [Lucide](https://lucide.dev) for the icons the panel draws inline:
+  [Gauge](https://lucide.dev/icons/gauge) for the usage view,
+  [File Image](https://lucide.dev/icons/file-image) for the chart's Save image
+  control, and [File Down](https://lucide.dev/icons/file-down) for Export CSV.
+  ISC licensed.
+- The Claude Code mark on the e-paper status bar (`src/claude_icon.c`) is
+  rasterized from the MIT-licensed mono SVG on
+  [theSVG](https://thesvg.org/icon/claude-code?variant=mono). The panel asks
+  for Anthropic Serif by name and falls back to Georgia; no font file is
+  bundled or downloaded. Both are Anthropic brand assets used to match the
+  look of Claude, not a claim of endorsement — see the
+  [disclaimer](#disclaimer).
 
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-The Lucide Gauge icon retains its ISC license; see
+The Lucide icons retain their ISC license; see
 [third-party notices](docs/THIRD_PARTY_NOTICES.md).
 
 ## Disclaimer
