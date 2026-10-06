@@ -26,9 +26,11 @@ ClaudeUsage fetchClaudeUsage(const char *token, const char *rootCaPem)
   // A PEM list rather than an ESP-IDF cert bundle: IDF 4.4's bundle only checks the topmost
   // issuer, which fails for chains cross-signed by roots Mozilla has since removed
   client.setCACert(rootCaPem);
+  client.setHandshakeTimeout(TIMEOUT_MS / 1000);
 
   HTTPClient https;
   https.setTimeout(TIMEOUT_MS);
+  https.setConnectTimeout(TIMEOUT_MS);
   if (!https.begin(client, "https://api.anthropic.com/v1/messages"))
   {
     usage.httpStatus = HTTPC_ERROR_CONNECTION_REFUSED;

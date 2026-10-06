@@ -19,7 +19,7 @@ struct PanelDisplay
 
 // Action flags returned by panelTakeAction() once a handler has queued them
 constexpr uint8_t PANEL_ACT_REFRESH = 0x01;        // poll Claude usage now
-constexpr uint8_t PANEL_ACT_SETTINGS_SAVED = 0x02; // re-evaluate polling after a settings POST
+constexpr uint8_t PANEL_ACT_SETTINGS_SAVED = 0x02; // re-evaluate changed polling settings or tokens
 constexpr uint8_t PANEL_ACT_REBOOT = 0x04;         // ESP.restart() after a short delay
 constexpr uint8_t PANEL_ACT_TIME_ZONE = 0x08;      // apply the new time zone, rewrite the RTC, redraw
 constexpr uint8_t PANEL_ACT_ROTATION = 0x10;       // apply the new rotation with a full refresh

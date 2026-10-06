@@ -531,3 +531,24 @@ text, which would widen the toolbox and push into the legend. ECharts 6 renders
 the feature *name* (`saveAsImage`) by default, so `toolbox.tooltip.formatter`
 explicitly returns the title. The tooltip is themed to match the chart tooltip
 and uses `confine` so it cannot spill outside the canvas on narrow screens.
+
+Panel mode now continues automatic usage polling at the configured interval.
+`panel_usage_poll.cpp` snapshots account data, credentials, and Pause Hours
+on the main loop, then runs HTTPS on a FreeRTOS worker. Release/acquire
+publication prevents `/api/state` from seeing partially written results.
+Only the main loop updates the cache, history, alerts, and RTC; the worker
+uses the existing Wi-Fi connection and never powers the radio off.
+Automatic jobs honor Pause Hours before each account request. Manual refresh
+requests coalesce and override the pause. Polling settings and credential
+changes cancel outdated results; unrelated settings keep the poll schedule.
+An exit waits for the current request to finish and cancels further accounts.
+NTP and reconnect waits are serviced on the loop without a blocking delay.
+Host regression checks cover a stalled request with readable cached state,
+result publication, errors, cancellation, changed tokens, pause/override,
+Wi-Fi loss, and allocation recovery. The firmware build and host worker and
+Pause Hours regressions passed. On-board checks after flashing and rebooting
+confirmed both accounts returned HTTP 200 on consecutive automatic polls at
+the saved two-minute interval. The panel continued serving cached state
+during HTTPS requests and published fresh values when the worker finished.
+The active Pause Hours window suppressed automatic polling; it was briefly
+disabled for the live interval check and restored afterward.

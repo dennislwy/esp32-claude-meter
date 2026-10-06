@@ -200,15 +200,34 @@ action flags drained by `loop()`:
 
 | Flag                       | Set by                                    | Handled in `loop()`                                                                                                                              |
 | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Calls `pollAndShow(true)` (explicitly overrides Pause Hours), reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
-| `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens`            | Resets the next poll deadline so changed/disabled Pause Hours take effect when Normal mode resumes; client polls `/api/state` on a timer         |
+| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Queues a worker poll that overrides Pause Hours; Wi-Fi stays connected and repeated requests coalesce |
+| `PANEL_ACT_SETTINGS_SAVED` | Polling/pause/time-zone settings or new tokens | Cancels outdated results and re-evaluates the next automatic poll after about two seconds, including during the active panel session |
 | `PANEL_ACT_TIME_ZONE`      | `/api/settings` with a changed `tz`       | `clockApplyTimeZone()`: `setenv("TZ")` + `tzset()`, rewrite the RTC (which holds local time) in the new zone, redraw                             |
 | `PANEL_ACT_ROTATION`       | `/api/settings` with a changed `rotation` | `lvglPortSetRotation()`, then redraw with a full e-paper refresh                                                                                 |
 | `PANEL_ACT_REBOOT`         | `/api/reboot`, `/api/factory-reset`       | `delay(800)` to let the response flush, then `ESP.restart()`                                                                                     |
 
-Wi-Fi stays up the entire time panel mode is active. Each refresh
-cycles through `pollUsage()` (which internally disconnects) and then
-reconnects — expect a ~3-5 s stall during a refresh.
+Automatic usage polling continues during panel mode at the configured
+1–5 minute interval, with Pause Hours deferring the next poll until the
+window ends. Manual refreshes override that pause. One worker job runs at
+a time, using the existing Wi-Fi connection without switching the radio off.
+The main loop serves cached state during HTTPS requests and applies results
+only after the worker publishes them. It then records history and checks
+alerts; the browser reads the updated state on its five-second timer.
+
+HTTP failures preserve earlier percentages and their age. Polling settings
+and token changes cancel older snapshots; volume, Quiet Hours, and display
+edits do not trigger extra usage polls. Clock sync and Wi-Fi reconnection
+are serviced without a blocking wait on the loop. Saved Wi-Fi credentials
+are applied before the next poll. HTTPS connect, handshake, and read waits
+are bounded; an exit during a request finishes that request and skips the
+remaining accounts before disconnecting. Automatic polls do not count as
+authenticated activity, so the five-minute idle exit still applies.
+
+The worker isolates usage HTTPS latency. Existing synchronous operations
+such as token probes, news fetching, ePaper redraws, and sound playback can
+still briefly delay HTTP handling. Serial `scan` and `tlscheck` require
+leaving panel mode because those diagnostics turn Wi-Fi off; the panel's
+Wi-Fi scan remains available.
 
 Pause Hours and Quiet hours fields accept individual partial updates: omitted
 times keep their saved values. Hours must be integers 0-23, minutes 0-59,

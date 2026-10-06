@@ -255,9 +255,16 @@ commands (`pause`). Existing saved Break Hours values migrate to the new
 NVS keys without resetting the window or switch; the midnight default only
 applies when no schedule has been saved.
 
-Settings changes do not force a re-poll; the UI picks them up on its
-next `/api/state` tick. Pause Hours changes re-evaluate the next poll on exit
-from panel mode, including when a pause is disabled or shortened.
+Usage polling continues while the panel is open, at the configured interval.
+HTTPS requests run on a worker while the main loop serves cached state;
+successful results appear on the next five-second `/api/state` tick. Failed
+requests retain the last successful values and their original age.
+
+Polling, Pause Hours, time-zone, and token changes cancel outdated worker
+results and re-evaluate the next automatic poll after about two seconds,
+respecting the updated pause window. Other settings update on the next
+status tick without triggering extra usage requests. **Refresh now** queues
+a manual poll, with repeated clicks coalesced while a request is in flight.
 
 During Pause Hours, Usage shows a pause notice and keeps the last cached
 figures. Normal mode sleeps until the window ends without periodic Wi-Fi
