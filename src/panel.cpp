@@ -552,6 +552,60 @@ namespace
     sendJson(200, d);
   }
 
+  // Raw 30-min samples as CSV: timestamp (slot start, epoch seconds), then 5h and 7d % per
+  // account. Rows with no sample for any account (device off) are left out; a missing value for
+  // one account is an empty cell.
+  void handleHistoryCsv()
+  {
+    if (!requireAuth())
+      return;
+    static_assert(settings::CLAUDE_TOKEN_COUNT == 2, "CSV columns are acct1 and acct2");
+    HistSlot buf[settings::CLAUDE_TOKEN_COUNT][HIST_SLOTS];
+    uint32_t newest = 0;
+    for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+    {
+      historySnapshot(i, buf[i], newest);
+    }
+    String csv;
+    csv.reserve(40 + HIST_SLOTS * 32);
+    csv += "timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d\r\n";
+    uint32_t from = 0, till = 0;
+    for (int slot = 0; slot < HIST_SLOTS; slot++)
+    {
+      bool any = false;
+      for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+      {
+        any |= buf[i][slot].h5 != HIST_EMPTY || buf[i][slot].d7 != HIST_EMPTY;
+      }
+      if (!any)
+        continue;
+      const uint32_t start = newest - (HIST_SLOTS - slot) * HIST_SLOT_SEC;
+      if (from == 0)
+        from = start;
+      till = start;
+      csv += String(start);
+      for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+      {
+        for (const uint8_t v : {buf[i][slot].h5, buf[i][slot].d7})
+        {
+          csv += ',';
+          if (v != HIST_EMPTY)
+            csv += String(v);
+        }
+      }
+      csv += "\r\n";
+    }
+    if (from == 0)
+    {
+      sendErr(404, "no_history");
+      return;
+    }
+    server->sendHeader("Content-Disposition",
+                       String("attachment; filename=\"claude-meter-") + from + "-" + till + ".csv\"");
+    server->sendHeader("Cache-Control", "no-store");
+    server->send(200, "text/csv; charset=utf-8", csv);
+  }
+
   void handleHistoryClear()
   {
     if (!requireAuth())
@@ -712,6 +766,7 @@ void panelBegin(PanelDisplay &out)
   server->on("/api/refresh", HTTP_POST, handleRefresh);
   server->on("/api/history", HTTP_GET, handleHistory);
   server->on("/api/history/clear", HTTP_POST, handleHistoryClear);
+  server->on("/api/history.csv", HTTP_GET, handleHistoryCsv);
   server->on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   server->on("/api/sounds/play", HTTP_POST, handleSoundsPlay);
   server->on("/api/news", HTTP_GET, handleNews);

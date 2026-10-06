@@ -44,7 +44,8 @@ const initialState = {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
   const errors = [], posts = [], external = [];
-  let signedIn = false, state = structuredClone(initialState), loginThrottle = false, offline = false, clearHistory = false, newsFetching = false;
+  let signedIn = false, state = structuredClone(initialState), loginThrottle = false, offline = false, clearHistory = false, newsFetching = false, csvEmpty = false;
+  const csvBody = 'timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d\r\n1791000000,12,40,3,\r\n1791001800,14,41,,\r\n';
   let loginGate = null;
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, timezoneId: 'America/New_York', reducedMotion: 'reduce' });
   const page = await context.newPage();
@@ -70,6 +71,10 @@ const initialState = {
     if (endpoint === '/api/settings') { Object.assign(state, body); return reply({ ok: true }); }
     if (endpoint === '/api/tokens') { state.accounts.forEach((a, i) => a.name = body['name' + (i + 1)]); return reply({ ok: true, probes: [{ account: 1, ok: true, http: 200, h5: 29, d7: 60 }] }); }
     if (endpoint === '/api/wifi/scan') return reply({ networks: [{ ssid: '<img src=x onerror="window.injected=true">', rssi: -45, channel: 6, secure: true, saved: false }] });
+    if (endpoint === '/api/history.csv') {
+      if (csvEmpty) return reply({ error: 'no_history' }, 404);
+      return route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8', headers: { 'Content-Disposition': 'attachment; filename="claude-meter-1791000000-1791001800.csv"' }, body: csvBody });
+    }
     if (endpoint === '/api/history/clear') clearHistory = true;
     return reply({ ok: true });
   };
@@ -139,13 +144,17 @@ const initialState = {
       };
       const toolbox=histChart.getViewOfComponentModel(model.getComponent('toolbox'));
       const icon=toolbox.group.children().find(item=>item.__title==='Save image');
+      const iconTops=toolbox.group.children().map(item=>{
+        const rect=item.getBoundingRect();
+        return item.transformCoordToGlobal(rect.x,rect.y)[1];
+      });
       const title=histChart.getViewOfComponentModel(model.getComponent('title'));
       const titleRect=title.group.getBoundingRect(),titleTop=title.group.transformCoordToGlobal(titleRect.x,titleRect.y);
       const rect=legend.group.getBoundingRect(),top=legend.group.transformCoordToGlobal(rect.x,rect.y);
       return {zoomTypes:histChart.getOption().dataZoom.map(item=>item.type),items:items.length,
         titleText:model.getComponent('title').get('text'),titleBottom:titleTop[1]+titleRect.height,
         legendTop:top[1],legendBottom:top[1]+rect.height,plotTop:model.getComponent('grid').coordinateSystem.getRect().y,
-        titleCenter:center(title.group),iconCenter:center(icon)};
+        titleCenter:center(title.group),iconCenter:center(icon),iconTop:Math.min(...iconTops)};
     });
     assert.deepEqual(layout.zoomTypes,['inside'],'Zoom slider is removed; gesture zoom remains');
     assert.equal(layout.items,4);
@@ -153,6 +162,7 @@ const initialState = {
     assert(layout.titleBottom<layout.legendTop,'Legend stays below the title');
     assert(layout.legendBottom<layout.plotTop,'Legend stays above the plot');
     assert(Math.abs(layout.titleCenter-layout.iconCenter)<1,'Save image is vertically centered with the chart title: '+JSON.stringify(layout));
+    assert(layout.iconTop>=0,'Toolbox icons are not clipped by the top of the chart: '+JSON.stringify(layout));
   };
   const checkMobileXAxisSpacing = async target => {
     const spacing=await target.evaluate(()=>{
@@ -165,16 +175,37 @@ const initialState = {
     assert(spacing.count>=2,'Mobile x-axis retains useful time labels');
     assert(spacing.minGap>=48,'Mobile x-axis labels have at least 48px between centers: '+JSON.stringify(spacing));
   };
+  const toolboxIconCenter = (target, title) => target.evaluate(title => {
+    const icon=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group.children().find(item=>item.__title===title);
+    const rect=icon.getBoundingRect();
+    return icon.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2);
+  }, title);
+  const tapChart = async (target, point) => {
+    const box = await target.locator('#histChart').boundingBox();
+    if (await target.evaluate(()=>'ontouchstart' in window)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
+    else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
+  };
+  const exportChartCsv = async target => {
+    await target.locator('#histChart').scrollIntoViewIfNeeded();
+    const image = await toolboxIconCenter(target,'Save image'), csv = await toolboxIconCenter(target,'Export CSV');
+    assert(csv[0] > image[0] + 18, 'Export CSV sits to the right of Save image: '+JSON.stringify({image,csv}));
+    assert(Math.abs(csv[1] - image[1]) < 1, 'Export CSV is level with Save image');
+    const pending = target.waitForEvent('download');
+    await tapChart(target, csv);
+    const download = await pending;
+    assert.equal(download.suggestedFilename(), 'claude-meter-1791000000-1791001800.csv');
+    assert.equal(fs.readFileSync(await download.path(), 'utf8'), csvBody);
+    csvEmpty = true;
+    await tapChart(target, csv);
+    await target.waitForFunction(() => document.querySelector('#chartStatus').textContent === 'No history to export yet.');
+    csvEmpty = false;
+  };
   const saveChartImage = async target => {
     await target.locator('#histChart').scrollIntoViewIfNeeded();
     const box = await target.locator('#histChart').boundingBox();
-    const point = await target.evaluate(() => {
-      const group=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group;
-      const rect=group.getBoundingRect();
-      return group.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2);
-    });
+    const point = await toolboxIconCenter(target,'Save image');
     const pending=target.waitForEvent('download');
-    if (await target.evaluate(()=>navigator.maxTouchPoints>0)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
+    if (await target.evaluate(()=>'ontouchstart' in window)) await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
     else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
     const download=await pending;
     assert.equal(download.suggestedFilename(),'claude-meter-usage-history.png');
@@ -213,7 +244,7 @@ const initialState = {
       const rect=group.getBoundingRect();
       return group.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2);
     },index);
-    if(await target.evaluate(()=>navigator.maxTouchPoints>0)){
+    if(await target.evaluate(()=>'ontouchstart' in window)){
       const box=await target.locator('#histChart').boundingBox();
       await target.touchscreen.tap(box.x+point[0],box.y+point[1]);
     }else await target.locator('#histChart').click({position:{x:point[0],y:point[1]}});
@@ -335,6 +366,8 @@ const initialState = {
     assert.equal(await page.locator('.chart-key').count(),0, 'History card has no extra chart key');
     assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.saveAsImage.title),'Save image');
     await saveChartImage(page);
+    assert.equal(await page.evaluate(()=>histChart.getOption().toolbox[0].feature.myExportCsv.title),'Export CSV');
+    await exportChartCsv(page);
     const samples = await page.evaluate(() => histChart.getOption().series.map(s => ({count:s.data.length,gap:s.data[50],style:s.lineStyle.type,width:s.lineStyle.width})));
     assert.deepEqual(samples, [0,1,2,3].map(i => ({count:168,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.6})));
     for (const zone of ['Asia/Kuala_Lumpur', 'Asia/Kolkata', 'Asia/Kathmandu', 'America/New_York']) {
@@ -400,6 +433,7 @@ const initialState = {
       await clickChartLegend(touchPage,0);
       await checkMobileLineTap(touchPage);
       await saveChartImage(touchPage);
+      await exportChartCsv(touchPage);
       await touchPage.locator('#histChart').scrollIntoViewIfNeeded();
       const box=await touchPage.locator('#histChart').boundingBox();
       const cdp=await touchContext.newCDPSession(touchPage);
