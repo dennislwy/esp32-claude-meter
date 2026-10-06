@@ -436,7 +436,7 @@ async function renderHistory(data){
     const legendContext=document.createElement('canvas').getContext('2d');
     legendContext.font='11px '+getComputedStyle(document.body).fontFamily;
     const legendLabel=name=>{
-      const label=histLabels[name]||name,maxWidth=Math.max(60,histChart.getWidth()-78);
+      const label=histLabels[name]||name,maxWidth=Math.max(60,histChart.getWidth()-106);
       if(legendContext.measureText(label).width<=maxWidth)return label;
       const suffix=label.slice(label.lastIndexOf(' · '));let account=label.slice(0,-suffix.length);
       while(account.length&&legendContext.measureText(account+'\u2026'+suffix).width>maxWidth)account=account.slice(0,-1);
@@ -445,8 +445,8 @@ async function renderHistory(data){
     histChart.setOption({animation:false,backgroundColor:'transparent',
       aria:{enabled:true,label:{description:hasSamples?'Seven-day usage history. Solid lines show 5-hour usage; dashed lines show 7-day usage. Use the series buttons to show or hide lines. Use plus/minus keys to zoom, arrow keys to pan, and 0 to reset.':'No usage history recorded yet.'}},
       title:{text:'7 days usage history',left:0,top:0,padding:0,textStyle:{color:text,fontFamily:getComputedStyle(document.body).fontFamily,fontSize:matchMedia('(max-width:480px)').matches?16:18,fontWeight:600}},
-      legend:{show:true,left:0,right:38,top:mobileSidebar.matches?46:50,itemWidth:18,itemHeight:8,itemGap:10,textStyle:{color:text,fontSize:11,fontFamily:getComputedStyle(document.body).fontFamily},formatter:legendLabel,data:series.map(item=>item.name),selected:histSelected},
-      toolbox:{right:4,top:0,padding:0,itemSize:18,showTitle:false,iconStyle:{borderColor:dim,borderWidth:1.5,borderCap:'round',borderJoin:'round'},emphasis:{iconStyle:{borderColor:text}},feature:{saveAsImage:{show:true,icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 12a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M20 17l-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22',title:'Save image',name:'claude-meter-usage-history',type:'png',pixelRatio:2,backgroundColor:card,excludeComponents:['toolbox']}}},
+      legend:{show:true,left:0,right:66,top:mobileSidebar.matches?46:50,itemWidth:18,itemHeight:8,itemGap:10,textStyle:{color:text,fontSize:11,fontFamily:getComputedStyle(document.body).fontFamily},formatter:legendLabel,data:series.map(item=>item.name),selected:histSelected},
+      toolbox:{right:4,top:0,padding:0,itemSize:18,showTitle:false,iconStyle:{borderColor:dim,borderWidth:1.5,borderCap:'round',borderJoin:'round'},emphasis:{iconStyle:{borderColor:text}},feature:{saveAsImage:{show:true,icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 12a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M20 17l-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22',title:'Save image',name:'claude-meter-usage-history',type:'png',pixelRatio:2,backgroundColor:card,excludeComponents:['toolbox']},myExportCsv:{show:true,title:'Export CSV',icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 18V12 M9 15l3 3l3-3',onclick:exportHistoryCsv}}},
       tooltip:{trigger:'axis',triggerOn:'mousemove|click',confine:true,renderMode:'html',formatter:historyTooltip,
         backgroundColor:card,borderColor:line,textStyle:{color:text,fontSize:12},extraCssText:'max-width:280px;white-space:normal;box-shadow:0 4px 20px #0002;'},
       axisPointer:{link:[{xAxisIndex:'all'}],lineStyle:{color:dim,type:'dashed'}},
@@ -458,17 +458,34 @@ async function renderHistory(data){
     const legendBottom=legendView.group.transformCoordToGlobal(legendRect.x,legendRect.y+legendRect.height)[1];
     const titleView=histChart.getViewOfComponentModel(histChart.getModel().getComponent('title'));
     const exportIcon=histChart.getViewOfComponentModel(histChart.getModel().getComponent('toolbox')).group.children().find(item=>item.__title==='Save image');
-    let exportTop=0;
+    // The icons are taller than the title, so the title drops to meet them; pulling them up instead
+    // would clip their top edge against the canvas.
+    let titleTop=0;
     if(titleView&&exportIcon){
       const rect=titleView.group.getBoundingRect(),iconRect=exportIcon.getBoundingRect();
       const center=titleView.group.transformCoordToGlobal(rect.x,rect.y+rect.height/2);
       const iconCenter=exportIcon.transformCoordToGlobal(iconRect.x,iconRect.y+iconRect.height/2);
-      exportTop=center[1]-iconCenter[1];
+      titleTop=Math.max(0,iconCenter[1]-center[1]);
     }
-    histChart.setOption({grid:[{top:Math.max(88,legendBottom+18)}],toolbox:{top:exportTop}});
+    histChart.setOption({grid:[{top:Math.max(88,legendBottom+18)}],title:{top:titleTop}});
     $('histChart').closest('.history-card').classList.add('chart-ready');
     updateHistoryLegend(series);status.textContent='';
   }catch(_){status.textContent='Your history chart could not load. Try again.';$('btnChartRetry').hidden=false;}
+}
+
+// Downloads the raw 30-min history as CSV; the device names the file after the first and last sample
+async function exportHistoryCsv(){
+  const status=$('chartStatus');
+  try{
+    const r=await fetch('/api/history.csv',{credentials:'same-origin',cache:'no-store'});
+    if(r.status===401){showLogin();return}
+    if(!r.ok){status.textContent=r.status===404?'No history to export yet.':'Your history could not be exported. Try again.';return}
+    const name=(/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition')||'')||[])[1]||'claude-meter-history.csv';
+    const url=URL.createObjectURL(await r.blob());
+    const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    status.textContent='';
+  }catch(_){status.textContent='Your history could not be exported. Try again.'}
 }
 
 function showLogin(){clearTimeout(newsTimer);$('login').classList.remove('hidden');$('dash').classList.add('hidden');document.title='Sign in · Claude Meter';document.querySelector('.skip').href='#loginMain';$('pin').focus()}
