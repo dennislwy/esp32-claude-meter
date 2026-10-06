@@ -256,14 +256,33 @@ void render()
   refreshPanel();
 }
 
-void poll()
+// Delay a due poll (or one that would land inside a pause) until polling resumes.
+void applyPauseSchedule()
+{
+  if (!clockValid())
+    return;
+  const time_t now = time(nullptr);
+  const time_t resume = settings::pauseHoursResumeAt(now);
+  const time_t dueResume = resume ? resume : settings::pauseHoursResumeAt(nextPollAt > now ? nextPollAt : now);
+  if (dueResume)
+    nextPollAt = dueResume;
+}
+
+bool poll(bool force = false)
 {
   const uint32_t start = millis();
   const bool syncClock = !clockValid() || time(nullptr) - lastNtpSync > NTP_RESYNC_S;
-  const PollReport report = pollUsage(usage, rtc, syncClock);
+  const PollReport report = pollUsage(usage, rtc, syncClock, force);
   if (report.clockSynced)
   {
     lastNtpSync = time(nullptr);
+  }
+  if (report.paused)
+  {
+    nextPollAt = time(nullptr) + settings::pollIntervalMinutes() * 60;
+    applyPauseSchedule();
+    Serial.printf("Pause Hours: usage polling paused for %ld s\n", (long)(nextPollAt - time(nullptr)));
+    return false; // Keep the last usage, history and alert state intact.
   }
   if (!report.configured)
   {
@@ -281,15 +300,19 @@ void poll()
   }
   // Schedule from when the poll started, so the interval doesn't drift by the poll's own duration
   nextPollAt = time(nullptr) - (millis() - start) / 1000 + settings::pollIntervalMinutes() * 60;
+  applyPauseSchedule();
+  return true;
 }
 
 // Poll, draw the new figures, then play any alert they trigger
-void pollAndShow()
+bool pollAndShow(bool force = false)
 {
-  poll();
+  if (!poll(force))
+    return false;
   historyRecord(usage);
   render();
   checkAlerts(usage, time(nullptr));
+  return true;
 }
 
 [[noreturn]] void deepSleep(uint32_t sleepSeconds)
@@ -315,6 +338,7 @@ void pollAndShow()
 
 [[noreturn]] void sleepUntilNextPoll()
 {
+  applyPauseSchedule();
   const long remaining = (long)nextPollAt - (long)time(nullptr);
   const uint32_t seconds = remaining > (long)MIN_SLEEP_S ? remaining : MIN_SLEEP_S;
   Serial.printf("Sleeping %lu s until the next poll\n", seconds);
@@ -336,9 +360,11 @@ void printHelp()
   Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
   Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8 or quiet 22:30-7:15");
+  Serial.println("  pause on | off             pause automatic polls during Pause Hours (default off)");
+  Serial.println("  pause <start>-<end>        set Pause Hours, e.g. pause 22:30-7:15; From and Until must differ");
   Serial.println("  sleep                      deep sleep between polls, debug mode kept on (long-press BOOT+PWR or PWR on USB returns)");
   Serial.println("  reboot                     restart the firmware (ESP.restart)");
-  Serial.println("  panel                      toggle LAN control panel (same as long-press BOOT)");
+  Serial.println("  panel                      toggle Web control panel (same as long-press BOOT)");
   Serial.println("  debug off                  turn debug mode off: no serial, no LED (long-press BOOT+PWR turns it back on)");
   Serial.println("  rtc                        read the RTC chip, compare with the system clock, last NTP sync");
   Serial.println("  rtc set YYYY-MM-DD HH:MM:SS  set the RTC, local time (NTP also sets it when online)");
@@ -379,6 +405,10 @@ void printStatus()
                 settings::quietHoursStart(), settings::quietMinuteStart(),
                 settings::quietHoursEnd(), settings::quietMinuteEnd(),
                 settings::quietHoursEnabled() ? "on" : "off");
+  Serial.printf("Pause:     %02u:%02u-%02u:%02u (%s)\n",
+                settings::pauseHoursStart(), settings::pauseMinuteStart(),
+                settings::pauseHoursEnd(), settings::pauseMinuteEnd(),
+                settings::pauseHoursEnabled() ? "on" : "off");
 }
 
 void listFiles()
@@ -529,7 +559,7 @@ void runCommand(const String &line)
   }
   else if (line == "usage")
   {
-    poll();
+    poll(true); // Explicit user requests may refresh during Pause Hours.
     printUsage(usage);
     render();
     checkAlerts(usage, time(nullptr));
@@ -576,9 +606,42 @@ void runCommand(const String &line)
     }
     else
     {
-      settings::setQuietHours(sh, sm, eh, em);
+      if (!settings::setQuietHours(sh, sm, eh, em))
+      {
+        Serial.println("Quiet hours: From and Until must be different times");
+        return;
+      }
       Serial.printf("Quiet hours %02u:%02u-%02u:%02u (%s)\n", sh, sm, eh, em,
                     settings::quietHoursEnabled() ? "on" : "off");
+    }
+  }
+  else if (line == "pause on" || line == "pause off")
+  {
+    settings::setPauseHoursEnabled(line.endsWith("on"));
+    nextPollAt = time(nullptr) + 2;
+    applyPauseSchedule();
+    Serial.printf("Pause Hours %s\n", settings::pauseHoursEnabled() ? "on" : "off");
+  }
+  else if (line.startsWith("pause "))
+  {
+    int sh, sm = 0, eh, em = 0;
+    const int parsedHhMm = sscanf(line.c_str(), "pause %d:%d-%d:%d", &sh, &sm, &eh, &em);
+    const int parsedH = parsedHhMm == 4 ? 4 : sscanf(line.c_str(), "pause %d-%d", &sh, &eh);
+    const bool ok = (parsedHhMm == 4 || parsedH == 2) &&
+                    sh >= 0 && sh <= 23 && eh >= 0 && eh <= 23 && sm >= 0 && sm <= 59 && em >= 0 && em <= 59;
+    if (!ok)
+      Serial.println("Usage: pause <start>-<end>, e.g. pause 22-8 or pause 22:30-7:15");
+    else
+    {
+      if (!settings::setPauseHours(sh, sm, eh, em))
+      {
+        Serial.println("Pause Hours: From and Until must be different times");
+        return;
+      }
+      nextPollAt = time(nullptr) + 2;
+      applyPauseSchedule();
+      Serial.printf("Pause Hours %02u:%02u-%02u:%02u (%s)\n", sh, sm, eh, em,
+                    settings::pauseHoursEnabled() ? "on" : "off");
     }
   }
   else if (line == "alerts clear")
@@ -787,7 +850,7 @@ void setDebugMode(bool on)
 
 // Awake-mode BOOT handling:
 // - short press: next view (or exit panel mode if active)
-// - long press (BOOT alone, >= 1 s): enter LAN panel mode
+// - long press (BOOT alone, >= 1 s): enter Web Panel mode
 // - long press (BOOT + PWR together, >= 1 s): toggle debug mode
 void handleBootButton()
 {
@@ -869,7 +932,7 @@ void enterPanelMode()
     Serial.begin(115200);
     delay(50);
   }
-  Serial.println("Panel: starting LAN control panel...");
+  Serial.println("Panel: starting Web control panel...");
   if (WiFi.status() != WL_CONNECTED)
   {
     WiFi.mode(WIFI_STA);
@@ -1051,7 +1114,7 @@ void setup()
   }
   if (bootWake && bootLongPress && !settings::wifiSsid().isEmpty())
   {
-    // Long-BOOT from sleep: enter LAN panel mode directly. If Wi-Fi connect fails,
+    // Long-BOOT from sleep: enter Web Panel mode directly. If Wi-Fi connect fails,
     // enterPanelMode() returns with panelMode=false and we fall through to sleep.
     enterPanelMode();
     if (panelMode)
@@ -1066,7 +1129,8 @@ void setup()
     view = nextView(view);
     if (time(nullptr) >= nextPollAt)
     {
-      pollAndShow();
+      if (!pollAndShow())
+        render(); // A due poll may be paused; still show the view the user selected.
     }
     else
     {
@@ -1144,6 +1208,11 @@ void loop()
       digitalWrite(PIN_LED, blinkOn ? LED_ON : LED_OFF);
     }
     const uint8_t act = panelTakeAction();
+    if (act & PANEL_ACT_SETTINGS_SAVED)
+    {
+      // Re-evaluate a changed/disabled pause; don't retain an old overnight deadline.
+      nextPollAt = time(nullptr) + 2;
+    }
     if (act & PANEL_ACT_TIME_ZONE)
     {
       clockApplyTimeZone(rtc);
@@ -1168,7 +1237,7 @@ void loop()
     }
     if (act & PANEL_ACT_REFRESH)
     {
-      pollAndShow();
+      pollAndShow(true); // Refresh now is an explicit override of Pause Hours.
       // pollUsage() always turns Wi-Fi off at the end; bring it back for the panel session
       WiFi.mode(WIFI_STA);
       WiFi.begin(settings::wifiSsid().c_str(), settings::wifiPassword().c_str());

@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-// Anthropic news headlines for the LAN panel. Fetched once per panel session: the panel asks
+// Anthropic news headlines for the Web Panel. Fetched once per panel session: the panel asks
 // for a fetch when it opens, and the main loop runs it (Wi-Fi is up in panel mode). The feed
 // is an unofficial RSS mirror of anthropic.com/news; only the first few items are read.
 

@@ -1,0 +1,7 @@
+{
+  "name": "claude-meter-chart-bundle",
+  "private": true,
+  "scripts": { "build": "node build.cjs" },
+  "dependencies": { "echarts": "6.1.0" },
+  "devDependencies": { "esbuild": "0.28.2" }
+}

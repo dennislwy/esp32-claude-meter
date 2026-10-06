@@ -1,10 +1,12 @@
-# LAN control panel
+# Web control panel
 
 Phase 1 of **R8**. A STA-mode HTTP server that lets you edit the device's
 settings from a browser on the same Wi-Fi, triggered on demand.
 
 Source: `src/panel.{h,cpp}`, `src/panel_html.h`. UI payload is a single
-PROGMEM HTML/CSS/JS blob (~10 kB) embedded in firmware.
+PROGMEM HTML/CSS/JS blob (~84 kB) embedded in firmware. Icons, styles, and
+scripts are embedded; fonts use the viewing device's local font stack.
+No font file or asset CDN is required.
 
 Phase 2 adds an **AP captive portal** for first-time Wi-Fi provisioning,
 documented in the [Provisioning (Phase 2)](#provisioning-phase-2) section
@@ -18,12 +20,12 @@ an explicit, user-triggered state.
 
 Enter panel mode:
 
-| Trigger | Where |
-| --- | --- |
+| Trigger                           | Where                                   |
+| --------------------------------- | --------------------------------------- |
 | Long-press **BOOT** alone (≥ 1 s) | On the device, while awake (debug mode) |
-| Serial command `panel` | USB serial — toggles |
+| Serial command `panel`            | USB serial — toggles                    |
 
-The ePaper switches to a **LAN Panel** view showing the hostname, IP,
+The ePaper switches to a **Web Panel** view showing the hostname, IP,
 and a fresh 6-digit login PIN.
 
 Exit panel mode:
@@ -64,26 +66,27 @@ login resets the counter.
 
 ## Routes
 
-All routes except `GET /` require a valid `sid` cookie. State-changing
+The HTML, chart asset, and login route are public. Other routes require a
+valid `sid` cookie. State-changing
 routes require `Content-Type: application/json` on the request body.
 
-| Method | Path | Request | Response |
-| --- | --- | --- | --- |
-| GET | `/` | — | HTML app |
-| POST | `/api/login` | `{"pin":"123456"}` | `{"ok":true}` + Set-Cookie, or `401 {"error":"auth"}`, or `429 {"error":"throttled","retry_s":N}` |
-| POST | `/api/logout` | — | `{"ok":true}` + clears cookie |
-| GET | `/api/state` | — | full dashboard payload (see below) |
-| POST | `/api/settings` | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, audio_vol, tz, tz_name, rotation}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270 | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` (nothing is applied) |
-| POST | `/api/tokens` | `{token1, token2, name1, name2}` (empty token = unchanged) | `{"ok":true, "probes":[{account, ok, http, h5?, d7?}]}` — each newly saved token is checked against the API (blocks ~2-3 s per token) |
-| POST | `/api/wifi` | `{ssid, pass}` (empty pass = unchanged) | `{"ok":true}` |
-| POST | `/api/refresh` | — | triggers an on-demand poll; `{"ok":true}` |
-| GET | `/api/history` | — | `{cols:168, col_seconds:3600, newest_epoch, accounts:[{name, h5:[…], d7:[…]}]}` |
-| POST | `/api/history/clear` | — | wipes `/history.bin` |
-| GET | `/api/wifi/scan` | `?start=1` starts a scan; poll without it | `202 {"scanning":true}` while running, then `{networks:[{ssid,rssi,channel,secure,saved},…]}`; `500 {"error":"scan_failed"}`, or `409 {"error":"no_scan"}` when polled with no scan started. The scan starts ~150 ms after the `202`; the radio is off-channel for ~7-8 s while it runs (requests sent then stall until it ends), so the panel waits 4 s before polling. Click to list takes ~8-9 s |
-| GET | `/api/news` | — | `{ok, fetching, fetched_epoch, source, items:[{title, date, link}]}` — up to 10 headlines, fetched once per panel session (`fetching` is true until that run finishes) |
-| POST | `/api/sounds/play` | `{"file":"5h-warning.wav"}` | plays an allow-listed alert WAV (blocks ~1-3 s). Allowed: `5h-warning`, `5h-depleted`, `5h-reset`, `7d-warning`, `7d-depleted`, `7d-reset` |
-| POST | `/api/factory-reset` | `{"confirm":"wipe"}` | wipes NVS (`meter` + `alerts`) + history, schedules reboot |
-| POST | `/api/reboot` | — | schedules a reboot ~1 s after the response |
+| Method | Path                 | Request                                                                                                                                                                                                                                                                                                    | Response                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/`                  | —                                                                                                                                                                                                                                                                                                          | HTML app                                                                                                                                                                                                                                                                                                                                                                                            |
+| POST   | `/api/login`         | `{"pin":"123456"}`                                                                                                                                                                                                                                                                                         | `{"ok":true}` + Set-Cookie, or `401 {"error":"auth"}`, or `429 {"error":"throttled","retry_s":N}`                                                                                                                                                                                                                                                                                                   |
+| POST   | `/api/logout`        | —                                                                                                                                                                                                                                                                                                          | `{"ok":true}` + clears cookie                                                                                                                                                                                                                                                                                                                                                                       |
+| GET    | `/api/state`         | —                                                                                                                                                                                                                                                                                                          | full dashboard payload (see below)                                                                                                                                                                                                                                                                                                                                                                  |
+| POST   | `/api/settings`      | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, pause_start_h, pause_start_m, pause_end_h, pause_end_m, pause_on, audio_vol, tz, tz_name, rotation}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270 | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` / `400 {"error":"bad_pause_hours"}` / `400 {"error":"bad_quiet_hours"}` (nothing is applied)                                                                                                                                                                                                                                                         |
+| POST   | `/api/tokens`        | `{token1, token2, name1, name2}` (empty token = unchanged)                                                                                                                                                                                                                                                 | `{"ok":true, "probes":[{account, ok, http, h5?, d7?}]}` — each newly saved token is checked against the API (blocks ~2-3 s per token)                                                                                                                                                                                                                                                               |
+| POST   | `/api/wifi`          | `{ssid, pass}` (empty pass = unchanged)                                                                                                                                                                                                                                                                    | `{"ok":true}`                                                                                                                                                                                                                                                                                                                                                                                       |
+| POST   | `/api/refresh`       | —                                                                                                                                                                                                                                                                                                          | triggers an on-demand poll; `{"ok":true}`                                                                                                                                                                                                                                                                                                                                                           |
+| GET    | `/api/history`       | —                                                                                                                                                                                                                                                                                                          | `{cols:168, col_seconds:3600, newest_epoch, accounts:[{name, h5:[…], d7:[…]}]}`                                                                                                                                                                                                                                                                                                                     |
+| POST   | `/api/history/clear` | —                                                                                                                                                                                                                                                                                                          | wipes `/history.bin`                                                                                                                                                                                                                                                                                                                                                                                |
+| GET    | `/api/wifi/scan`     | `?start=1` starts a scan; poll without it                                                                                                                                                                                                                                                                  | `202 {"scanning":true}` while running, then `{networks:[{ssid,rssi,channel,secure,saved},…]}`; `500 {"error":"scan_failed"}`, or `409 {"error":"no_scan"}` when polled with no scan started. The scan starts ~150 ms after the `202`; the radio is off-channel for ~7-8 s while it runs (requests sent then stall until it ends), so the panel waits 4 s before polling. Click to list takes ~8-9 s |
+| GET    | `/api/news`          | —                                                                                                                                                                                                                                                                                                          | `{ok, fetching, fetched_epoch, source, items:[{title, date, link}]}` — up to 10 headlines, fetched once per panel session (`fetching` is true until that run finishes)                                                                                                                                                                                                                              |
+| POST   | `/api/sounds/play`   | `{"file":"5h-warning.wav"}`                                                                                                                                                                                                                                                                                | plays an allow-listed alert WAV (blocks ~1-3 s). Allowed: `5h-warning`, `5h-depleted`, `5h-reset`, `7d-warning`, `7d-depleted`, `7d-reset`                                                                                                                                                                                                                                                          |
+| POST   | `/api/factory-reset` | `{"confirm":"wipe"}`                                                                                                                                                                                                                                                                                       | wipes NVS (`meter` + `alerts`) + history, schedules reboot                                                                                                                                                                                                                                                                                                                                          |
+| POST   | `/api/reboot`        | —                                                                                                                                                                                                                                                                                                          | schedules a reboot ~1 s after the response                                                                                                                                                                                                                                                                                                                                                          |
 
 ### `/api/state` payload
 
@@ -92,8 +95,8 @@ routes require `Content-Type: application/json` on the request body.
   "ip": "192.168.0.203",
   "hostname": "claude-meter",
   "uptime_s": 1234,
-  "fw_rev": "82dc70e-dirty",
-  "fw_built": "2026-10-05 16:42 +0800",
+  "fw_version": "0.0.9",
+  "fw_rev": "aae7f66-dirty",
   "heap_free": 145320,
   "heap_min": 98112,
   "now_epoch": 1759619826,
@@ -101,21 +104,25 @@ routes require `Content-Type: application/json` on the request body.
   "battery_pct": 92,
   "wifi_rssi": -54,
   "wifi_ssid": "...",
+  "wifi_mac": "02:00:00:12:34:56",
   "poll_min": 2,
   "warn5": 80,
   "warn7": 90,
   "quiet_start_h": 22, "quiet_start_m": 30,
   "quiet_end_h": 7,   "quiet_end_m": 15,
   "quiet_on": true,
+  "pause_start_h": 0, "pause_start_m": 0,
+  "pause_end_h": 6,   "pause_end_m": 0,
+  "pause_on": false, "pause_active": false, "pause_resume_epoch": 0,
   "audio_vol": 80,
   "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
   "tz_name": "Europe/Amsterdam",
   "rotation": 0,
   "accounts": [
     {"name":"Claude 1","configured":true,"has_data":true,
-     "h5":75,"d7":39,"h5_reset":1759637400,"d7_reset":1760223600,"age":"1 m ago"},
+     "h5":75,"d7":39,"h5_reset":1759637400,"d7_reset":1760223600,"age":"1m ago"},
     {"name":"Claude 2","configured":true,"has_data":true,
-     "h5":0, "d7":98,"h5_reset":1759637400,"d7_reset":1760223600,"age":"1 m ago"}
+     "h5":0, "d7":98,"h5_reset":1759637400,"d7_reset":1760223600,"age":"1m ago"}
   ],
   "poll_age_s": 83
 }
@@ -123,6 +130,18 @@ routes require `Content-Type: application/json` on the request body.
 
 Clients should prefer `now_epoch` over the browser clock when computing
 "resets in" countdowns.
+
+`fw_version` is the release version from `FW_VERSION` in `src/build_info.h`.
+`fw_rev` remains the generated git description. The former `fw_built` field
+and `FW_BUILD_TIME` constant have been removed.
+
+`wifi_mac` is the Wi-Fi station MAC address. Per-account `age` is `no data`
+when unavailable, `just now` below 60 seconds, then whole minutes rounded
+down (for example `120m ago`). `poll_age_s` is the first account's age in
+seconds, or -1 without data. The UI formats this value as `Ns ago` below
+60 seconds, rounded `Nm ago` below 3600 seconds, then rounded `Nh ago`;
+negative values display a dash. The news fetch status uses the same UI
+formatter. Neither formatter switches to days.
 
 ### `/api/history` downsampling
 
@@ -132,23 +151,36 @@ by taking `max(h5[a], h5[b])` and `max(d7[a], d7[b])` for the two
 30-min samples in each hour. Empty slots become JSON `null` so the UI
 renders gaps as broken line segments.
 
+The UI centers each weekday label directly under its visible 00:00 tick,
+using the device's selected time zone and the same x-coordinate for both.
+
 ## UI sections
 
-Rendered client-side from a single HTML blob:
+Rendered client-side from an embedded HTML blob, organised into **Usage**,
+**Accounts**, **Device**, **Polling & alerts**, and **News** views. The
+sidebar becomes a scrollable navigation row on phones. System/light/dark
+appearance is saved per browser and resolved in the head before the first
+paint. Both footers link to the GitHub repository. See [PANEL_DESIGN.md](PANEL_DESIGN.md)
+for the reference analysis and a simulated local preview.
 
-| Card | Purpose |
-| --- | --- |
-| **Sign in** | PIN prompt. Replaced by the dashboard after `/api/login` succeeds. |
-| **Status** | IP, Wi-Fi (SSID, dBm, quality word), uptime (`Xd Yh Zm`), battery, last-poll age, heap free / low-water mark, firmware revision + build time, per-account bars with `resets Sun 4 Oct 17:01 in 1h 4m` lines, "Refresh now" button. |
-| **7-day history** | Inline SVG line chart, 168 cols, orange = account 1, green = account 2 (thin = 5h, thick = 7d). Legend chips toggle each account's series. Day letters align to local midnight; y-axis ticks every 25 %. |
-| **Anthropic news** | 10 latest headlines (date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. |
-| **Accounts** | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token. |
-| **Wi-Fi** | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID. |
-| **Alert sounds** | Volume slider (0-100 %, saves on release) + 6 test-play buttons for the alert WAVs. |
-| **Display & time** | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°. |
-| **Polling & alerts** | Poll interval (1-5 min), 5h/7d warning %, quiet hours (`<input type=time>` with HH:MM precision), quiet enabled toggle. |
-| **Sign out** | Clears the session cookie. |
-| **Danger zone** | Clear 7-day history / Reboot / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes). |
+`GET /assets/echarts-6.1.0-v2.js` serves the embedded Apache ECharts bundle
+with `Content-Encoding: gzip` and an immutable one-year cache. It contains
+202,957 compressed bytes and loads on demand after sign-in. No CDN or
+LittleFS upload is required; the public asset contains no device data.
+
+| Card                       | Purpose                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Sign in**                | PIN prompt; typing or pasting six digits automatically calls `/api/login`. Replaced by the dashboard on success; manual retry is available.                                                                                                                                                                                                                  |
+| **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: battery, last poll, uptime, IP, Wi-Fi (SSID, dBm, quality word), Wi-Fi MAC address immediately after Wi-Fi, heap free / low-water mark, firmware release version + git revision, and the full device diagnostics.                                                        |
+| **7-day history**          | Local Apache ECharts canvas chart, 168 hourly columns; blue = account 1, green = account 2, solid = 5h, dashed = 7d. One combined graph with four independent in-chart legend toggles and hover/tap tooltips. Double-click/double-tap toggles closer/full-week zoom; wheel/pinch, drag, and keyboard provide zoom/pan/reset. Save image aligns with the chart title and downloads the current chart, including its title and legend, as a PNG. Selections and zoom survive refreshes and view/theme changes. Weekdays align with device-local midnight ticks; missing samples remain gaps. |
+| **Anthropic news**         | 10 latest headlines (13px date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. Successful-fetch status links to anthropic.com/news.                                                                                                                                            |
+| **Accounts**               | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token.                                                                                                                                                                                                             |
+| **Wi-Fi**                  | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID.                                                                                                                                                                                                                                                              |
+| **Alerts & sound**         | Warning thresholds (50-99%), Alert sounds (volume slider saves on release + six WAV previews), then Quiet hours with an accessible switch and HH:MM times. Save alerts applies thresholds and Quiet hours.                                                                                                                                                   |
+| **Display & time**         | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°.                                                                                                                                                                              |
+| **Polling & pauses**       | Poll interval (1-5 min), then Pause hours with an accessible switch and HH:MM times (00:00-06:00, disabled by default). Save polling & pauses applies this card only. Pause hours pauses automatic requests and sleeps through the window in Normal mode.                                                                                                    |
+| **Appearance / Sign out**  | Controls select System, Light, or Dark theme and clear the session cookie. Sign out is right of the theme switch on mobile only, with matching keyboard order. The theme applies before first paint. Any authenticated endpoint returning 401 opens the PIN screen.                                                                                          |
+| **Device management**      | In Device: Clear 7-day history / Restart device / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes).                                                                                                                                                                                       |
 
 ## State and side effects
 
@@ -156,17 +188,35 @@ Panel handlers run **inside** `panelService()` (which `loop()` pumps).
 They never draw to the ePaper. Destructive work is deferred through
 action flags drained by `loop()`:
 
-| Flag | Set by | Handled in `loop()` |
-| --- | --- | --- |
-| `PANEL_ACT_REFRESH` | `/api/refresh` | Calls `pollAndShow()`, reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
-| `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens` | No immediate action — client polls `/api/state` on a timer |
-| `PANEL_ACT_TIME_ZONE` | `/api/settings` with a changed `tz` | `clockApplyTimeZone()`: `setenv("TZ")` + `tzset()`, rewrite the RTC (which holds local time) in the new zone, redraw |
-| `PANEL_ACT_ROTATION` | `/api/settings` with a changed `rotation` | `lvglPortSetRotation()`, then redraw with a full e-paper refresh |
-| `PANEL_ACT_REBOOT` | `/api/reboot`, `/api/factory-reset` | `delay(800)` to let the response flush, then `ESP.restart()` |
+| Flag                       | Set by                                    | Handled in `loop()`                                                                                                                              |
+| -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Calls `pollAndShow(true)` (explicitly overrides Pause Hours), reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
+| `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens`            | Resets the next poll deadline so changed/disabled Pause Hours take effect when Normal mode resumes; client polls `/api/state` on a timer         |
+| `PANEL_ACT_TIME_ZONE`      | `/api/settings` with a changed `tz`       | `clockApplyTimeZone()`: `setenv("TZ")` + `tzset()`, rewrite the RTC (which holds local time) in the new zone, redraw                             |
+| `PANEL_ACT_ROTATION`       | `/api/settings` with a changed `rotation` | `lvglPortSetRotation()`, then redraw with a full e-paper refresh                                                                                 |
+| `PANEL_ACT_REBOOT`         | `/api/reboot`, `/api/factory-reset`       | `delay(800)` to let the response flush, then `ESP.restart()`                                                                                     |
 
 Wi-Fi stays up the entire time panel mode is active. Each refresh
 cycles through `pollUsage()` (which internally disconnects) and then
 reconnects — expect a ~3-5 s stall during a refresh.
+
+Pause Hours and Quiet hours fields accept individual partial updates: omitted
+times keep their saved values. Hours must be integers 0-23, minutes 0-59,
+and `pause_on`/`quiet_on` booleans. Matching From/Until times, including those
+created by a partial update, reject the whole request before settings change.
+This applies to submitted times even when disabled. Enabling a legacy empty
+window is also rejected; disabling it is allowed. Errors are `bad_pause_hours`
+or `bad_quiet_hours`. Overnight windows remain valid.
+
+The former `break_*` API fields and `break` serial command are now `pause_*`
+and `pause`. Existing NVS `break_*` keys are lazily copied to `pause_*` keys;
+saved times and enabled states take precedence over the new 00:00-06:00,
+disabled default. Invalid legacy empty windows remain inactive until corrected.
+`pause_active` describes the current local-time window, and
+`pause_resume_epoch` is the next allowed automatic poll (0 when inactive).
+An unset clock reports inactive until time is established. Usage displays a
+pause notice using this state, while **Refresh now** and token-save probes
+remain explicit user actions.
 
 ## Battery impact
 
@@ -174,7 +224,9 @@ Normal operation averages ~1 mA (deep sleep + 2-min wake). Panel mode
 keeps the radio and MCU continuously awake and running Wi-Fi — call it
 **~70-100 mA**. At 400 mAh this would drain the pack in roughly 4-6
 hours of continuous panel use. The 5-minute idle auto-exit guards
-against leaving it on by accident.
+against leaving it on by accident. Pause Hours saves power in Normal mode
+with debug off by deferring timer wakes and keeping Wi-Fi off until the
+window ends. It does not put an active panel session to sleep.
 
 ## Security
 
@@ -206,15 +258,15 @@ against leaving it on by accident.
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-| --- | --- |
-| `claude-meter.local` doesn't resolve | Browser host lacks mDNS/Bonjour; use the IP shown on the ePaper |
-| ePaper shows "LAN Panel" but IP is blank | Wi-Fi failed to connect within 15 s — check SSID/pass, 2.4 GHz availability |
-| Panel exits by itself | 5-min idle timeout; any API hit resets the counter |
-| 429 "throttled" | Too many wrong PINs — exit and re-enter panel mode to reset |
-| 401 "auth" after a while | Session evicted (new login elsewhere, or reboot). Reload page |
-| Scan returns `[]` | Scan completed but no networks visible on 2.4 GHz; try moving the device |
-| Serial `panel` doesn't start the server | Device not in debug mode (no serial), or Wi-Fi not configured. Enter debug mode (long BOOT+PWR) first |
+| Symptom                                  | Likely cause                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `claude-meter.local` doesn't resolve     | Browser host lacks mDNS/Bonjour; use the IP shown on the ePaper                                       |
+| ePaper shows "Web Panel" but IP is blank | Wi-Fi failed to connect within 15 s — check SSID/pass, 2.4 GHz availability                           |
+| Panel exits by itself                    | 5-min idle timeout; any API hit resets the counter                                                    |
+| 429 "throttled"                          | Too many wrong PINs — exit and re-enter panel mode to reset                                           |
+| 401 "auth" after a while                 | Session evicted (new login elsewhere, or reboot). The panel returns to the PIN screen automatically   |
+| Scan returns `[]`                        | Scan completed but no networks visible on 2.4 GHz; try moving the device                              |
+| Serial `panel` doesn't start the server  | Device not in debug mode (no serial), or Wi-Fi not configured. Enter debug mode (long BOOT+PWR) first |
 
 ## Provisioning (Phase 2)
 
@@ -223,8 +275,8 @@ NVS, it comes up as an **open SoftAP** instead of trying (and failing) to
 connect. The ePaper shows the AP name and URL; a captive portal popup
 guides the user to a one-page SSID picker.
 
-| Trigger | Where |
-| --- | --- |
+| Trigger                             | Where                                                                |
+| ----------------------------------- | -------------------------------------------------------------------- |
 | Boot with empty `wifi.ssid` NVS key | Automatic (fresh device, after factory reset, or after `wifi "" ""`) |
 
 **AP:** `claude-meter-XXXXXX` (last 6 hex of MAC), **open**, IP
@@ -236,13 +288,13 @@ URL and get redirected to our setup page.
 
 ### Routes (AP mode)
 
-| Method | Path | Response |
-| --- | --- | --- |
-| GET | `/` | Setup HTML (SSID list + password form) |
-| GET | `/scan` | `{networks:[{ssid,rssi,channel,secure},...]}` |
-| POST | `/save` | `{ssid, pass}` → saves to NVS, responds `{"ok":true}`, reboots ~1.2 s later |
-| GET | `/generate_204`, `/gen_204`, `/hotspot-detect.html`, `/library/test/success.html`, `/connecttest.txt`, `/ncsi.txt`, `/redirect` | 302 → `http://192.168.4.1/` (captive-portal detection) |
-| any | `*` | 302 → `http://192.168.4.1/` (catch-all) |
+| Method | Path                                                                                                                            | Response                                                                    |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| GET    | `/`                                                                                                                             | Setup HTML (SSID list + password form)                                      |
+| GET    | `/scan`                                                                                                                         | `{networks:[{ssid,rssi,channel,secure},...]}`                               |
+| POST   | `/save`                                                                                                                         | `{ssid, pass}` → saves to NVS, responds `{"ok":true}`, reboots ~1.2 s later |
+| GET    | `/generate_204`, `/gen_204`, `/hotspot-detect.html`, `/library/test/success.html`, `/connecttest.txt`, `/ncsi.txt`, `/redirect` | 302 → `http://192.168.4.1/` (captive-portal detection)                      |
+| any    | `*`                                                                                                                             | 302 → `http://192.168.4.1/` (catch-all)                                     |
 
 **No auth.** The portal is open by design — the device is physically in
 the user's hand and the only thing being configured is Wi-Fi creds. No

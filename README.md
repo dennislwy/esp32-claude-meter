@@ -5,7 +5,16 @@ board. The device polls `api.anthropic.com` over verified HTTPS for the
 5-hour and 7-day usage of up to two Claude accounts, and shows the result 
 on the 200×200 black & white ePaper panel. Audible alerts play from an 
 onboard speaker when a window crosses a configurable warning threshold or 
-depletes, with optional quiet hours.
+depletes, with optional quiet hours. Pause Hours can pause automatic polling
+and keep the board asleep through a daily window; it defaults to disabled,
+with a saved window of 00:00-06:00.
+
+Firmware version: **0.0.9**, set in `src/build_info.h`.
+
+The web panel's usage history uses a locally served Apache ECharts bundle
+with series toggles, tooltips, mouse/touch zoom, and double-click/double-tap
+zoom toggling, plus PNG image export.
+It works without a CDN. See [panel features](docs/PANEL_FEATURES.md#7-day-history).
 
 ## Hardware
 
@@ -54,13 +63,15 @@ Type `help` for the full list. Highlights:
 
 | Command                               | Purpose                                                                 |
 | ------------------------------------- | ----------------------------------------------------------------------- |
-| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet hours |
+| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet/pause hours |
 | `usage`                               | Poll now, print the result, redraw, trigger any alerts                  |
 | `view`                                | Switch to the next view (dual / account 1 / account 2)                  |
 | `interval <1-5>`                      | Minutes between polls                                                   |
 | `warn5h <50-99>` / `warn7d <50-99>`   | Warning threshold per window                                            |
 | `quiet on \| off`                     | Enable or disable quiet hours                                           |
 | `quiet <start>-<end>`                 | Set quiet hours, 24-h local time (e.g. `quiet 22-8`)                    |
+| `pause on \| off` | Enable or disable Pause Hours |
+| `pause <start>-<end>` | Set the local polling-pause window (e.g. `pause 00:00-06:00`) |
 | `alerts` / `alerts clear`             | Inspect / reset the per-window alert state                              |
 | `history` / `history clear`           | Inspect / wipe the 7-day usage ring                                     |
 | `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock                                           |
@@ -74,10 +85,12 @@ Type `help` for the full list. Highlights:
   enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s to
   toggle at any time (awake, asleep, or on battery).
 - **Normal mode** (battery): serial and LED off to save power. The board
-  wakes on its poll timer, polls, draws, and deep-sleeps again. A short
+  wakes on its poll timer, polls, draws, and deep-sleeps again. During enabled
+  Pause Hours it sleeps until the window ends without automatic usage
+  requests; manual Refresh now and serial `usage` override the pause. A short
   `BOOT` press wakes it to show the next view; a long `PWR` press powers
   it off (full refresh to white first, then VBAT_PWR is cut).
-- **LAN panel**: a long `BOOT` press opens a browser control panel on
+- **Web Panel**: a long `BOOT` press opens a browser control panel on
   your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,
   Wi-Fi, alerts, and sounds. See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
@@ -86,6 +99,24 @@ Type `help` for the full list. Highlights:
 The usage ring survives power cycles (persisted to LittleFS; written only
 when the 30-min slot advances — ~48 writes/day).
 
+## Panel preview
+
+The panel has Usage, Accounts, Device, Polling & alerts, and News views.
+It supports automatic six-digit sign-in, System/Light/Dark appearance
+applied before first paint, and a seven-day chart with weekday labels
+directly below the midnight ticks in the device's time zone. Device details
+includes the Wi-Fi MAC address. See [panel features](docs/PANEL_FEATURES.md)
+and [panel design](docs/PANEL_DESIGN.md) for the full behavior and verification.
+
+Preview the actual embedded page locally without a board:
+
+```sh
+python scripts/panel_preview.py
+```
+
+Open `http://127.0.0.1:8080` and use PIN **123456**. Data and device actions
+are simulated; the preview binds only to loopback.
+
 ## Project layout
 
 ```
@@ -93,7 +124,7 @@ src/           firmware (main, poll loop, UI, alerts, history, settings)
 include/       lv_conf.h and other build-only headers
 lib/           local libraries (Battery, Epaper154, ES8311, PCF85063, ClaudeUsage)
 assets/certs/  pinned root CAs for api.anthropic.com and the news feed (embedded at build time)
-scripts/       build_info.py: writes src/build_info.cpp (git revision + build time) before each build
+scripts/       build_info.py: generates git revision; FW_VERSION is set in src/build_info.h
 data/          LittleFS payload: WAV alert sounds (gitignored)
 docs/          design notes: modes, buttons, battery, alert sounds, web panel
 ```
@@ -112,3 +143,13 @@ docs/          design notes: modes, buttons, battery, alert sounds, web panel
 - Thanks to [Olshansk/rss-feeds](https://github.com/Olshansk/rss-feeds)
   for maintaining the RSS feed of Anthropic news that the panel's news card
   reads.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+The Lucide Gauge icon retains its ISC license; see
+[third-party notices](docs/THIRD_PARTY_NOTICES.md).
+
+## Disclaimer
+
+"Claude" is a trademark of Anthropic. This project is not affiliated with Anthropic.

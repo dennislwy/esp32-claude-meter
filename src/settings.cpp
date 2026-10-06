@@ -1,6 +1,7 @@
 #include "settings.h"
 
 #include <Preferences.h>
+#include "daily_window.h"
 
 namespace
 {
@@ -11,6 +12,11 @@ const char *const KEY_QUIET_START = "quiet_start";
 const char *const KEY_QUIET_END = "quiet_end";
 const char *const KEY_QUIET_START_MIN = "quiet_startM";
 const char *const KEY_QUIET_END_MIN = "quiet_endM";
+const char *const KEY_PAUSE_ENABLED = "pause_on";
+const char *const KEY_PAUSE_START = "pause_start";
+const char *const KEY_PAUSE_END = "pause_end";
+const char *const KEY_PAUSE_START_MIN = "pause_startM";
+const char *const KEY_PAUSE_END_MIN = "pause_endM";
 const char *const KEY_AUDIO_VOLUME = "audio_vol";
 const char *const KEY_TIME_ZONE = "tz";
 const char *const KEY_TIME_ZONE_NAME = "tz_name";
@@ -50,10 +56,13 @@ void store(const char *key, const String &value)
 }
 
 // A byte setting, clamped to min..max, or fallback when unset
-uint8_t loadByte(const char *key, uint8_t fallback, uint8_t min, uint8_t max)
+uint8_t loadByte(const char *key, uint8_t fallback, uint8_t min, uint8_t max, const char *legacyKey = nullptr)
 {
   Preferences prefs;
   prefs.begin(NAMESPACE, false);
+  // Lazily migrate the old Break Hours keys; new Pause Hours saves take precedence.
+  if (!prefs.isKey(key) && legacyKey && prefs.isKey(legacyKey))
+    prefs.putUChar(key, prefs.getUChar(legacyKey));
   const uint8_t value = prefs.isKey(key) ? prefs.getUChar(key) : fallback;
   prefs.end();
   return constrain(value, min, max);
@@ -142,12 +151,15 @@ void setQuietHoursEnabled(bool enabled)
   prefs.end();
 }
 
-void setQuietHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute)
+bool setQuietHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute)
 {
+  if (!dailyWindowValid(startHour, startMinute, endHour, endMinute))
+    return false;
   storeByte(KEY_QUIET_START, startHour, 0, 23);
   storeByte(KEY_QUIET_START_MIN, startMinute, 0, 59);
   storeByte(KEY_QUIET_END, endHour, 0, 23);
   storeByte(KEY_QUIET_END_MIN, endMinute, 0, 59);
+  return true;
 }
 
 bool isQuietTime(uint8_t localHour, uint8_t localMinute)
@@ -158,13 +170,51 @@ bool isQuietTime(uint8_t localHour, uint8_t localMinute)
   }
   const uint16_t start = quietHoursStart() * 60 + quietMinuteStart();
   const uint16_t end = quietHoursEnd() * 60 + quietMinuteEnd();
-  if (start == end)
-  {
-    return false;
-  }
   const uint16_t now = (uint16_t)localHour * 60 + localMinute;
-  // The window wraps past midnight when end is earlier than start
-  return start < end ? (now >= start && now < end) : (now >= start || now < end);
+  return dailyWindowContains(start, end, now);
+}
+
+bool pauseHoursEnabled()
+{
+  Preferences prefs;
+  prefs.begin(NAMESPACE, false);
+  if (!prefs.isKey(KEY_PAUSE_ENABLED) && prefs.isKey("break_on"))
+    prefs.putBool(KEY_PAUSE_ENABLED, prefs.getBool("break_on"));
+  const bool enabled = prefs.isKey(KEY_PAUSE_ENABLED) ? prefs.getBool(KEY_PAUSE_ENABLED) : false;
+  prefs.end();
+  return enabled;
+}
+
+uint8_t pauseHoursStart() { return loadByte(KEY_PAUSE_START, 0, 0, 23, "break_start"); }
+uint8_t pauseMinuteStart() { return loadByte(KEY_PAUSE_START_MIN, 0, 0, 59, "break_startM"); }
+uint8_t pauseHoursEnd() { return loadByte(KEY_PAUSE_END, 6, 0, 23, "break_end"); }
+uint8_t pauseMinuteEnd() { return loadByte(KEY_PAUSE_END_MIN, 0, 0, 59, "break_endM"); }
+
+void setPauseHoursEnabled(bool enabled)
+{
+  Preferences prefs;
+  prefs.begin(NAMESPACE, false);
+  prefs.putBool(KEY_PAUSE_ENABLED, enabled);
+  prefs.end();
+}
+
+bool setPauseHours(uint8_t startHour, uint8_t startMinute, uint8_t endHour, uint8_t endMinute)
+{
+  if (!dailyWindowValid(startHour, startMinute, endHour, endMinute))
+    return false;
+  storeByte(KEY_PAUSE_START, startHour, 0, 23);
+  storeByte(KEY_PAUSE_START_MIN, startMinute, 0, 59);
+  storeByte(KEY_PAUSE_END, endHour, 0, 23);
+  storeByte(KEY_PAUSE_END_MIN, endMinute, 0, 59);
+  return true;
+}
+
+time_t pauseHoursResumeAt(time_t now)
+{
+  if (!pauseHoursEnabled())
+    return 0;
+  return dailyWindowResumeAt(now, true, pauseHoursStart() * 60 + pauseMinuteStart(),
+                            pauseHoursEnd() * 60 + pauseMinuteEnd());
 }
 
 uint8_t audioVolume() { return loadByte(KEY_AUDIO_VOLUME, AUDIO_VOLUME_DEFAULT, 0, 100); }

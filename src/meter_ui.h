@@ -12,7 +12,7 @@ enum class MeterView : uint8_t
   Account1History, // 7-day line chart for account 1
   Account2,
   Account2History, // 7-day line chart for account 2
-  Panel,           // R8 LAN panel: hostname/IP + login PIN
+  Panel,           // R8 Web Panel: hostname/IP + login PIN
   Setup,           // R8 Phase 2: AP captive portal for first-time Wi-Fi setup
 };
 
@@ -33,8 +33,8 @@ struct MeterScreen
   bool clockValid;
   uint8_t batteryPercent;
   WifiState wifiState;
-  int8_t wifiRssi; // dBm, when connected
-  const char *notice; // shown instead of the account(s) when set, e.g. setup instructions
+  int8_t wifiRssi;        // dBm, when connected
+  const char *notice;     // shown instead of the account(s) when set, e.g. setup instructions
   const char *popupTitle; // when set, a box centred over the view, e.g. a Wi-Fi failure
   String popupBody;
   // Only used when view == Panel
