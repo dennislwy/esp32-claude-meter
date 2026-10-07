@@ -496,13 +496,24 @@ namespace
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
 
     const String url = String("http://") + screen.panelHostname + ".local";
-    // A 15-character hostname overflows CONTENT_W at 14 px and would wrap onto the
-    // IP line below, so measure and drop a size rather than assume one name's width
-    lv_point_t urlSize;
-    lv_text_get_size(&urlSize, url.c_str(), &lv_font_montserrat_14, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    const lv_font_t *urlFont = urlSize.x <= CONTENT_W ? &lv_font_montserrat_14 : &lv_font_montserrat_12;
+    // A long hostname overflows CONTENT_W and would wrap onto the IP line below,
+    // so measure each size rather than assume one name's width
+    static const lv_font_t *const urlFonts[] = {&lv_font_montserrat_14, &lv_font_montserrat_12, &lv_font_montserrat_10};
+    const size_t urlFontCount = sizeof(urlFonts) / sizeof(urlFonts[0]);
+    const lv_font_t *urlFont = urlFonts[urlFontCount - 1];
+    for (size_t i = 0; i < urlFontCount; i++)
+    {
+      lv_point_t urlSize;
+      lv_text_get_size(&urlSize, url.c_str(), urlFonts[i], 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+      if (urlSize.x <= CONTENT_W)
+      {
+        urlFont = urlFonts[i];
+        break;
+      }
+    }
     lv_obj_t *urlLabel = text(parent, url.c_str(), urlFont, BLACK);
     lv_obj_set_width(urlLabel, CONTENT_W);
+    lv_label_set_long_mode(urlLabel, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, y + 22);
 

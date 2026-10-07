@@ -16,6 +16,7 @@
 #include "news.h"
 #include "panel_html.h"
 #include "panel_usage_poll.h"
+#include "hostname.h"
 #include "settings.h"
 
 namespace
@@ -348,11 +349,16 @@ namespace
       sendErr(400, "bad_rotation");
       return;
     }
-    if (!body["hostname"].isNull())
+    const bool hasHostname = !body["hostname"].isNull();
+    // `| ""`, not as<String>(): a missing key would become the string "null"
+    const String hostnameValue = body["hostname"] | "";
+    if (hasHostname)
     {
-      // `| ""`, not as<String>(): a missing key would become the string "null"
-      const String name = body["hostname"] | "";
-      if (!settings::setHostname(name))
+      // Anything but a string would read as empty, which would silently
+      // restore the default instead of reporting the bad request
+      char normalized[HOSTNAME_LIMIT + 1];
+      if (!body["hostname"].is<const char *>() ||
+          (!hostnameValue.isEmpty() && !hostnameNormalize(hostnameValue.c_str(), normalized)))
       {
         sendErr(400, "bad_hostname");
         return;
@@ -379,6 +385,8 @@ namespace
     // The loop collects the running request without blocking this handler.
     if (pollingChanged)
       cancelPanelUsagePoll();
+    if (hasHostname)
+      settings::setHostname(hostnameValue);
     if (hasRotation && rotation / 90 != settings::displayRotation())
     {
       settings::setDisplayRotation(rotation / 90);

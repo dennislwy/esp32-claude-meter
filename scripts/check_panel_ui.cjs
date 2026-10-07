@@ -649,10 +649,15 @@ const initialState = {
     await page.locator('#hostnameInput').fill('bad name');
     await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'Use 1-15');
     assert.equal(latestPost('/api/settings').hostname, 'Studio-Meter', 'An invalid name never reaches the API');
-    await page.locator('#hostnameInput').fill('rejected-by-device');
+    // 'rejected-by-dev' is exactly 15 chars: passes the client-side maxlength check and reaches the server-side 400 path
+    await page.locator('#hostnameInput').fill('rejected-by-dev');
     await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'not allowed');
     state.hostname_saved = state.hostname; await page.evaluate(() => refreshState());
     assert.equal(await page.locator('#hostnamePending').isVisible(), false, 'The pending notice clears once the names agree');
+    await page.locator('#hostnameInput').fill('mid-edit');
+    await page.evaluate(() => refreshState());
+    assert.equal(await page.locator('#hostnameInput').inputValue(), 'mid-edit', 'Unsaved hostname edits survive the poll');
+    await page.locator('#hostnameInput').fill('claude-meter'); await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'Saved');
     await select('alerts');
     assert.equal(await page.locator('[data-view=alerts]').textContent(), 'Polling & alerts');
     assert.equal(await page.locator('#currentView').textContent(), 'Polling & alerts');

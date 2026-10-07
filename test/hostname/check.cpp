@@ -49,6 +49,10 @@ int main()
     assert(!hostnameNormalize(bad[i], out));
   }
 
+  // Two-character minimum: the regex optional group could have diverged here.
+  assert(hostnameNormalize("ab", out));
+  assert(strcmp(out, "ab") == 0);
+
   // Hyphens may separate but not bracket.
   assert(!hostnameNormalize("-abc", out));
   assert(!hostnameNormalize("abc-", out));

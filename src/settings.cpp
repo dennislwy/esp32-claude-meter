@@ -271,7 +271,7 @@ String hostname()
 
 bool setHostname(const String &value)
 {
-  // An empty value clears the key, so hostname() falls back to the default
+  // An empty value is stored as-is, so hostname() falls back to the default
   if (value.isEmpty())
   {
     store(KEY_HOSTNAME, "");

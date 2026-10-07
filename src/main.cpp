@@ -592,8 +592,14 @@ void printStatus()
   const uint32_t millivolts = battery.readMillivolts();
   Serial.printf("Battery:   %.2f V  %u %%\n", millivolts / 1000.0f, Battery::percentFromMillivolts(millivolts));
   Serial.printf("View:      %s\n", viewName(view));
-  Serial.printf("Hostname:  %s.local%s\n", settings::hostname().c_str(),
-                panelMode && panelDisplay.hostname != settings::hostname() ? " (restart to apply)" : "");
+  {
+    const String saved = settings::hostname();
+    const String active = panelMode ? panelDisplay.hostname : saved;
+    if (active != saved)
+      Serial.printf("Hostname:  %s.local (saved as %s.local, restart to apply)\n", active.c_str(), saved.c_str());
+    else
+      Serial.printf("Hostname:  %s.local\n", active.c_str());
+  }
   Serial.printf("Interval:  %u min, next poll in %ld s\n", settings::pollIntervalMinutes(), (long)nextPollAt - (long)now);
   Serial.printf("Warnings:  5h at %u%%, 7d at %u%%\n", settings::warningPercent5h(), settings::warningPercent7d());
   Serial.printf("Quiet:     %02u:%02u-%02u:%02u (%s)\n",
@@ -939,7 +945,10 @@ void runCommand(const String &line)
   }
   else if (line.startsWith("hostname "))
   {
-    const String value = line.substring(9) == "clear" ? String("") : line.substring(9);
+    String value = line.substring(9);
+    value.trim();
+    if (value == "clear")
+      value = "";
     if (!settings::setHostname(value))
     {
       Serial.printf("Hostname must be 1 to %u characters of a-z, 0-9 and -, "

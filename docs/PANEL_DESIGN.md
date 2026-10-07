@@ -174,7 +174,9 @@ areas, quiet-hours row alignment, account/Wi-Fi/display/settings writes,
 quiet-hours switching with keyboard/dirty-state/save behavior,
 all six sound requests, unsafe text handling, five-row news sizing,
 destructive confirmation, empty history/usage, preservation of unsaved
-edits, connection failure, and session expiry. No external assets may load.
+edits, connection failure, session expiry, and hostname rename (pending
+notice, client-side rejection, server-side 400, and survival of an
+unsaved edit across a poll). No external assets may load.
 
 Use an installed Playwright package and browser:
 
@@ -254,7 +256,9 @@ and year rollover, and daylight-saving gaps/repeats; MSVC compiled these
 tests with warnings treated as errors. The final ESP32 build passed and
 the binary contains the exact 81,959-byte embedded page. This version has
 not been flashed at that stage; physical sleep/wake and current-draw verification remain
-pending. See [the host test instructions](../test/pause_hours/README.md).
+pending. See the host test instructions for
+[pause hours](../test/pause_hours/README.md) and
+[the hostname rule](../test/hostname/README.md).
 
 The navigation item, breadcrumb, and page title now use Polling & alerts.
 Its two cards are Polling & breaks (Poll interval, then Break hours) and
