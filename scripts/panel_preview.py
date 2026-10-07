@@ -8,6 +8,7 @@ import argparse
 import errno
 import json
 import math
+import re
 import socket
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,7 +17,8 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE = {
-    "ip": "192.168.1.42", "hostname": "claude-meter", "uptime_s": 93642,
+    "ip": "192.168.1.42", "hostname": "claude-meter",
+    "hostname_saved": "claude-meter", "uptime_s": 93642,
     "fw_version": "0.0.9", "fw_rev": "preview", "heap_free": 148480,
     "heap_min": 102400, "battery_mv": 4120, "battery_pct": 94,
     "wifi_rssi": -52, "wifi_ssid": "Studio Wi-Fi", "wifi_mac": "02:00:00:12:34:56", "poll_min": 2,
@@ -134,6 +136,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
                     if (any(type(value) is not int or not 0 <= value <= (23 if i % 2 == 0 else 59)
                             for i, value in enumerate(times)) or times[:2] == times[2:]):
                         return self.reply(400, {"error": "bad_" + prefix + "_hours"})
+            if "hostname" in body:
+                name = body.pop("hostname")
+                if name and not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,13}[A-Za-z0-9])?", name):
+                    return self.reply(400, {"error": "bad_hostname"})
+                # A rename applies on restart, so the active name is deliberately left alone
+                STATE["hostname_saved"] = name.lower() if name else "claude-meter"
             STATE.update({key: value for key, value in body.items() if key in STATE and key != "accounts"})
         elif path == "/api/tokens":
             for i, account in enumerate(STATE["accounts"], 1):

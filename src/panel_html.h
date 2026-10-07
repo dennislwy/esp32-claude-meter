@@ -115,6 +115,7 @@ setTheme(themeMode);
       </section>
       <section class="view hidden" id="view-device" aria-labelledby="deviceTitle"><div class="page-head"><div><div class="eyebrow">The little screen on your desk</div><h1 id="deviceTitle" tabindex="-1">Your companion.</h1><p>A few thoughtful settings to help it fit into your day.</p></div></div>
         <div class="card"><div class="card-head"><h2>Display &amp; time</h2><span class="eyebrow">Personalization</span></div><div class="setting-row"><div class="setting-copy"><label for="tzInput">Time zone</label><p>Reset times, quiet hours, and pause hours follow this zone.<br>Daylight saving adjusts automatically.</p></div><div class="f"><div class="combo" id="tzCombo"><input id="tzInput" placeholder="Search a city, country, or offset…" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tzList"><svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg><div class="combo-list" id="tzList" role="listbox" aria-label="Time zones"></div></div><div class="hint" id="tzNow"></div></div></div><div class="setting-row"><div class="setting-copy"><label for="rot">Screen rotation</label><p>Choose how your meter sits on your desk.</p></div><div class="f"><select id="rot"><option value="0">0° · Upright</option><option value="90">90° · Clockwise</option><option value="180">180° · Upside down</option><option value="270">270° · Clockwise</option></select><div class="hint">Changing rotation triggers a full display refresh.</div></div></div><div class="form-actions"><button class="btn" id="btnDisplay">Save display &amp; time</button></div><div class="status" id="dispStatus" role="status"></div></div>
+        <div class="card"><div class="card-head"><h2>Device name</h2><span class="eyebrow">Network identity</span></div><div class="setting-row"><div class="setting-copy"><label for="hostnameInput">Hostname</label><p>How you reach the panel on your network, as <code>&lt;name&gt;.local</code>.</p></div><div class="f"><input id="hostnameInput" maxlength="15" pattern="[A-Za-z0-9-]*" autocomplete="off" spellcheck="false"><div class="hint">Letters, numbers, and hyphens — up to 15 characters. Takes effect after restart; use Restart device below.</div><div class="hint" id="hostnamePending" hidden></div></div></div><div class="form-actions"><button class="btn" id="btnHostname">Save device name</button></div><div class="status" id="hostnameStatus" role="status"></div></div>
         <div class="form-grid"><div class="card"><div class="card-head"><h2>Wi-Fi connection</h2><svg class="icon muted" aria-hidden="true"><use href="#i-wifi"/></svg></div><div class="f"><label for="ssid">Network name</label><input id="ssid" maxlength="32" autocomplete="off"></div><div class="f"><label for="pass">Password</label><input id="pass" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password"></div><div class="btn-row"><button class="btn" id="btnWifi">Save Wi-Fi</button><button class="alt btn-narrow" id="btnScan">Find networks</button></div><div class="scanlist" id="scanList" aria-live="polite"></div><div class="status" id="wifiStatus" role="status"></div><div class="hint">Changes apply at the next poll. Keep this network connected until then.</div></div><div class="card"><div class="card-head"><h2>Device details</h2><span class="eyebrow">ESP32-S3</span></div><div class="kv"><span class="k">Hostname</span><span id="hostname">—</span></div><div class="kv"><span class="k">IP address</span><span id="ip">—</span></div><div class="kv"><span class="k">Wi-Fi</span><span id="wifi">—</span></div><div class="kv"><span class="k">MAC address</span><span id="mac">—</span></div><div class="kv"><span class="k">Uptime</span><span id="uptime">—</span></div><div class="kv"><span class="k">Battery</span><span id="batt">—</span></div><div class="kv"><span class="k">Last poll</span><span id="age">—</span></div><div class="kv"><span class="k">Free memory</span><span id="heap">—</span></div><div class="kv"><span class="k">Firmware</span><span id="fw">—</span></div></div></div>
         <div class="card danger"><div class="card-head"><h2>Device management</h2></div><p class="section-intro">These actions need a second click within five seconds to confirm.</p><div class="danger-row"><div><h3>Clear usage history</h3><p>Remove the saved seven-day history from your meter.</p></div><button class="btn-danger" id="btnClearHist">Clear history</button></div><div class="danger-row"><div><h3>Restart your meter</h3><p>Ends this session and returns to normal operation.</p></div><button class="btn-danger" id="btnReboot">Restart device</button></div><div class="danger-row"><div><h3>Restore factory settings</h3><p>Erases Wi-Fi, account tokens, settings, and history.<br>Reconnect to the device’s setup hotspot after restarting.</p></div><button class="btn-danger" id="btnFactory">Factory reset</button></div><div class="status" id="dangerStatus" role="status"></div></div>
       </section>
@@ -210,6 +211,10 @@ async function refreshState(){
   if(!r.ok){if(r.status!==401)connectionState(false);return}
   const s=r.data;
   $('hostname').textContent=s.hostname?s.hostname+'.local':'—';
+  syncField('hostnameInput',s.hostname_saved||'');
+  const pending=s.hostname_saved&&s.hostname&&s.hostname_saved!==s.hostname;
+  $('hostnamePending').hidden=!pending;
+  if(pending)$('hostnamePending').textContent='Saved as '+s.hostname_saved+'.local — restart to apply.';
   $('ip').textContent=s.ip||'–';
   $('wifi').textContent=(s.wifi_ssid||'?')+'  ·  '+s.wifi_rssi+' dBm ('+rssiWord(s.wifi_rssi)+')';
   $('mac').textContent=s.wifi_mac||'—';
@@ -638,6 +643,20 @@ $('btnDisplay').onclick=async()=>{
   b.disabled=false;
   st.textContent=r.ok?'Saved':(r.data?.error||'Error');st.className='status '+(r.ok?'ok':'err');
   if(r.ok){tzDirty=false;rotDirty=false;tzSaved=null;refreshState()}
+};
+$('btnHostname').onclick=async()=>{
+  const st=$('hostnameStatus'),b=$('btnHostname'),name=$('hostnameInput').value.trim();
+  // Same rule the firmware enforces, checked here so a typo never reaches the API
+  if(name&&!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,13}[A-Za-z0-9])?$/.test(name)){
+    st.textContent='Use 1-15 letters, numbers, or hyphens, not starting or ending with a hyphen';
+    st.className='status err';return
+  }
+  b.disabled=true;
+  const r=await api('/api/settings','POST',{hostname:name});
+  b.disabled=false;
+  st.textContent=r.ok?'Saved — restart to apply':(r.data?.error==='bad_hostname'?'That name is not allowed':(r.data?.error||'Error'));
+  st.className='status '+(r.ok?'ok':'err');
+  if(r.ok){cleanFields(['hostnameInput']);refreshState()}
 };
 // Shows the first 5 headlines; the rest scroll. Heights vary with title wrapping, so measure.
 function fitNews(){

@@ -10,7 +10,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/panel_html.h'), 'utf
 const html = source.split('R"HTML(')[1].split(')HTML";')[0];
 const now = 1791220000;
 const initialState = {
-  ip: '192.168.1.42', hostname: 'claude-meter', uptime_s: 93642,
+  ip: '192.168.1.42', hostname: 'claude-meter', hostname_saved: 'claude-meter', uptime_s: 93642,
   fw_version: '0.0.9', fw_rev: 'preview', heap_free: 148480, heap_min: 102400,
   battery_mv: 4120, battery_pct: 94, wifi_rssi: -52, wifi_ssid: 'Studio Wi-Fi',
   wifi_mac: '02:00:00:12:34:56',
@@ -73,7 +73,15 @@ const initialState = {
     if (endpoint === '/api/state') return reply(state);
     if (endpoint === '/api/history') return reply({ cols: HIST_COLS, col_seconds: 1800, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:i%40), d7: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:20+i%50) })) });
     if (endpoint === '/api/news') return reply({ ok: true, fetching: newsFetching, fetched_epoch: now, items: Array.from({ length: 8 }, (_, i) => ({ title: i ? 'Preview headline ' + i : '<img src=x onerror="window.injected=true">', date: 'Oct 5, 2026', link: i ? 'https://www.anthropic.com/news' : 'javascript:alert(1)' })) });
-    if (endpoint === '/api/settings') { Object.assign(state, body); return reply({ ok: true }); }
+    if (endpoint === '/api/settings') {
+      if (body.hostname === 'rejected-by-dev') return reply({ error: 'bad_hostname' }, 400);
+      const { hostname, ...rest } = body;
+      // Matches the firmware: the name is lowercased and applies on restart, so
+      // the active name this session is serving stays as it is
+      if (hostname !== undefined) state.hostname_saved = hostname.toLowerCase() || 'claude-meter';
+      Object.assign(state, rest);
+      return reply({ ok: true });
+    }
     if (endpoint === '/api/tokens') { state.accounts.forEach((a, i) => a.name = body['name' + (i + 1)]); return reply({ ok: true, probes: [{ account: 1, ok: true, http: 200, h5: 29, d7: 60 }] }); }
     if (endpoint === '/api/wifi/scan') return reply({ networks: [{ ssid: '<img src=x onerror="window.injected=true">', rssi: -45, channel: 6, secure: true, saved: false }] });
     if (endpoint === '/api/history.csv') {
@@ -572,7 +580,7 @@ const initialState = {
         if(view==='usage')assert.equal(await page.evaluate(()=>histChart.getOption().xAxis[0].axisPointer.snap===true),width<=760,'Snapping pointer follows the mobile breakpoint');
         if(view==='usage')assert.equal(await page.evaluate(()=>histChart.getOption().series.every(series=>series.emphasis.disabled===true)),width<=760,'Series emphasis is disabled on mobile and restored on desktop');
         if (view === 'device' || view === 'alerts') {
-          for (const buttonSelector of view === 'device' ? ['#btnDisplay'] : ['#btnPolling', '#btnSettings']) {
+          for (const buttonSelector of view === 'device' ? ['#btnDisplay', '#btnHostname'] : ['#btnPolling', '#btnSettings']) {
             const separators = await page.locator(buttonSelector).evaluate(button => {
               const actions = button.parentElement, lastRow = actions.previousElementSibling;
               return Number(parseFloat(getComputedStyle(lastRow).borderBottomWidth) > 0) + Number(parseFloat(getComputedStyle(actions).borderTopWidth) > 0);
@@ -632,6 +640,19 @@ const initialState = {
     await page.locator('#rot').selectOption('90'); await page.locator('#btnDisplay').click(); await waitFor('#dispStatus', 'Saved');
     assert.equal(latestPost('/api/settings').tz_name, 'Asia/Tokyo');
     assert.equal(latestPost('/api/settings').rotation, 90);
+    await page.locator('#hostnameInput').fill('Studio-Meter');
+    await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'Saved');
+    assert.equal(latestPost('/api/settings').hostname, 'Studio-Meter');
+    assert.equal(await page.locator('#hostnamePending').isVisible(), true, 'A saved rename is flagged as pending');
+    assert.match(await page.locator('#hostnamePending').textContent(), /studio-meter\.local/);
+    assert.equal(await page.locator('#hostname').textContent(), 'claude-meter.local', 'Device details keeps showing the active name');
+    await page.locator('#hostnameInput').fill('bad name');
+    await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'Use 1-15');
+    assert.equal(latestPost('/api/settings').hostname, 'Studio-Meter', 'An invalid name never reaches the API');
+    await page.locator('#hostnameInput').fill('rejected-by-device');
+    await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'not allowed');
+    state.hostname_saved = state.hostname; await page.evaluate(() => refreshState());
+    assert.equal(await page.locator('#hostnamePending').isVisible(), false, 'The pending notice clears once the names agree');
     await select('alerts');
     assert.equal(await page.locator('[data-view=alerts]').textContent(), 'Polling & alerts');
     assert.equal(await page.locator('#currentView').textContent(), 'Polling & alerts');
