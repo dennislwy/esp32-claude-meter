@@ -71,7 +71,8 @@ of this flag, so the flag is only meaningful in Normal mode.
 
 ## 2 — Web Panel
 
-A STA-mode HTTP server on `claude-meter.local` for editing settings,
+A STA-mode HTTP server on `<hostname>.local` (default `claude-meter`,
+configurable; applies at the next restart) for editing settings,
 reviewing history, playing alert sounds, and triggering a refresh. See
 [WEB_SERVER.md](WEB_SERVER.md).
 

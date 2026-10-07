@@ -16,6 +16,7 @@
 #include "news.h"
 #include "panel_html.h"
 #include "panel_usage_poll.h"
+#include "hostname.h"
 #include "settings.h"
 
 namespace
@@ -25,6 +26,9 @@ namespace
   WebServer *server = nullptr;
   bool active = false;
   char pinCode[7] = {0};
+  // The name handed to MDNS.begin() for this session. A rename only takes effect
+  // on restart, so the readouts must report this rather than the saved setting.
+  String activeHostname;
   const AccountUsage *usageSource = nullptr;
 
   // A few concurrent sessions (phone + laptop, say). A login past the limit evicts the slot
@@ -233,7 +237,8 @@ namespace
       return;
     JsonDocument d;
     d["ip"] = WiFi.localIP().toString();
-    d["hostname"] = "claude-meter";
+    d["hostname"] = activeHostname;
+    d["hostname_saved"] = settings::hostname();
     d["uptime_s"] = (uint32_t)(millis() / 1000);
     d["fw_version"] = FW_VERSION;
     d["fw_rev"] = FW_GIT_REV;
@@ -344,6 +349,21 @@ namespace
       sendErr(400, "bad_rotation");
       return;
     }
+    const bool hasHostname = !body["hostname"].isNull();
+    // `| ""`, not as<String>(): a missing key would become the string "null"
+    const String hostnameValue = body["hostname"] | "";
+    if (hasHostname)
+    {
+      // Anything but a string would read as empty, which would silently
+      // restore the default instead of reporting the bad request
+      char normalized[HOSTNAME_LIMIT + 1];
+      if (!body["hostname"].is<const char *>() ||
+          (!hostnameValue.isEmpty() && !hostnameNormalize(hostnameValue.c_str(), normalized)))
+      {
+        sendErr(400, "bad_hostname");
+        return;
+      }
+    }
     if (!body["tz"].isNull())
     {
       // `| ""`, not as<String>(): a missing key would become the string "null"
@@ -365,6 +385,8 @@ namespace
     // The loop collects the running request without blocking this handler.
     if (pollingChanged)
       cancelPanelUsagePoll();
+    if (hasHostname)
+      settings::setHostname(hostnameValue);
     if (hasRotation && rotation / 90 != settings::displayRotation())
     {
       settings::setDisplayRotation(rotation / 90);
@@ -774,7 +796,8 @@ void panelBegin(PanelDisplay &out)
   active = true;
 
   out.ip = WiFi.localIP().toString();
-  out.hostname = "claude-meter";
+  activeHostname = settings::hostname();
+  out.hostname = activeHostname;
   out.pin = String(pinCode);
 }
 

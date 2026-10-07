@@ -63,7 +63,7 @@ Type `help` for the full list. Highlights:
 
 | Command                               | Purpose                                                                 |
 | ------------------------------------- | ----------------------------------------------------------------------- |
-| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet/pause hours |
+| `status`                              | Time, battery, current view, hostname, next poll, warning thresholds, quiet/pause hours |
 | `usage`                               | Poll now, print the result, redraw, trigger any alerts                  |
 | `view`                                | Switch to the next view (dual / account 1 / account 2)                  |
 | `interval <1-5>`                      | Minutes between polls                                                   |
@@ -72,6 +72,7 @@ Type `help` for the full list. Highlights:
 | `quiet <start>-<end>`                 | Set quiet hours, 24-h local time (e.g. `quiet 22-8`)                    |
 | `pause on \| off` | Enable or disable Pause Hours |
 | `pause <start>-<end>` | Set the local polling-pause window (e.g. `pause 00:00-06:00`) |
+| `hostname` / `hostname <name>`        | Show or set the mDNS name, max 15 chars; `clear` restores the default   |
 | `alerts` / `alerts clear`             | Inspect / reset the per-window alert state                              |
 | `history` / `history clear`           | Inspect / wipe the 7-day usage ring                                     |
 | `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock                                           |
@@ -99,7 +100,8 @@ Type `help` for the full list. Highlights:
 - **Web Panel**: a long `BOOT` press opens a browser control panel on
   your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,
-  Wi-Fi, alerts, and sounds. Usage continues polling automatically at the
+  Wi-Fi, alerts, sounds, and the mDNS device name (applied at the next
+  restart). Usage continues polling automatically at the
   configured interval, except during Pause Hours. HTTPS requests run on a
   worker while the panel serves cached state; completed results update the
   Usage page on its next status refresh. The panel exits by itself after
@@ -130,8 +132,9 @@ Preview the actual embedded page locally without a board:
 python scripts/panel_preview.py
 ```
 
-Open `http://127.0.0.1:8080` and use PIN **123456**. Data and device actions
-are simulated; the preview binds only to loopback.
+Open the URL printed by the script and use PIN **123456**. It defaults to port
+8080 and chooses a free port if that port is busy. Data and device actions are
+simulated; the preview binds only to loopback.
 
 ## Project layout
 
