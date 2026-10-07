@@ -69,7 +69,7 @@ the page has been judged.
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Usage            | Both accounts, usage bars, responsive seven-day chart, manual refresh                                                |
 | Accounts         | Account names and masked token replacement, including save-time API probe results                                    |
-| Device           | Display/time zone, rotation, Wi-Fi and network scan, complete diagnostics, destructive maintenance                   |
+| Device           | Complete diagnostics, device name, Wi-Fi and network scan, display/time zone and rotation, destructive maintenance   |
 | Polling & alerts | Polling & breaks: interval and break schedule. Alerts & sound: warning thresholds, speaker controls, and quiet hours |
 | News             | Feed headlines, publication dates, source link, fetch/stale feedback                                                 |
 

@@ -58,7 +58,7 @@ complete diagnostics.
 - Hostname (`<active-name>.local`), listed first so the mDNS name sits directly
   above the IP address it resolves to. This row reports the **active** name —
   the one the device actually registered at startup. The Device name card
-  (above the Wi-Fi card on the Device page) is where you change it; a
+  (beside this one at the top of the Device page) is where you change it; a
   pending rename shows a notice there until the meter restarts and the new
   name takes effect
 - IP, uptime (`Xd Yh Zm`), battery %, last-poll age
