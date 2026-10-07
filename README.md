@@ -63,7 +63,7 @@ Type `help` for the full list. Highlights:
 
 | Command                               | Purpose                                                                 |
 | ------------------------------------- | ----------------------------------------------------------------------- |
-| `status`                              | Time, battery, current view, next poll, warning thresholds, quiet/pause hours |
+| `status`                              | Time, battery, current view, hostname, next poll, warning thresholds, quiet/pause hours |
 | `usage`                               | Poll now, print the result, redraw, trigger any alerts                  |
 | `view`                                | Switch to the next view (dual / account 1 / account 2)                  |
 | `interval <1-5>`                      | Minutes between polls                                                   |
