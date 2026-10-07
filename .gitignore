@@ -5,9 +5,13 @@ node_modules/
 .vscode/launch.json
 .vscode/ipch
 .env
-foobar/
+
+# to remove in production
 *.wav
+foobar/
 DESIGN_REQUIREMENTS.md
 src/build_info.cpp
 claude-ui-samples/
 *.ps1
+TODO*.md
+*.png

@@ -83,7 +83,11 @@ Type `help` for the full list. Highlights:
 
 - **Debug mode** (default when USB host is attached at cold boot): serial
   enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s to
-  toggle at any time (awake, asleep, or on battery).
+  toggle at any time (awake, asleep, or on battery). It has no idle
+  timeout: the board stays awake and skips deep sleep until you turn it off
+  with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
+  Clear it before unplugging, or battery life drops well short of the
+  normal-mode figure.
 - **Normal mode** (battery): serial and LED off to save power. The board
   wakes on its poll timer, polls, draws, and deep-sleeps again. During enabled
   Pause Hours it sleeps until the window ends without automatic usage
@@ -93,7 +97,16 @@ Type `help` for the full list. Highlights:
 - **Web Panel**: a long `BOOT` press opens a browser control panel on
   your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,
-  Wi-Fi, alerts, and sounds. See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
+  Wi-Fi, alerts, and sounds. Usage continues polling automatically at the
+  configured interval, except during Pause Hours. HTTPS requests run on a
+  worker while the panel serves cached state; completed results update the
+  Usage page on its next status refresh. The panel exits by itself after
+  5 minutes with no authenticated request — the Wi-Fi radio is the board's
+  heaviest load — and hands control back to the sleep cycle unless debug mode
+  is on. Automatic polls do not count as activity, but an open signed-in tab
+  polls every 5 seconds and keeps the panel alive indefinitely — close the tab
+  when you're done, or the radio will flatten the battery.
+  See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
   and [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
 
 The usage ring survives power cycles (persisted to LittleFS; written only
@@ -103,7 +116,8 @@ when the 30-min slot advances — ~48 writes/day).
 
 The panel has Usage, Accounts, Device, Polling & alerts, and News views.
 It supports automatic six-digit sign-in, System/Light/Dark appearance
-applied before first paint, and a seven-day chart with weekday labels
+applied before first paint, reopening the same page after a browser
+refresh, and a seven-day chart with weekday labels
 directly below the midnight ticks in the device's time zone. Device details
 includes the Wi-Fi MAC address. See [panel features](docs/PANEL_FEATURES.md)
 and [panel design](docs/PANEL_DESIGN.md) for the full behavior and verification.

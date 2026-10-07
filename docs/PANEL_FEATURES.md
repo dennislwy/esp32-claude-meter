@@ -23,7 +23,10 @@ when loading in dark mode. Blocked storage falls back to the system theme.
 The complete UI loads from the meter, with no external fonts or scripts.
 Serif text prefers locally installed Anthropic Serif, then Georgia,
 Times New Roman, and the browser's default serif. No font file is shipped.
-Both the sign-in footer and page footer link to the project's GitHub repository.
+Both the sign-in footer and page footer link to the project's GitHub repository,
+at the same font size (11 px, 10 px at 480 CSS pixels and below).
+Refreshing the browser reopens the page that was showing; the view is kept per
+tab, so a new tab starts on Usage.
 Keyboard focus, labelled controls, live feedback, and reduced-motion
 preferences are supported.
 
@@ -52,7 +55,9 @@ Usage shows per-account bars and the seven-day chart. Device → Device
 details contains battery, last poll, signal strength, uptime, and the
 complete diagnostics.
 
-- IP, hostname, uptime (`Xd Yh Zm`), battery %, last-poll age
+- Hostname (`claude-meter.local`), listed first so the mDNS name sits directly
+  above the IP address it resolves to
+- IP, uptime (`Xd Yh Zm`), battery %, last-poll age
 - Wi-Fi: SSID, RSSI and a quality word (`GSFwifi  ·  -55 dBm (excellent)`;
   ≥ -55 excellent, ≥ -67 good, ≥ -75 fair, below that weak)
 - MAC address: the device's Wi-Fi station address, shown after Wi-Fi
@@ -82,7 +87,7 @@ flash and loaded after sign-in.
 
 - Orange = account 1, blue = account 2, matching the usage progress bars;
   colors adapt to the theme
-- Solid line = 5 H series (1.6 px), dashed line = 7 D series (1 px)
+- Solid line = 5 H series (1.2 px), dashed line = 7 D series (1 px)
 - The in-chart legend independently toggles each account's 5-hour/7-day
   series and is included in saved images. Long account names are shortened
   to fit the chart. Equivalent keyboard controls appear when focused; use
@@ -255,9 +260,16 @@ commands (`pause`). Existing saved Break Hours values migrate to the new
 NVS keys without resetting the window or switch; the midnight default only
 applies when no schedule has been saved.
 
-Settings changes do not force a re-poll; the UI picks them up on its
-next `/api/state` tick. Pause Hours changes re-evaluate the next poll on exit
-from panel mode, including when a pause is disabled or shortened.
+Usage polling continues while the panel is open, at the configured interval.
+HTTPS requests run on a worker while the main loop serves cached state;
+successful results appear on the next five-second `/api/state` tick. Failed
+requests retain the last successful values and their original age.
+
+Polling, Pause Hours, time-zone, and token changes cancel outdated worker
+results and re-evaluate the next automatic poll after about two seconds,
+respecting the updated pause window. Other settings update on the next
+status tick without triggering extra usage requests. **Refresh now** queues
+a manual poll, with repeated clicks coalesced while a request is in flight.
 
 During Pause Hours, Usage shows a pause notice and keeps the last cached
 figures. Normal mode sleeps until the window ends without periodic Wi-Fi
@@ -271,7 +283,9 @@ first and checks the window before sending usage requests.
 
 Clears the `sid` cookie and ends the session. Panel mode on the device
 stays up until the normal exit (long BOOT, serial `panel`, 5 min idle,
-or reboot).
+or reboot). Signing out does stop the 5-second state polling, so it lets
+the idle timeout run; simply leaving the page open does not, because each
+poll resets the timer.
 
 A `401` from any authenticated endpoint returns the page to the PIN
 screen. Connection failures show feedback, and state polling retries

@@ -41,14 +41,24 @@ bool clockValid()
   return time(nullptr) > VALID_AFTER;
 }
 
-bool clockSyncNtp(Pcf85063 &rtc)
+void clockStartNtpSync()
 {
   sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
   const String timeZone = settings::timeZone();
   configTzTime(timeZone.c_str(), NTP_SERVER_1, NTP_SERVER_2);
+}
+
+bool clockNtpSyncComplete()
+{
+  return sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED && clockValid();
+}
+
+bool clockSyncNtp(Pcf85063 &rtc)
+{
+  clockStartNtpSync();
   // configTzTime returns before the first sync completes
   const uint32_t start = millis();
-  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED || !clockValid())
+  while (!clockNtpSyncComplete())
   {
     if (millis() - start > NTP_TIMEOUT_MS)
     {

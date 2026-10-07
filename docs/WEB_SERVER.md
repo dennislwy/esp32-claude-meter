@@ -35,6 +35,14 @@ Exit panel mode:
 - 5 minutes with no authenticated API request (idle timeout)
 - Device reboot (loses the session)
 
+The idle timeout measures **requests, not user interaction**. A signed-in
+tab polls `/api/state` every 5 seconds, and every authenticated request
+refreshes the timer, so leaving the panel open on a screen keeps the board
+awake with the Wi-Fi radio on indefinitely — roughly 4-6 hours on a
+400 mAh pack. The countdown only starts once the browser stops polling:
+the tab is closed, the browser quits, or the phone locks and suspends its
+timers. Close the tab (or long-press BOOT) when you are done.
+
 Long-pressing BOOT from deep sleep enters panel mode directly: `setup()`
 polls the BOOT pin for up to `LONG_PRESS_MS` after an `ext1` wake and
 takes the long-press branch when BOOT is still held at the deadline.
@@ -170,7 +178,9 @@ Rendered client-side from an embedded HTML blob, organised into **Usage**,
 **Accounts**, **Device**, **Polling & alerts**, and **News** views. The
 sidebar becomes a scrollable navigation row on phones. System/light/dark
 appearance is saved per browser and resolved in the head before the first
-paint. Both footers link to the GitHub repository. See [PANEL_DESIGN.md](PANEL_DESIGN.md)
+paint. The open view is saved per tab in `sessionStorage`, so a browser
+refresh reopens the same page rather than returning to Usage.
+Both footers link to the GitHub repository. See [PANEL_DESIGN.md](PANEL_DESIGN.md)
 for the reference analysis and a simulated local preview.
 
 `GET /assets/echarts-6.1.0-v2.js` serves the embedded Apache ECharts bundle
@@ -181,7 +191,7 @@ LittleFS upload is required; the public asset contains no device data.
 | Card                       | Purpose                                                                                                                                                                                                                                                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Sign in**                | PIN prompt; typing or pasting six digits automatically calls `/api/login`. Replaced by the dashboard on success; manual retry is available.                                                                                                                                                                                                                  |
-| **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: battery, last poll, uptime, IP, Wi-Fi (SSID, dBm, quality word), Wi-Fi MAC address immediately after Wi-Fi, heap free / low-water mark, firmware release version + git revision, and the full device diagnostics.                                                        |
+| **Usage / Device details** | Usage: per-account bars with device-time-zone reset times and "Refresh now". Device details: hostname (`<hostname>.local`) above IP, battery, last poll, uptime, Wi-Fi (SSID, dBm, quality word), Wi-Fi MAC address immediately after Wi-Fi, heap free / low-water mark, firmware release version + git revision, and the full device diagnostics.                                                        |
 | **7-day history**          | Local Apache ECharts canvas chart, 168 hourly columns; blue = account 1, green = account 2, solid = 5h, dashed = 7d. One combined graph with four independent in-chart legend toggles and hover/tap tooltips. Double-click/double-tap toggles closer/full-week zoom; wheel/pinch, drag, and keyboard provide zoom/pan/reset. Save image aligns with the chart title and downloads the current chart, including its title and legend, as a PNG. Export CSV, right of Save image, downloads the raw 30-min history from `/api/history.csv`. Selections and zoom survive refreshes and view/theme changes. Weekdays align with device-local midnight ticks; missing samples remain gaps. |
 | **Anthropic news**         | 10 latest headlines (13px date + title link), 5 visible and the rest in a scroll, fetched once when panel mode opens; stale headlines kept if a fetch fails. Successful-fetch status links to anthropic.com/news.                                                                                                                                            |
 | **Accounts**               | Name + token fields. Empty token keeps the stored one. A newly entered token is checked against the API on save and the verdict shown per token.                                                                                                                                                                                                             |
@@ -200,15 +210,34 @@ action flags drained by `loop()`:
 
 | Flag                       | Set by                                    | Handled in `loop()`                                                                                                                              |
 | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Calls `pollAndShow(true)` (explicitly overrides Pause Hours), reconnects Wi-Fi (since `pollUsage()` turns it off at the end), redraws panel view |
-| `PANEL_ACT_SETTINGS_SAVED` | `/api/settings`, `/api/tokens`            | Resets the next poll deadline so changed/disabled Pause Hours take effect when Normal mode resumes; client polls `/api/state` on a timer         |
+| `PANEL_ACT_REFRESH`        | `/api/refresh`                            | Queues a worker poll that overrides Pause Hours; Wi-Fi stays connected and repeated requests coalesce |
+| `PANEL_ACT_SETTINGS_SAVED` | Polling/pause/time-zone settings or new tokens | Cancels outdated results and re-evaluates the next automatic poll after about two seconds, including during the active panel session |
 | `PANEL_ACT_TIME_ZONE`      | `/api/settings` with a changed `tz`       | `clockApplyTimeZone()`: `setenv("TZ")` + `tzset()`, rewrite the RTC (which holds local time) in the new zone, redraw                             |
 | `PANEL_ACT_ROTATION`       | `/api/settings` with a changed `rotation` | `lvglPortSetRotation()`, then redraw with a full e-paper refresh                                                                                 |
 | `PANEL_ACT_REBOOT`         | `/api/reboot`, `/api/factory-reset`       | `delay(800)` to let the response flush, then `ESP.restart()`                                                                                     |
 
-Wi-Fi stays up the entire time panel mode is active. Each refresh
-cycles through `pollUsage()` (which internally disconnects) and then
-reconnects — expect a ~3-5 s stall during a refresh.
+Automatic usage polling continues during panel mode at the configured
+1–5 minute interval, with Pause Hours deferring the next poll until the
+window ends. Manual refreshes override that pause. One worker job runs at
+a time, using the existing Wi-Fi connection without switching the radio off.
+The main loop serves cached state during HTTPS requests and applies results
+only after the worker publishes them. It then records history and checks
+alerts; the browser reads the updated state on its five-second timer.
+
+HTTP failures preserve earlier percentages and their age. Polling settings
+and token changes cancel older snapshots; volume, Quiet Hours, and display
+edits do not trigger extra usage polls. Clock sync and Wi-Fi reconnection
+are serviced without a blocking wait on the loop. Saved Wi-Fi credentials
+are applied before the next poll. HTTPS connect, handshake, and read waits
+are bounded; an exit during a request finishes that request and skips the
+remaining accounts before disconnecting. Automatic polls do not count as
+authenticated activity, so the five-minute idle exit still applies.
+
+The worker isolates usage HTTPS latency. Existing synchronous operations
+such as token probes, news fetching, ePaper redraws, and sound playback can
+still briefly delay HTTP handling. Serial `scan` and `tlscheck` require
+leaving panel mode because those diagnostics turn Wi-Fi off; the panel's
+Wi-Fi scan remains available.
 
 Pause Hours and Quiet hours fields accept individual partial updates: omitted
 times keep their saved values. Hours must be integers 0-23, minutes 0-59,
@@ -272,7 +301,8 @@ window ends. It does not put an active panel session to sleep.
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `claude-meter.local` doesn't resolve     | Browser host lacks mDNS/Bonjour; use the IP shown on the ePaper                                       |
 | ePaper shows "Web Panel" but IP is blank | Wi-Fi failed to connect within 15 s — check SSID/pass, 2.4 GHz availability                           |
-| Panel exits by itself                    | 5-min idle timeout; any API hit resets the counter                                                    |
+| Panel exits by itself                    | 5-min idle timeout; any API hit resets the counter, so it fires only after the browser stops polling  |
+| Panel never exits / battery drains       | A signed-in tab polls every 5 s and keeps resetting the timer. Close the tab                          |
 | 429 "throttled"                          | Too many wrong PINs — exit and re-enter panel mode to reset                                           |
 | 401 "auth" after a while                 | Session evicted (new login elsewhere, or reboot). The panel returns to the PIN screen automatically   |
 | Scan returns `[]`                        | Scan completed but no networks visible on 2.4 GHz; try moving the device                              |

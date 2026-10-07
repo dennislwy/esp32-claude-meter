@@ -17,6 +17,7 @@
 #include "meter_ui.h"
 #include "news.h"
 #include "panel.h"
+#include "panel_usage_poll.h"
 #include "pcf85063.h"
 #include "provisioning.h"
 #include "settings.h"
@@ -70,6 +71,14 @@ uint32_t pwrButtonDownAt = 0;
 bool panelMode = false;
 PanelDisplay panelDisplay;
 constexpr uint32_t PANEL_INACTIVITY_MS = 5UL * 60UL * 1000UL;
+bool panelRefreshRequested = false;
+bool panelExitRequested = false;
+bool panelNtpPending = false;
+uint32_t panelNtpStartedMs = 0;
+bool panelWifiConnecting = false;
+uint32_t panelWifiStartedMs = 0;
+String panelWifiSsid;
+String panelWifiPassword;
 bool provisionMode = false;
 ProvisionInfo provisionInfo;
 
@@ -268,11 +277,8 @@ void applyPauseSchedule()
     nextPollAt = dueResume;
 }
 
-bool poll(bool force = false)
+bool completePoll(const PollReport &report, uint32_t start)
 {
-  const uint32_t start = millis();
-  const bool syncClock = !clockValid() || time(nullptr) - lastNtpSync > NTP_RESYNC_S;
-  const PollReport report = pollUsage(usage, rtc, syncClock, force);
   if (report.clockSynced)
   {
     lastNtpSync = time(nullptr);
@@ -304,6 +310,13 @@ bool poll(bool force = false)
   return true;
 }
 
+bool poll(bool force = false)
+{
+  const uint32_t start = millis();
+  const bool syncClock = !clockValid() || time(nullptr) - lastNtpSync > NTP_RESYNC_S;
+  return completePoll(pollUsage(usage, rtc, syncClock, force), start);
+}
+
 // Poll, draw the new figures, then play any alert they trigger
 bool pollAndShow(bool force = false)
 {
@@ -313,6 +326,128 @@ bool pollAndShow(bool force = false)
   render();
   checkAlerts(usage, time(nullptr));
   return true;
+}
+
+void reschedulePanelPoll()
+{
+  cancelPanelUsagePoll();
+  nextPollAt = time(nullptr) + 2;
+  applyPauseSchedule();
+}
+
+// Start/reconnect without waiting on the loop. Wi-Fi settings take effect at
+// the next poll; an HTTPS worker must finish before we change its connection.
+bool panelWifiReady()
+{
+  const String ssid = settings::wifiSsid();
+  const String password = settings::wifiPassword();
+  const bool changed = ssid != panelWifiSsid || password != panelWifiPassword;
+  if (changed || (!panelWifiConnecting && WiFi.status() != WL_CONNECTED))
+  {
+    panelWifiSsid = ssid;
+    panelWifiPassword = password;
+    panelWifiConnecting = true;
+    panelWifiStartedMs = millis();
+    WiFi.begin(ssid.c_str(), password.c_str());
+    return false;
+  }
+  if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == ssid)
+  {
+    panelWifiConnecting = false;
+    const String ip = WiFi.localIP().toString();
+    if (panelDisplay.ip != ip)
+    {
+      panelDisplay.ip = ip;
+      render();
+    }
+    return true;
+  }
+  if (millis() - panelWifiStartedMs >= 15000)
+  {
+    panelWifiConnecting = false;
+    panelRefreshRequested = false;
+    nextPollAt = time(nullptr) + settings::pollIntervalMinutes() * 60;
+    applyPauseSchedule();
+    Serial.println("Panel: Wi-Fi unavailable, keeping cached usage until the next poll");
+  }
+  return false;
+}
+
+void servicePanelUsagePolling()
+{
+  PollReport report;
+  uint32_t startedAtMs;
+  bool cancelled;
+  if (finishPanelUsagePoll(usage, report, startedAtMs, cancelled))
+  {
+    if (cancelled)
+      reschedulePanelPoll();
+    else if (completePoll(report, startedAtMs))
+    {
+      historyRecord(usage);
+      checkAlerts(usage, time(nullptr));
+      // The ePaper panel screen contains the URL/PIN, not usage values.
+      // Don't stall HTTP with an unnecessary ePaper refresh on each poll.
+    }
+  }
+  if (panelExitRequested)
+  {
+    if (!panelUsagePollPending())
+      exitPanelMode();
+    return;
+  }
+  if (panelUsagePollPending())
+    return;
+
+  // Finish NTP on the loop, which owns the RTC. Even with an unset clock the
+  // panel stays responsive while the network establishes the correct time.
+  bool ntpFinished = false;
+  if (panelNtpPending)
+  {
+    if (!clockNtpSyncComplete() && millis() - panelNtpStartedMs < 10000)
+      return;
+    if (clockNtpSyncComplete())
+    {
+      clockSaveToRtc(rtc);
+      lastNtpSync = time(nullptr);
+      Serial.println("Panel: clock synced over NTP");
+    }
+    else
+      Serial.println("Panel: NTP sync timed out");
+    panelNtpPending = false;
+    ntpFinished = true;
+    if (!clockValid())
+    {
+      panelRefreshRequested = false;
+      nextPollAt = time(nullptr) + settings::pollIntervalMinutes() * 60;
+      return;
+    }
+  }
+  if (!panelRefreshRequested && time(nullptr) < nextPollAt)
+    return;
+  if (!panelRefreshRequested)
+  {
+    applyPauseSchedule();
+    if (time(nullptr) < nextPollAt)
+      return;
+  }
+  if (!panelWifiReady())
+    return;
+  if (!ntpFinished && (!clockValid() || time(nullptr) - lastNtpSync > NTP_RESYNC_S))
+  {
+    clockStartNtpSync();
+    panelNtpPending = true;
+    panelNtpStartedMs = millis();
+    return;
+  }
+  const bool force = panelRefreshRequested;
+  panelRefreshRequested = false;
+  if (!startPanelUsagePoll(usage, force))
+  {
+    Serial.println("Panel: unable to start usage worker, retrying at the next interval");
+    nextPollAt = time(nullptr) + settings::pollIntervalMinutes() * 60;
+    applyPauseSchedule();
+  }
 }
 
 [[noreturn]] void deepSleep(uint32_t sleepSeconds)
@@ -535,6 +670,8 @@ void runCommand(const String &line)
   else if (isToken)
   {
     settings::setClaudeToken(number, value);
+    if (panelMode)
+      reschedulePanelPoll();
     Serial.printf("Claude token %d %s (%s)\n", number, value.isEmpty() ? "cleared" : "saved",
                   settings::mask(settings::claudeToken(number)).c_str());
   }
@@ -559,6 +696,12 @@ void runCommand(const String &line)
   }
   else if (line == "usage")
   {
+    if (panelMode)
+    {
+      panelRefreshRequested = true;
+      Serial.println("Panel: usage refresh queued");
+      return;
+    }
     poll(true); // Explicit user requests may refresh during Pause Hours.
     printUsage(usage);
     render();
@@ -618,8 +761,7 @@ void runCommand(const String &line)
   else if (line == "pause on" || line == "pause off")
   {
     settings::setPauseHoursEnabled(line.endsWith("on"));
-    nextPollAt = time(nullptr) + 2;
-    applyPauseSchedule();
+    reschedulePanelPoll();
     Serial.printf("Pause Hours %s\n", settings::pauseHoursEnabled() ? "on" : "off");
   }
   else if (line.startsWith("pause "))
@@ -638,8 +780,7 @@ void runCommand(const String &line)
         Serial.println("Pause Hours: From and Until must be different times");
         return;
       }
-      nextPollAt = time(nullptr) + 2;
-      applyPauseSchedule();
+      reschedulePanelPoll();
       Serial.printf("Pause Hours %02u:%02u-%02u:%02u (%s)\n", sh, sm, eh, em,
                     settings::pauseHoursEnabled() ? "on" : "off");
     }
@@ -735,10 +876,20 @@ void runCommand(const String &line)
   }
   else if (line == "scan")
   {
+    if (panelMode)
+    {
+      Serial.println("Use the panel Wi-Fi scan, or exit panel mode before serial scan");
+      return;
+    }
     runWifiScan();
   }
   else if (line == "tlscheck")
   {
+    if (panelMode)
+    {
+      Serial.println("Exit panel mode before tlscheck (it disconnects Wi-Fi)");
+      return;
+    }
     runTlsCheck();
   }
   else if (line == "files")
@@ -959,6 +1110,13 @@ void enterPanelMode()
   MDNS.addService("http", "tcp", 80);
   panelBegin(panelDisplay);
   panelMode = true;
+  panelRefreshRequested = panelExitRequested = panelNtpPending = panelWifiConnecting = false;
+  panelWifiSsid = settings::wifiSsid();
+  panelWifiPassword = settings::wifiPassword();
+  // An RTC loss must not leave an old, real-epoch deadline ahead of the
+  // unset system clock. Let the panel's nonblocking NTP path run immediately.
+  if (!clockValid())
+    nextPollAt = time(nullptr);
   wifiState = WifiState::Connected;
   wifiRssi = WiFi.RSSI();
   Serial.printf("Panel: http://%s.local  IP %s  PIN %s\n",
@@ -991,6 +1149,17 @@ void exitPanelMode()
   {
     return;
   }
+  if (panelUsagePollPending())
+  {
+    if (!panelExitRequested)
+      Serial.println("Panel: finishing the current usage request before exit");
+    panelExitRequested = true;
+    panelRefreshRequested = false;
+    cancelPanelUsagePoll();
+    return;
+  }
+  panelExitRequested = panelRefreshRequested = panelNtpPending = panelWifiConnecting = false;
+  panelWifiSsid = panelWifiPassword = "";
   Serial.println("Panel: shutting down");
   panelEnd();
   MDNS.end();
@@ -1211,7 +1380,7 @@ void loop()
     if (act & PANEL_ACT_SETTINGS_SAVED)
     {
       // Re-evaluate a changed/disabled pause; don't retain an old overnight deadline.
-      nextPollAt = time(nullptr) + 2;
+      reschedulePanelPoll();
     }
     if (act & PANEL_ACT_TIME_ZONE)
     {
@@ -1237,32 +1406,18 @@ void loop()
     }
     if (act & PANEL_ACT_REFRESH)
     {
-      pollAndShow(true); // Refresh now is an explicit override of Pause Hours.
-      // pollUsage() always turns Wi-Fi off at the end; bring it back for the panel session
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(settings::wifiSsid().c_str(), settings::wifiPassword().c_str());
-      const uint32_t t0 = millis();
-      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000)
-      {
-        delay(100);
-      }
-      if (WiFi.status() != WL_CONNECTED)
-      {
-        Serial.println("Panel: lost Wi-Fi after refresh, exiting");
-        exitPanelMode();
-      }
-      else
-      {
-        panelDisplay.ip = WiFi.localIP().toString();
-        view = MeterView::Panel;
-        render();
-      }
+      // Coalesce repeated clicks while a request is in flight. Explicit
+      // refreshes override Pause Hours, automatic jobs do not.
+      if (!panelExitRequested)
+        panelRefreshRequested = true;
     }
-    if (millis() - panelLastActivityMs() > PANEL_INACTIVITY_MS)
+    if (!panelExitRequested && millis() - panelLastActivityMs() > PANEL_INACTIVITY_MS)
     {
       Serial.println("Panel: idle timeout");
       exitPanelMode();
     }
+    if (panelMode)
+      servicePanelUsagePolling();
     delay(5);
     return;
   }

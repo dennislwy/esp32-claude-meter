@@ -15,6 +15,7 @@
 #include "history.h"
 #include "news.h"
 #include "panel_html.h"
+#include "panel_usage_poll.h"
 #include "settings.h"
 
 namespace
@@ -358,6 +359,12 @@ namespace
         pendingActions |= PANEL_ACT_TIME_ZONE;
       }
     }
+    const bool pollingChanged = body["poll_min"].is<int>() || hasPauseTimes ||
+                                body["pause_on"].is<bool>() || (pendingActions & PANEL_ACT_TIME_ZONE);
+    // Stop an old schedule snapshot before saving a new pause window.
+    // The loop collects the running request without blocking this handler.
+    if (pollingChanged)
+      cancelPanelUsagePoll();
     if (hasRotation && rotation / 90 != settings::displayRotation())
     {
       settings::setDisplayRotation(rotation / 90);
@@ -379,7 +386,8 @@ namespace
       settings::setPauseHoursEnabled(body["pause_on"].as<bool>());
     if (body["audio_vol"].is<int>())
       settings::setAudioVolume(body["audio_vol"].as<int>());
-    pendingActions |= PANEL_ACT_SETTINGS_SAVED;
+    if (pollingChanged)
+      pendingActions |= PANEL_ACT_SETTINGS_SAVED;
     JsonDocument d;
     d["ok"] = true;
     sendJson(200, d);
@@ -396,13 +404,17 @@ namespace
     const String t2 = body["token2"].as<String>();
     const String n1 = body["name1"].as<String>();
     const String n2 = body["name2"].as<String>();
+    const bool tokensChanged = !t1.isEmpty() || !t2.isEmpty();
+    if (tokensChanged)
+      cancelPanelUsagePoll();
     if (!t1.isEmpty())
       settings::setClaudeToken(1, t1);
     if (!t2.isEmpty())
       settings::setClaudeToken(2, t2);
     settings::setAccountName(1, n1);
     settings::setAccountName(2, n2);
-    pendingActions |= PANEL_ACT_SETTINGS_SAVED;
+    if (tokensChanged)
+      pendingActions |= PANEL_ACT_SETTINGS_SAVED;
     JsonDocument d;
     d["ok"] = true;
     // Probe each newly saved token so the user gets a verdict now, not at the next poll.

@@ -531,3 +531,50 @@ text, which would widen the toolbox and push into the legend. ECharts 6 renders
 the feature *name* (`saveAsImage`) by default, so `toolbox.tooltip.formatter`
 explicitly returns the title. The tooltip is themed to match the chart tooltip
 and uses `confine` so it cannot spill outside the canvas on narrow screens.
+
+Panel mode now continues automatic usage polling at the configured interval.
+`panel_usage_poll.cpp` snapshots account data, credentials, and Pause Hours
+on the main loop, then runs HTTPS on a FreeRTOS worker. Release/acquire
+publication prevents `/api/state` from seeing partially written results.
+Only the main loop updates the cache, history, alerts, and RTC; the worker
+uses the existing Wi-Fi connection and never powers the radio off.
+Automatic jobs honor Pause Hours before each account request. Manual refresh
+requests coalesce and override the pause. Polling settings and credential
+changes cancel outdated results; unrelated settings keep the poll schedule.
+An exit waits for the current request to finish and cancels further accounts.
+NTP and reconnect waits are serviced on the loop without a blocking delay.
+Host regression checks cover a stalled request with readable cached state,
+result publication, errors, cancellation, changed tokens, pause/override,
+Wi-Fi loss, and allocation recovery. The firmware build and host worker and
+Pause Hours regressions passed. On-board checks after flashing and rebooting
+confirmed both accounts returned HTTP 200 on consecutive automatic polls at
+the saved two-minute interval. The panel continued serving cached state
+during HTTPS requests and published fresh values when the worker finished.
+The active Pause Hours window suppressed automatic polling; it was briefly
+disabled for the live interval check and restored afterward.
+
+The solid 5-hour series narrowed from 1.6 px to 1.2 px (the dashed 7-day
+series stays at 1 px, superseding the 1.4 px figure recorded earlier). Solid
+versus dashed already separates the two windows, so the extra weight was only
+adding visual noise at full 30-minute resolution; 1.2 px keeps the 5-hour line
+the dominant one without it reading as a thick band.
+
+The panel remembers the open page across a browser refresh. `selectView`
+writes the view name to `sessionStorage` under `meter-view`, and `showDash`
+reads it back, falling back to Usage when the key is missing or names a view
+that no longer exists. `sessionStorage` rather than `localStorage` keeps this
+per-tab, so a second tab opens on Usage instead of inheriting wherever the
+first tab happened to be; a URL hash was rejected because `#accounts` and
+`#news` collide with existing element ids and would scroll the page. Both
+footers now compute to the same size at every breakpoint — 11 px above
+480 px CSS pixels and 10 px below it. The page footer previously dropped to
+9 px on narrow screens, half a step smaller than the sign-in footer on the
+same phone. A dead `.page-footer{font-size:9px}` rule, overridden by a later
+top-level rule, was removed at the same time. Local Chromium checks cover the
+reload restoring the open page, and footer parity at six viewport widths.
+
+Device details leads with a Hostname row showing `<hostname>.local`, placed
+directly above IP address. The sidebar already printed the mDNS URL, but that
+line is easy to miss and the diagnostics list — the place people copy values
+from — only had the IP. The value comes from the existing `hostname` field in
+`/api/state`, so no firmware API change was needed.

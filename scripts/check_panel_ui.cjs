@@ -405,7 +405,7 @@ const initialState = {
     await checkToolboxTooltip(page,'Export to CSV');
     await exportChartCsv(page, ['03-Oct-2026 00:00:00', '03-Oct-2026 00:30:00']);
     const samples = await page.evaluate(() => histChart.getOption().series.map(s => ({count:s.data.length,gap:s.data[50],style:s.lineStyle.type,width:s.lineStyle.width})));
-    assert.deepEqual(samples, [0,1,2,3].map(i => ({count:HIST_COLS,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.6})));
+    assert.deepEqual(samples, [0,1,2,3].map(i => ({count:HIST_COLS,gap:null,style:i%2?'dashed':'solid',width:i%2?1:1.2})));
     for (const zone of ['Asia/Kuala_Lumpur', 'Asia/Kolkata', 'Asia/Kathmandu', 'America/New_York']) {
       await page.evaluate(async zone => { deviceTimeZone=zone; await renderHistory(lastHistData); }, zone);
       // Pointer events queue a histAxisFrame that re-applies the tick interval; let it flush before
@@ -546,8 +546,12 @@ const initialState = {
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
     const colors = await page.evaluate(() => ({ bar: getComputedStyle(document.querySelector('.bar i')).backgroundColor, line: histChart.getOption().series[0].lineStyle.color }));
     assert.equal(colors.line, '#e99b7d', 'Chart recolors for dark mode');
-    await page.reload(); await page.locator('.usage-account').first().waitFor();
+    await select('device');
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('currentView')?.textContent === 'Device');
+    assert.equal(await page.locator('#view-device').isVisible(), true, 'Reload reopens the page that was showing');
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark', 'Theme persists after reload');
+    await select('usage'); await page.locator('.usage-account').first().waitFor();
     await page.locator('[data-theme=system]').click(); await page.emulateMedia({ colorScheme: 'light' });
     assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -555,6 +559,10 @@ const initialState = {
     await page.locator('[data-theme=light]').click();
     for (const width of [320, 390, 640, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
+      // The sign-in shell is hidden here, but font-size still computes, so the two footers
+      // can be compared at every breakpoint without signing out.
+      const footers = await page.evaluate(() => ({ login: getComputedStyle(document.querySelector('.login-footer')).fontSize, page: getComputedStyle(document.querySelector('.page-footer')).fontSize }));
+      assert.equal(footers.page, footers.login, 'Page footer matches the sign-in footer size at ' + width + 'px');
       for (const view of ['usage', 'accounts', 'device', 'alerts', 'news']) {
         await select(view);
         const geometry = await page.evaluate(() => ({ viewport: innerWidth, width: document.documentElement.scrollWidth, views: [...document.querySelectorAll('.view')].filter(v => !v.classList.contains('hidden')).length, brand: document.querySelector('.sidebar .brand').getBoundingClientRect().right, actions: document.querySelector('.sidebar-actions').getBoundingClientRect().left }));
@@ -606,6 +614,11 @@ const initialState = {
     assert.equal(await page.locator('.history-tooltip img').count(),0,'Tooltip names remain plain text');
     await select('device');
     assert.equal(await page.locator('#fw').textContent(), '0.0.9-preview', 'Firmware shows the release version and git revision');
+    assert.equal(await page.locator('#hostname').textContent(), 'claude-meter.local', 'Device details shows the mDNS hostname');
+    assert.equal(await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#view-device .kv')].map(row => row.querySelector('.k').textContent);
+      return rows.indexOf('Hostname') + 1 === rows.indexOf('IP address');
+    }), true, 'Hostname sits directly above IP address');
     await page.locator('#btnScan').click();
     await page.locator('#scanList button').waitFor();
     assert.equal(await page.locator('#scanList img').count(), 0, 'SSID names are plain text');

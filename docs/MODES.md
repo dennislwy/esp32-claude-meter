@@ -54,6 +54,12 @@ Orthogonal to mode: changes behaviour **within Normal mode** only.
 Auto-detected at cold boot: USB attached → on, battery boot → off.
 Toggle anytime with long **BOOT + PWR**, or serial `debug off`.
 
+**There is no idle timeout.** Unlike Web Panel mode, the debug flag never
+clears itself: it stays on until a long **BOOT + PWR**, serial `debug off`,
+or a cold boot with no USB host. While it is on the board never deep-sleeps,
+so on battery it drains far faster than the ~17 days Normal mode reaches.
+Clear it before unplugging if you want the board back on its sleep cycle.
+
 In practice: "I'm working on it over USB" vs "it's on my desk doing its
 job." Panel and Provisioning modes keep the MCU fully awake regardless
 of this flag, so the flag is only meaningful in Normal mode.
@@ -64,6 +70,17 @@ A STA-mode HTTP server on `claude-meter.local` for editing settings,
 reviewing history, playing alert sounds, and triggering a refresh. See
 [WEB_SERVER.md](WEB_SERVER.md).
 
+Automatic usage polling continues at the configured 1–5 minute interval,
+respecting Pause Hours. HTTPS requests run on a worker using the existing
+Wi-Fi connection. The main loop keeps serving cached usage while they run,
+then applies results, records history, and checks alerts. Failed requests
+retain the last successful percentages and their age. **Refresh now** and
+serial `usage` queue an explicit refresh that overrides Pause Hours.
+
+Leaving the panel while a usage request is in flight cancels subsequent
+accounts and waits for the current request to finish before disconnecting.
+Automatic polls do not reset the five-minute authenticated-activity timeout.
+
 Entry: long **BOOT** (alone) while awake, serial `panel`, or long BOOT
 while in debug mode after a wake. Requires Wi-Fi to be configured.
 
@@ -72,6 +89,14 @@ Exit: long **BOOT** (same gesture that entered it), serial `panel`,
 
 LED: 1 Hz blink. Wi-Fi radio ~70-100 mA — a 400 mAh pack lasts 4-6 h in
 this mode, which is why there's an idle auto-exit.
+
+That auto-exit counts **authenticated requests, not user interaction**. A
+signed-in tab polls `/api/state` every 5 seconds and each poll resets the
+timer, so an open browser holds the panel — and the radio — up indefinitely;
+sitting idle with the page on screen will flatten the pack rather than
+trigger the timeout. The five minutes only begin once the browser stops
+polling (tab closed, browser quit, phone locked and timers suspended).
+Close the tab or long-press BOOT when finished.
 
 ## 3 — AP provisioning
 

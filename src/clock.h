@@ -16,6 +16,11 @@ bool clockValid();
 // Syncs system time over NTP (Wi-Fi must be up) and writes it to the RTC. Returns false on timeout.
 bool clockSyncNtp(Pcf85063 &rtc);
 
+// Non-blocking NTP path for an active panel. Start on the main loop, check
+// completion there, then save the RTC there. The caller handles its timeout.
+void clockStartNtpSync();
+bool clockNtpSyncComplete();
+
 // Writes the current system time to the RTC, e.g. after setting it by hand.
 void clockSaveToRtc(Pcf85063 &rtc);
 
