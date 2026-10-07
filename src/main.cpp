@@ -324,7 +324,7 @@ bool pollAndShow(bool force = false)
     return false;
   historyRecord(usage);
   render();
-  checkAlerts(usage, time(nullptr));
+  playAlertSounds(evaluateAlerts(usage, time(nullptr)));
   return true;
 }
 
@@ -385,7 +385,7 @@ void servicePanelUsagePolling()
     else if (completePoll(report, startedAtMs))
     {
       historyRecord(usage);
-      checkAlerts(usage, time(nullptr));
+      playAlertSounds(evaluateAlerts(usage, time(nullptr)));
       // The ePaper panel screen contains the URL/PIN, not usage values.
       // Don't stall HTTP with an unnecessary ePaper refresh on each poll.
     }
@@ -705,7 +705,7 @@ void runCommand(const String &line)
     poll(true); // Explicit user requests may refresh during Pause Hours.
     printUsage(usage);
     render();
-    checkAlerts(usage, time(nullptr));
+    playAlertSounds(evaluateAlerts(usage, time(nullptr)));
   }
   else if (line.startsWith("warn5h ") || line.startsWith("warn7d "))
   {
