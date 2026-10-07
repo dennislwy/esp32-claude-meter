@@ -2,6 +2,7 @@
 
 #include <Preferences.h>
 #include "daily_window.h"
+#include "hostname.h"
 
 namespace
 {
@@ -21,6 +22,7 @@ const char *const KEY_AUDIO_VOLUME = "audio_vol";
 const char *const KEY_TIME_ZONE = "tz";
 const char *const KEY_TIME_ZONE_NAME = "tz_name";
 const char *const KEY_ROTATION = "rotation";
+const char *const KEY_HOSTNAME = "hostname";
 const char *const KEY_WIFI_PASSWORD = "wifi_pass";
 const char *const KEY_POLL_INTERVAL = "poll_minutes";
 const char *const KEY_WARNING_5H = "warn_5h";
@@ -259,6 +261,29 @@ String accountName(int number)
 {
   const String name = validNumber(number) ? load(KEY_ACCOUNT_NAMES[number - 1]) : "";
   return name.isEmpty() ? "Claude " + String(number) : name;
+}
+
+String hostname()
+{
+  const String name = load(KEY_HOSTNAME);
+  return name.isEmpty() ? HOSTNAME_DEFAULT : name;
+}
+
+bool setHostname(const String &value)
+{
+  // An empty value clears the key, so hostname() falls back to the default
+  if (value.isEmpty())
+  {
+    store(KEY_HOSTNAME, "");
+    return true;
+  }
+  char normalized[HOSTNAME_LIMIT + 1];
+  if (!hostnameNormalize(value.c_str(), normalized))
+  {
+    return false;
+  }
+  store(KEY_HOSTNAME, normalized);
+  return true;
 }
 
 void setWifiSsid(const String &value) { store(KEY_WIFI_SSID, value); }
