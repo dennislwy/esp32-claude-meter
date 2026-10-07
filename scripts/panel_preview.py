@@ -1,12 +1,14 @@
 """Serve the firmware's actual panel with simulated data, without an ESP32.
 
 Run: python scripts/panel_preview.py
-Open http://127.0.0.1:8080 and use PIN 123456. No device is contacted.
+Open the URL printed at startup and use PIN 123456. No device is contacted.
 """
 
 import argparse
+import errno
 import json
 import math
+import socket
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -151,12 +153,29 @@ class PreviewHandler(BaseHTTPRequestHandler):
         pass
 
 
+class PreviewServer(ThreadingHTTPServer):
+    # ThreadingHTTPServer enables SO_REUSEADDR, which can silently share an
+    # occupied port on Windows instead of raising an address-in-use error.
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), PreviewHandler)
-    print("Preview: http://127.0.0.1:%s · PIN 123456 · Simulated data only" % args.port, flush=True)
+    try:
+        server = PreviewServer(("127.0.0.1", args.port), PreviewHandler)
+    except OSError as exc:
+        if exc.errno not in (errno.EADDRINUSE, errno.EACCES, 10048, 10013):
+            raise
+        server = PreviewServer(("127.0.0.1", 0), PreviewHandler)
+        print("Port %s is unavailable; using a free port." % args.port, flush=True)
+    print("Preview: http://127.0.0.1:%s · PIN 123456 · Simulated data only" % server.server_port, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

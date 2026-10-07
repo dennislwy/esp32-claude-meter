@@ -154,7 +154,8 @@ From the repository root:
 python scripts/panel_preview.py
 ```
 
-Open `http://127.0.0.1:8080` and enter **123456**. The preview extracts the
+Open the printed URL and enter **123456**. The preview defaults to port 8080
+and chooses a free port if it is busy. The preview extracts the
 actual page from `src/panel_html.h` on every reload. All data and API writes
 are simulated in memory, and the server binds only to loopback. Tokens and
 Wi-Fi passwords are not persisted. Reboot, factory reset, and speaker

@@ -130,8 +130,9 @@ Preview the actual embedded page locally without a board:
 python scripts/panel_preview.py
 ```
 
-Open `http://127.0.0.1:8080` and use PIN **123456**. Data and device actions
-are simulated; the preview binds only to loopback.
+Open the URL printed by the script and use PIN **123456**. It defaults to port
+8080 and chooses a free port if that port is busy. Data and device actions are
+simulated; the preview binds only to loopback.
 
 ## Project layout
 
