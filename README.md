@@ -93,7 +93,9 @@ Type `help` for the full list. Highlights:
   Pause Hours it sleeps until the window ends without automatic usage
   requests; manual Refresh now and serial `usage` override the pause. A short
   `BOOT` press wakes it to show the next view; a long `PWR` press powers
-  it off (full refresh to white first, then VBAT_PWR is cut).
+  it off (full refresh to white first, then VBAT_PWR is cut). A warning,
+  depletion, or reset for one account switches the screen to that account's
+  view until the next poll.
 - **Web Panel**: a long `BOOT` press opens a browser control panel on
   your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,

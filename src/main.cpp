@@ -48,6 +48,9 @@ constexpr uint16_t SHTC3_CMD_SLEEP = 0xB098;
 RTC_DATA_ATTR uint8_t savedFrame[Epaper::FRAME_BYTES]; // image left on the panel, for partial refresh on wake
 RTC_DATA_ATTR AccountUsage usage[settings::CLAUDE_TOKEN_COUNT];
 RTC_DATA_ATTR MeterView view = MeterView::Dual;
+// Set when an alert chose the current view, so the next poll can restore firstView().
+// A view the user picked must keep surviving wakes, so only alert switches revert.
+RTC_DATA_ATTR bool viewFromAlert = false;
 RTC_DATA_ATTR time_t nextPollAt = 0;
 RTC_DATA_ATTR time_t lastNtpSync = 0;
 RTC_DATA_ATTR uint16_t partialRefreshes = 0;
@@ -166,6 +169,19 @@ const char *viewName(MeterView value)
     return "account 2 history";
   }
   return "?";
+}
+
+// The single-account view an alert for this account should show
+MeterView alertView(int account)
+{
+  return account == 0 ? MeterView::Account1 : MeterView::Account2;
+}
+
+// Advance to the next view at the user's request, which also ends any alert view
+void cycleView()
+{
+  view = nextView(view);
+  viewFromAlert = false;
 }
 
 // A USB host sends a start-of-frame every millisecond, whether or not a terminal has the port open
@@ -317,14 +333,54 @@ bool poll(bool force = false)
   return completePoll(pollUsage(usage, rtc, syncClock, force), start);
 }
 
-// Poll, draw the new figures, then play any alert they trigger
+// An alert view lasts one poll; drop the previous one before this poll draws
+void clearAlertView()
+{
+  if (viewFromAlert)
+  {
+    view = firstView();
+    viewFromAlert = false;
+  }
+}
+
+// Show the account that raised an alert, when exactly one did. Two accounts firing
+// leaves the dual view, which is already the relevant one. Quiet hours suppresses the
+// switch along with the sound.
+void applyAlertView(const AlertOutcome &outcome)
+{
+  if (outcome.silenced || outcome.firedCount != 1)
+  {
+    return;
+  }
+  for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+  {
+    if (!outcome.fired[i])
+    {
+      continue;
+    }
+    const MeterView target = alertView(i);
+    // A single-account device already shows this view, so there is nothing to revert
+    if (target != view && viewAvailable(target))
+    {
+      view = target;
+      viewFromAlert = true;
+      Serial.printf("Alert: showing %s\n", viewName(view));
+    }
+    return;
+  }
+}
+
+// Poll, draw the new figures on the view the result calls for, then play any alert
 bool pollAndShow(bool force = false)
 {
+  clearAlertView();
   if (!poll(force))
     return false;
   historyRecord(usage);
+  const AlertOutcome outcome = evaluateAlerts(usage, time(nullptr));
+  applyAlertView(outcome);
   render();
-  checkAlerts(usage, time(nullptr));
+  playAlertSounds(outcome);
   return true;
 }
 
@@ -385,7 +441,7 @@ void servicePanelUsagePolling()
     else if (completePoll(report, startedAtMs))
     {
       historyRecord(usage);
-      checkAlerts(usage, time(nullptr));
+      playAlertSounds(evaluateAlerts(usage, time(nullptr)));
       // The ePaper panel screen contains the URL/PIN, not usage values.
       // Don't stall HTTP with an unnecessary ePaper refresh on each poll.
     }
@@ -702,10 +758,13 @@ void runCommand(const String &line)
       Serial.println("Panel: usage refresh queued");
       return;
     }
+    clearAlertView();
     poll(true); // Explicit user requests may refresh during Pause Hours.
     printUsage(usage);
+    const AlertOutcome outcome = evaluateAlerts(usage, time(nullptr));
+    applyAlertView(outcome);
     render();
-    checkAlerts(usage, time(nullptr));
+    playAlertSounds(outcome);
   }
   else if (line.startsWith("warn5h ") || line.startsWith("warn7d "))
   {
@@ -801,7 +860,7 @@ void runCommand(const String &line)
   }
   else if (line == "view")
   {
-    view = nextView(view);
+    cycleView();
     Serial.printf("View: %s\n", viewName(view));
     render();
   }
@@ -1021,7 +1080,7 @@ void handleBootButton()
         // Short press: cycle view when not in panel; no-op in panel mode (long press exits)
         if (!panelMode)
         {
-          view = nextView(view);
+          cycleView();
           Serial.printf("View: %s\n", viewName(view));
           render();
         }
@@ -1122,6 +1181,7 @@ void enterPanelMode()
   Serial.printf("Panel: http://%s.local  IP %s  PIN %s\n",
                 panelDisplay.hostname.c_str(), panelDisplay.ip.c_str(), panelDisplay.pin.c_str());
   view = MeterView::Panel;
+  viewFromAlert = false;
   render();
   // Headlines for the panel, fetched once per session; loop() runs it after the PIN is on screen
   newsRequestFetch();
@@ -1138,6 +1198,7 @@ void enterProvisionMode()
   provisionMode = true;
   wifiState = WifiState::Unknown;
   view = MeterView::Setup;
+  viewFromAlert = false;
   Serial.printf("Provisioning: SSID \"%s\"  URL http://%s\n",
                 provisionInfo.apSsid.c_str(), provisionInfo.apIp.c_str());
   render();
@@ -1171,6 +1232,7 @@ void exitPanelMode()
   // Restore debug-mode LED state (blink loop left it in an undefined position)
   applyDebugMode();
   view = firstView();
+  viewFromAlert = false;
   render();
   // Re-poll soon so the dashboard is current
   nextPollAt = time(nullptr) + 2;
@@ -1295,7 +1357,7 @@ void setup()
   if (bootWake && !comboLongPress)
   {
     // BOOT: next view from cached data, keeping the poll schedule unless a poll is due anyway
-    view = nextView(view);
+    cycleView();
     if (time(nullptr) >= nextPollAt)
     {
       if (!pollAndShow())

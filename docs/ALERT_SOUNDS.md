@@ -40,7 +40,7 @@ and 90 %). The depleted threshold is a fixed `99.95 %` — see
 
 ## Trigger logic (`src/alerts.cpp`)
 
-Each `checkAlerts()` call iterates every (account, window) pair and
+Each `evaluateAlerts()` call iterates every (account, window) pair and
 compares the current level (`NORMAL` / `WARNING` / `DEPLETED`) against
 the last-seen level stored in NVS (namespace `alerts`, keys
 `lvl<n>_<window>` and `rst<n>_<window>`).
@@ -58,6 +58,20 @@ the last-seen level stored in NVS (namespace `alerts`, keys
 Successful plays go through `playWav(path)` in `audio_player.cpp`,
 which powers up the amplifier, streams the file to I²S, and powers it
 back down.
+
+## Display switch
+
+`evaluateAlerts()` reports which accounts fired, and the caller switches the
+ePaper to that account's single-account view before rendering. It applies only
+when exactly one account fired: two accounts firing leaves the dual view, which
+already shows both. Quiet hours suppresses the switch along with the sound.
+
+The view reverts to the default on the next poll, so an alert view lasts one
+poll interval (1-5 minutes). A view selected with `BOOT` is tracked separately
+and keeps persisting across wakes indefinitely.
+
+Panel mode evaluates and plays alerts but never switches the view — the ePaper
+is showing the panel URL and sign-in PIN.
 
 ## Quiet hours
 
