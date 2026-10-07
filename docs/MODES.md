@@ -90,6 +90,14 @@ Exit: long **BOOT** (same gesture that entered it), serial `panel`,
 LED: 1 Hz blink. Wi-Fi radio ~70-100 mA — a 400 mAh pack lasts 4-6 h in
 this mode, which is why there's an idle auto-exit.
 
+That auto-exit counts **authenticated requests, not user interaction**. A
+signed-in tab polls `/api/state` every 5 seconds and each poll resets the
+timer, so an open browser holds the panel — and the radio — up indefinitely;
+sitting idle with the page on screen will flatten the pack rather than
+trigger the timeout. The five minutes only begin once the browser stops
+polling (tab closed, browser quit, phone locked and timers suspended).
+Close the tab or long-press BOOT when finished.
+
 ## 3 — AP provisioning
 
 First-time Wi-Fi setup. The board comes up as an open SoftAP named

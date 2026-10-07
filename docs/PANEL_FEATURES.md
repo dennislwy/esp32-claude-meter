@@ -283,7 +283,9 @@ first and checks the window before sending usage requests.
 
 Clears the `sid` cookie and ends the session. Panel mode on the device
 stays up until the normal exit (long BOOT, serial `panel`, 5 min idle,
-or reboot).
+or reboot). Signing out does stop the 5-second state polling, so it lets
+the idle timeout run; simply leaving the page open does not, because each
+poll resets the timer.
 
 A `401` from any authenticated endpoint returns the page to the PIN
 screen. Connection failures show feedback, and state polling retries

@@ -103,7 +103,9 @@ Type `help` for the full list. Highlights:
   Usage page on its next status refresh. The panel exits by itself after
   5 minutes with no authenticated request — the Wi-Fi radio is the board's
   heaviest load — and hands control back to the sleep cycle unless debug mode
-  is on. Automatic polls do not count as activity.
+  is on. Automatic polls do not count as activity, but an open signed-in tab
+  polls every 5 seconds and keeps the panel alive indefinitely — close the tab
+  when you're done, or the radio will flatten the battery.
   See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
   and [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
 

@@ -35,6 +35,14 @@ Exit panel mode:
 - 5 minutes with no authenticated API request (idle timeout)
 - Device reboot (loses the session)
 
+The idle timeout measures **requests, not user interaction**. A signed-in
+tab polls `/api/state` every 5 seconds, and every authenticated request
+refreshes the timer, so leaving the panel open on a screen keeps the board
+awake with the Wi-Fi radio on indefinitely — roughly 4-6 hours on a
+400 mAh pack. The countdown only starts once the browser stops polling:
+the tab is closed, the browser quits, or the phone locks and suspends its
+timers. Close the tab (or long-press BOOT) when you are done.
+
 Long-pressing BOOT from deep sleep enters panel mode directly: `setup()`
 polls the BOOT pin for up to `LONG_PRESS_MS` after an `ext1` wake and
 takes the long-press branch when BOOT is still held at the deadline.
@@ -293,7 +301,8 @@ window ends. It does not put an active panel session to sleep.
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `claude-meter.local` doesn't resolve     | Browser host lacks mDNS/Bonjour; use the IP shown on the ePaper                                       |
 | ePaper shows "Web Panel" but IP is blank | Wi-Fi failed to connect within 15 s — check SSID/pass, 2.4 GHz availability                           |
-| Panel exits by itself                    | 5-min idle timeout; any API hit resets the counter                                                    |
+| Panel exits by itself                    | 5-min idle timeout; any API hit resets the counter, so it fires only after the browser stops polling  |
+| Panel never exits / battery drains       | A signed-in tab polls every 5 s and keeps resetting the timer. Close the tab                          |
 | 429 "throttled"                          | Too many wrong PINs — exit and re-enter panel mode to reset                                           |
 | 401 "auth" after a while                 | Session evicted (new login elsewhere, or reboot). The panel returns to the PIN screen automatically   |
 | Scan returns `[]`                        | Scan completed but no networks visible on 2.4 GHz; try moving the device                              |
