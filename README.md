@@ -72,6 +72,7 @@ Type `help` for the full list. Highlights:
 | `quiet <start>-<end>`                 | Set quiet hours, 24-h local time (e.g. `quiet 22-8`)                    |
 | `pause on \| off` | Enable or disable Pause Hours |
 | `pause <start>-<end>` | Set the local polling-pause window (e.g. `pause 00:00-06:00`) |
+| `hostname` / `hostname <name>`        | Show or set the mDNS name, max 15 chars; `clear` restores the default   |
 | `alerts` / `alerts clear`             | Inspect / reset the per-window alert state                              |
 | `history` / `history clear`           | Inspect / wipe the 7-day usage ring                                     |
 | `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock                                           |
@@ -99,7 +100,8 @@ Type `help` for the full list. Highlights:
 - **Web Panel**: a long `BOOT` press opens a browser control panel on
   your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,
-  Wi-Fi, alerts, and sounds. Usage continues polling automatically at the
+  Wi-Fi, alerts, sounds, and the mDNS device name (applied at the next
+  restart). Usage continues polling automatically at the
   configured interval, except during Pause Hours. HTTPS requests run on a
   worker while the panel serves cached state; completed results update the
   Usage page on its next status refresh. The panel exits by itself after

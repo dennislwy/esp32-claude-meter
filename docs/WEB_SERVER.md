@@ -52,10 +52,13 @@ cycle automatically.
 
 ## Hostname and URL
 
-mDNS registers the device as **`claude-meter.local`** on service type
-`_http._tcp` port 80. Browse to either:
+mDNS registers the device as **`<hostname>.local`** on service type
+`_http._tcp` port 80. The hostname defaults to `claude-meter` and is
+configurable on the Device page (Device name card) or over serial
+(`hostname <name>`); it takes effect at the **next restart**. Browse to
+either:
 
-- `http://claude-meter.local` (macOS/iOS/Linux-with-avahi/Windows-with-Bonjour)
+- `http://<hostname>.local` (macOS/iOS/Linux-with-avahi/Windows-with-Bonjour)
 - `http://<IP>` (the IP is printed on the ePaper and in `/api/state`)
 
 ## Login
@@ -84,7 +87,7 @@ routes require `Content-Type: application/json` on the request body.
 | POST   | `/api/login`         | `{"pin":"123456"}`                                                                                                                                                                                                                                                                                         | `{"ok":true}` + Set-Cookie, or `401 {"error":"auth"}`, or `429 {"error":"throttled","retry_s":N}`                                                                                                                                                                                                                                                                                                   |
 | POST   | `/api/logout`        | —                                                                                                                                                                                                                                                                                                          | `{"ok":true}` + clears cookie                                                                                                                                                                                                                                                                                                                                                                       |
 | GET    | `/api/state`         | —                                                                                                                                                                                                                                                                                                          | full dashboard payload (see below)                                                                                                                                                                                                                                                                                                                                                                  |
-| POST   | `/api/settings`      | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, pause_start_h, pause_start_m, pause_end_h, pause_end_m, pause_on, audio_vol, tz, tz_name, rotation}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270 | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` / `400 {"error":"bad_pause_hours"}` / `400 {"error":"bad_quiet_hours"}` (nothing is applied)                                                                                                                                                                                                                                                         |
+| POST   | `/api/settings`      | subset of `{poll_min, warn5, warn7, quiet_start_h, quiet_start_m, quiet_end_h, quiet_end_m, quiet_on, pause_start_h, pause_start_m, pause_end_h, pause_end_m, pause_on, audio_vol, tz, tz_name, rotation, hostname}` — `tz` is a POSIX TZ string and needs `tz_name` (IANA name) with it; `rotation` is 0/90/180/270; `hostname` is optional, 1–15 of `a-z0-9-` (no leading/trailing hyphen), empty string restores the default | `{"ok":true}`, or `400 {"error":"bad_time_zone"}` / `400 {"error":"bad_rotation"}` / `400 {"error":"bad_pause_hours"}` / `400 {"error":"bad_quiet_hours"}` / `400 {"error":"bad_hostname"}` (nothing is applied)                                                                                                                                                                                                                                                         |
 | POST   | `/api/tokens`        | `{token1, token2, name1, name2}` (empty token = unchanged)                                                                                                                                                                                                                                                 | `{"ok":true, "probes":[{account, ok, http, h5?, d7?}]}` — each newly saved token is checked against the API (blocks ~2-3 s per token)                                                                                                                                                                                                                                                               |
 | POST   | `/api/wifi`          | `{ssid, pass}` (empty pass = unchanged)                                                                                                                                                                                                                                                                    | `{"ok":true}`                                                                                                                                                                                                                                                                                                                                                                                       |
 | POST   | `/api/refresh`       | —                                                                                                                                                                                                                                                                                                          | triggers an on-demand poll; `{"ok":true}`                                                                                                                                                                                                                                                                                                                                                           |
@@ -103,6 +106,7 @@ routes require `Content-Type: application/json` on the request body.
 {
   "ip": "192.168.0.203",
   "hostname": "claude-meter",
+  "hostname_saved": "claude-meter",
   "uptime_s": 1234,
   "fw_version": "0.0.9",
   "fw_rev": "aae7f66-dirty",
@@ -136,6 +140,13 @@ routes require `Content-Type: application/json` on the request body.
   "poll_age_s": 83
 }
 ```
+
+`hostname` is the name `MDNS.begin()` was called with for the current
+session — the name the device actually answers to right now. `hostname_saved`
+is the name stored in NVS. The two differ between a rename and the restart
+that applies it. A client that writes a posted `hostname` straight back into
+its local state object would overwrite the active name and make the pending
+state invisible; keep `hostname` and `hostname_saved` as separate fields.
 
 Clients should prefer `now_epoch` over the browser clock when computing
 "resets in" countdowns.
@@ -198,6 +209,7 @@ LittleFS upload is required; the public asset contains no device data.
 | **Wi-Fi**                  | SSID + password + **Scan** button → async scan, scrollable sorted list, click to populate SSID.                                                                                                                                                                                                                                                              |
 | **Alerts & sound**         | Warning thresholds (50-99%), Alert sounds (volume slider saves on release + six WAV previews), then Quiet hours with an accessible switch and HH:MM times. Save alerts applies thresholds and Quiet hours.                                                                                                                                                   |
 | **Display & time**         | Type-ahead time-zone picker (145 IANA zones, search by city / country / alias / offset, browser's zone suggested, DST via POSIX rules) and screen rotation 0 / 90 / 180 / 270°.                                                                                                                                                                              |
+| **Device name**            | In Device, between Display & time and Wi-Fi connection. Text field for the mDNS hostname (1–15 of `a-z0-9-`, no leading/trailing hyphen). Save validates and persists the name; the field shows `Saved as <name>.local — restart to apply` while a rename is pending. The name takes effect at the next restart.                                              |
 | **Polling & pauses**       | Poll interval (1-5 min), then Pause hours with an accessible switch and HH:MM times (00:00-06:00, disabled by default). Save polling & pauses applies this card only. Pause hours pauses automatic requests and sleeps through the window in Normal mode.                                                                                                    |
 | **Appearance / Sign out**  | Controls select System, Light, or Dark theme and clear the session cookie. Sign out is right of the theme switch on mobile only, with matching keyboard order. The theme applies before first paint. Any authenticated endpoint returning 401 opens the PIN screen.                                                                                          |
 | **Device management**      | In Device: Clear 7-day history / Restart device / Factory reset — each uses a tap-to-arm pattern (first tap = "Tap again to confirm", second tap within 5 s executes).                                                                                                                                                                                       |
@@ -299,7 +311,7 @@ window ends. It does not put an active panel session to sleep.
 
 | Symptom                                  | Likely cause                                                                                          |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `claude-meter.local` doesn't resolve     | Browser host lacks mDNS/Bonjour; use the IP shown on the ePaper                                       |
+| `<hostname>.local` doesn't resolve       | Browser host lacks mDNS/Bonjour; use the IP shown on the ePaper                                       |
 | ePaper shows "Web Panel" but IP is blank | Wi-Fi failed to connect within 15 s — check SSID/pass, 2.4 GHz availability                           |
 | Panel exits by itself                    | 5-min idle timeout; any API hit resets the counter, so it fires only after the browser stops polling  |
 | Panel never exits / battery drains       | A signed-in tab polls every 5 s and keeps resetting the timer. Close the tab                          |
