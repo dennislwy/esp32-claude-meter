@@ -552,3 +552,29 @@ the saved two-minute interval. The panel continued serving cached state
 during HTTPS requests and published fresh values when the worker finished.
 The active Pause Hours window suppressed automatic polling; it was briefly
 disabled for the live interval check and restored afterward.
+
+The solid 5-hour series narrowed from 1.6 px to 1.2 px (the dashed 7-day
+series stays at 1 px, superseding the 1.4 px figure recorded earlier). Solid
+versus dashed already separates the two windows, so the extra weight was only
+adding visual noise at full 30-minute resolution; 1.2 px keeps the 5-hour line
+the dominant one without it reading as a thick band.
+
+The panel remembers the open page across a browser refresh. `selectView`
+writes the view name to `sessionStorage` under `meter-view`, and `showDash`
+reads it back, falling back to Usage when the key is missing or names a view
+that no longer exists. `sessionStorage` rather than `localStorage` keeps this
+per-tab, so a second tab opens on Usage instead of inheriting wherever the
+first tab happened to be; a URL hash was rejected because `#accounts` and
+`#news` collide with existing element ids and would scroll the page. Both
+footers now compute to the same size at every breakpoint — 11 px above
+480 px CSS pixels and 10 px below it. The page footer previously dropped to
+9 px on narrow screens, half a step smaller than the sign-in footer on the
+same phone. A dead `.page-footer{font-size:9px}` rule, overridden by a later
+top-level rule, was removed at the same time. Local Chromium checks cover the
+reload restoring the open page, and footer parity at six viewport widths.
+
+Device details leads with a Hostname row showing `<hostname>.local`, placed
+directly above IP address. The sidebar already printed the mDNS URL, but that
+line is easy to miss and the diagnostics list — the place people copy values
+from — only had the IP. The value comes from the existing `hostname` field in
+`/api/state`, so no firmware API change was needed.

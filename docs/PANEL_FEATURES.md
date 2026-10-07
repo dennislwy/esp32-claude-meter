@@ -23,7 +23,10 @@ when loading in dark mode. Blocked storage falls back to the system theme.
 The complete UI loads from the meter, with no external fonts or scripts.
 Serif text prefers locally installed Anthropic Serif, then Georgia,
 Times New Roman, and the browser's default serif. No font file is shipped.
-Both the sign-in footer and page footer link to the project's GitHub repository.
+Both the sign-in footer and page footer link to the project's GitHub repository,
+at the same font size (11 px, 10 px at 480 CSS pixels and below).
+Refreshing the browser reopens the page that was showing; the view is kept per
+tab, so a new tab starts on Usage.
 Keyboard focus, labelled controls, live feedback, and reduced-motion
 preferences are supported.
 
@@ -52,7 +55,9 @@ Usage shows per-account bars and the seven-day chart. Device → Device
 details contains battery, last poll, signal strength, uptime, and the
 complete diagnostics.
 
-- IP, hostname, uptime (`Xd Yh Zm`), battery %, last-poll age
+- Hostname (`claude-meter.local`), listed first so the mDNS name sits directly
+  above the IP address it resolves to
+- IP, uptime (`Xd Yh Zm`), battery %, last-poll age
 - Wi-Fi: SSID, RSSI and a quality word (`GSFwifi  ·  -55 dBm (excellent)`;
   ≥ -55 excellent, ≥ -67 good, ≥ -75 fair, below that weak)
 - MAC address: the device's Wi-Fi station address, shown after Wi-Fi
@@ -82,7 +87,7 @@ flash and loaded after sign-in.
 
 - Orange = account 1, blue = account 2, matching the usage progress bars;
   colors adapt to the theme
-- Solid line = 5 H series (1.6 px), dashed line = 7 D series (1 px)
+- Solid line = 5 H series (1.2 px), dashed line = 7 D series (1 px)
 - The in-chart legend independently toggles each account's 5-hour/7-day
   series and is included in saved images. Long account names are shortened
   to fit the chart. Equivalent keyboard controls appear when focused; use

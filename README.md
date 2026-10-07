@@ -114,7 +114,8 @@ when the 30-min slot advances — ~48 writes/day).
 
 The panel has Usage, Accounts, Device, Polling & alerts, and News views.
 It supports automatic six-digit sign-in, System/Light/Dark appearance
-applied before first paint, and a seven-day chart with weekday labels
+applied before first paint, reopening the same page after a browser
+refresh, and a seven-day chart with weekday labels
 directly below the midnight ticks in the device's time zone. Device details
 includes the Wi-Fi MAC address. See [panel features](docs/PANEL_FEATURES.md)
 and [panel design](docs/PANEL_DESIGN.md) for the full behavior and verification.
