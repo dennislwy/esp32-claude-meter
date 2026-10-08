@@ -4,6 +4,7 @@ node_modules/
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+# superpowers/
 .env
 
 # to remove in production
@@ -15,4 +16,3 @@ claude-ui-samples/
 *.ps1
 TODO*.md
 *.png
-superpowers/
