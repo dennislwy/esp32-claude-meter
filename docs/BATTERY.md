@@ -28,10 +28,35 @@ pouch cell** (5 × 25 × 35 mm).
    two bracketing voltages, and linearly interpolates between their
    percent values.
 
-A fresh reading is taken once per draw in `src/main.cpp`
-(`screen.batteryPercent = Battery::percentFromMillivolts(...)`). The
-status bar in `src/meter_ui.cpp` picks one of five battery icons by
+The status bar in `src/meter_ui.cpp` picks one of five battery icons by
 thresholding the number (≥90, ≥65, ≥40, ≥15, else empty).
+
+## When the reading is taken
+
+A voltage-only gauge is only as good as the moment it samples, so
+`sampleBattery()` in `src/main.cpp` caches a percentage at the two
+quietest points in the cycle and `render()` reads the cache:
+
+- **Top of `setup()`**, before the display and audio rails come up.
+  Straight out of deep sleep the pack has been resting at microamps for
+  a whole poll interval, which is as close to open-circuit voltage as
+  this board can get.
+- **Top of `pollAndShow()`**, before `poll()` powers up Wi-Fi. In debug
+  mode the board stays awake across many polls, so the `setup()` sample
+  would otherwise go stale.
+
+Sampling inside `render()` would be worse than it looks. `pollUsage()`
+already calls `wifiOff()` before returning (`src/usage_poll.cpp`), so
+the radio is down by then — but a Li-ion cell relaxes toward its resting
+voltage over seconds to tens of seconds after a load drops. A reading
+taken immediately after a multi-second TLS session still sits low on the
+curve and under-reports.
+
+Two call sites deliberately still sample live, because they report an
+instantaneous voltage next to the percentage and are diagnostics rather
+than the user-facing gauge: the serial `status` command and the panel's
+Device card (`src/panel.cpp`). In panel mode Wi-Fi is up continuously,
+so those readings are expected to sit a few percent below the ePaper's.
 
 ## The shifted curve
 
@@ -106,8 +131,9 @@ average draw is ~400 h ≈ 16 days.
   drives one half of the dual LED on the board, not an ESP32 GPIO.
   The firmware can't tell "charging" from "charged" from the voltage
   reading alone.
-- Load regulation isn't compensated. During Wi-Fi transmit bursts the
-  pack voltage sags and the gauge temporarily drops.
+- Load regulation isn't compensated. The sleep-cycle gauge dodges this
+  by sampling only while the radio is off, but the live diagnostics in
+  `status` and the panel still read a sagged pack.
 - No coulomb counting. SoC resets each boot from whatever voltage the
   pack happens to read.
 
@@ -118,5 +144,6 @@ LC709203F soldered across the pack and tied to the existing I²C bus
 (SDA = GPIO47, SCL = GPIO48). Pick an address that doesn't collide
 with 0x18 / 0x51 / 0x70. Firmware change is minimal — replace the
 curve lookup in `lib/Battery/battery.cpp` with the fuel gauge's I²C
-read. All call sites (`main.cpp:204`, `meter_ui.cpp:249`) are already
-percent-based and don't need to change.
+read. A real gauge also reports under load, so `sampleBattery()`'s
+timing would stop mattering. All call sites are already percent-based
+and don't need to change.
