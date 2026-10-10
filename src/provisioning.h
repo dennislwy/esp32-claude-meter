@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-// R8 Phase 2: AP-mode captive portal for first-time Wi-Fi provisioning.
+// AP-mode captive portal for first-time Wi-Fi provisioning.
 // Entered automatically on boot when no SSID is stored in NVS. Opens an
 // open SoftAP named "claude-meter-XXXXXX" at 192.168.4.1, runs a DNS
 // hijack so any phone/laptop triggers its captive-portal popup, and serves
