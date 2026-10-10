@@ -82,6 +82,14 @@ bool setTimeZone(const String &posix, const String &name);
 uint8_t displayRotation();
 void setDisplayRotation(uint8_t quarterTurns);
 
+// mDNS name the panel is reachable at, as "<hostname>.local". Lowercase letters,
+// digits and hyphens, up to HOSTNAME_LIMIT characters (see hostname.h).
+const char *const HOSTNAME_DEFAULT = "claude-meter";
+String hostname();
+// Stores the lowercased name and returns true; an empty value restores the default.
+// Stores nothing and returns false when the name is not a valid mDNS label.
+bool setHostname(const String &value);
+
 void setWifiSsid(const String &value);
 void setWifiPassword(const String &value);
 void setClaudeToken(int number, const String &value);

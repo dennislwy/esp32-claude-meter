@@ -30,6 +30,11 @@ independent. Panel/debug modes keep their existing awake behavior.
 Serial configuration: `pause on`, `pause off`, and `pause 22:30-7:15` (or
 `pause 22-8`). `status` shows the saved window and enabled state.
 
+A usage warning, depletion, or window reset for exactly one account switches the
+display to that account's view, which reverts on the next poll. Both accounts
+firing leaves the dual view. Quiet hours suppresses the switch with the sound. A
+view chosen with **BOOT** is not affected and still persists across wakes.
+
 Button behaviour (awake only):
 - Short **BOOT** → cycle to the next view
 - Long **BOOT** (≥ 1 s alone) → enter Web Panel mode
@@ -66,7 +71,8 @@ of this flag, so the flag is only meaningful in Normal mode.
 
 ## 2 — Web Panel
 
-A STA-mode HTTP server on `claude-meter.local` for editing settings,
+A STA-mode HTTP server on `<hostname>.local` (default `claude-meter`,
+configurable; applies at the next restart) for editing settings,
 reviewing history, playing alert sounds, and triggering a refresh. See
 [WEB_SERVER.md](WEB_SERVER.md).
 

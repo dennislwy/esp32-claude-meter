@@ -69,7 +69,7 @@ the page has been judged.
 | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Usage            | Both accounts, usage bars, responsive seven-day chart, manual refresh                                                |
 | Accounts         | Account names and masked token replacement, including save-time API probe results                                    |
-| Device           | Display/time zone, rotation, Wi-Fi and network scan, complete diagnostics, destructive maintenance                   |
+| Device           | Complete diagnostics, device name, Wi-Fi and network scan, display/time zone and rotation, destructive maintenance   |
 | Polling & alerts | Polling & breaks: interval and break schedule. Alerts & sound: warning thresholds, speaker controls, and quiet hours |
 | News             | Feed headlines, publication dates, source link, fetch/stale feedback                                                 |
 
@@ -154,7 +154,8 @@ From the repository root:
 python scripts/panel_preview.py
 ```
 
-Open `http://127.0.0.1:8080` and enter **123456**. The preview extracts the
+Open the printed URL and enter **123456**. The preview defaults to port 8080
+and chooses a free port if it is busy. The preview extracts the
 actual page from `src/panel_html.h` on every reload. All data and API writes
 are simulated in memory, and the server binds only to loopback. Tokens and
 Wi-Fi passwords are not persisted. Reboot, factory reset, and speaker
@@ -173,7 +174,9 @@ areas, quiet-hours row alignment, account/Wi-Fi/display/settings writes,
 quiet-hours switching with keyboard/dirty-state/save behavior,
 all six sound requests, unsafe text handling, five-row news sizing,
 destructive confirmation, empty history/usage, preservation of unsaved
-edits, connection failure, and session expiry. No external assets may load.
+edits, connection failure, session expiry, and hostname rename (pending
+notice, client-side rejection, server-side 400, and survival of an
+unsaved edit across a poll). No external assets may load.
 
 Use an installed Playwright package and browser:
 
@@ -253,7 +256,9 @@ and year rollover, and daylight-saving gaps/repeats; MSVC compiled these
 tests with warnings treated as errors. The final ESP32 build passed and
 the binary contains the exact 81,959-byte embedded page. This version has
 not been flashed at that stage; physical sleep/wake and current-draw verification remain
-pending. See [the host test instructions](../test/pause_hours/README.md).
+pending. See the host test instructions for
+[pause hours](../test/pause_hours/README.md) and
+[the hostname rule](../test/hostname/README.md).
 
 The navigation item, breadcrumb, and page title now use Polling & alerts.
 Its two cards are Polling & breaks (Poll interval, then Break hours) and

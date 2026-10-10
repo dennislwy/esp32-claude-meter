@@ -31,8 +31,6 @@ const Window WINDOWS[] = {
 };
 constexpr int WINDOW_COUNT = sizeof(WINDOWS) / sizeof(WINDOWS[0]);
 
-constexpr size_t MAX_SOUNDS = settings::CLAUDE_TOKEN_COUNT * WINDOW_COUNT * 2;
-
 // NVS keys, e.g. "lvl1_5h": alert level reached in the current window; "rst1_5h": the reset time
 // we're waiting for (0 = none)
 String key(const char *prefix, int account, int window)
@@ -60,24 +58,23 @@ Level levelFor(float percent, int window)
   return percent >= DEPLETED_PERCENT ? DEPLETED : percent >= warningPercent(window) ? WARNING : NORMAL;
 }
 
-// Several accounts can trigger the same sound in one poll; play it once
-void addSound(const char *sounds[], size_t &count, const char *sound)
+// Several accounts can trigger the same sound in one poll; queue it once
+void addSound(AlertOutcome &outcome, const char *sound)
 {
-  for (size_t i = 0; i < count; i++)
+  for (size_t i = 0; i < outcome.soundCount; i++)
   {
-    if (sounds[i] == sound)
+    if (outcome.sounds[i] == sound)
     {
       return;
     }
   }
-  sounds[count++] = sound;
+  outcome.sounds[outcome.soundCount++] = sound;
 }
 }
 
-void checkAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], time_t now)
+AlertOutcome evaluateAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], time_t now)
 {
-  const char *sounds[MAX_SOUNDS];
-  size_t soundCount = 0;
+  AlertOutcome outcome = {};
 
   Preferences prefs;
   prefs.begin(NAMESPACE, false);
@@ -100,7 +97,8 @@ void checkAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], time
       if (pendingReset != 0 && now >= (time_t)pendingReset)
       {
         Serial.printf("Alert: %s %s reset\n", name.c_str(), window.name);
-        addSound(sounds, soundCount, window.resetSound);
+        addSound(outcome, window.resetSound);
+        outcome.fired[i] = true;
       }
 
       // Rising only: a drop (after a reset, or a raised threshold) just updates the stored level
@@ -108,7 +106,8 @@ void checkAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], time
       if (level > stored)
       {
         Serial.printf("Alert: %s %s %s (%.0f%%)\n", name.c_str(), window.name, LEVEL_NAMES[level], windowPercent(account, w));
-        addSound(sounds, soundCount, level == DEPLETED ? window.depletedSound : window.warningSound);
+        addSound(outcome, level == DEPLETED ? window.depletedSound : window.warningSound);
+        outcome.fired[i] = true;
       }
       if (level != stored)
       {
@@ -125,22 +124,36 @@ void checkAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_COUNT], time
   }
   prefs.end();
 
+  for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+  {
+    if (outcome.fired[i])
+    {
+      outcome.firedCount++;
+    }
+  }
+
   // State is updated first so alerts don't catch up when quiet hours end; silence here is permanent
   struct tm local;
   localtime_r(&now, &local);
-  if (settings::isQuietTime(local.tm_hour, local.tm_min))
+  outcome.silenced = settings::isQuietTime(local.tm_hour, local.tm_min);
+  if (outcome.silenced && outcome.soundCount > 0)
   {
-    if (soundCount > 0)
-    {
-      Serial.printf("Quiet hours (%02u:%02u-%02u:%02u): %u alert sound(s) silenced\n",
-                    settings::quietHoursStart(), settings::quietMinuteStart(),
-                    settings::quietHoursEnd(), settings::quietMinuteEnd(), (unsigned)soundCount);
-    }
+    Serial.printf("Quiet hours (%02u:%02u-%02u:%02u): %u alert sound(s) silenced\n",
+                  settings::quietHoursStart(), settings::quietMinuteStart(),
+                  settings::quietHoursEnd(), settings::quietMinuteEnd(), (unsigned)outcome.soundCount);
+  }
+  return outcome;
+}
+
+void playAlertSounds(const AlertOutcome &outcome)
+{
+  if (outcome.silenced)
+  {
     return;
   }
-  for (size_t i = 0; i < soundCount; i++)
+  for (size_t i = 0; i < outcome.soundCount; i++)
   {
-    playWav(sounds[i]);
+    playWav(outcome.sounds[i]);
   }
 }
 

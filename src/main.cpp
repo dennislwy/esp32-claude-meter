@@ -13,6 +13,7 @@
 #include "clock.h"
 #include "epaper.h"
 #include "history.h"
+#include "hostname.h"
 #include "lvgl_port.h"
 #include "meter_ui.h"
 #include "news.h"
@@ -48,6 +49,9 @@ constexpr uint16_t SHTC3_CMD_SLEEP = 0xB098;
 RTC_DATA_ATTR uint8_t savedFrame[Epaper::FRAME_BYTES]; // image left on the panel, for partial refresh on wake
 RTC_DATA_ATTR AccountUsage usage[settings::CLAUDE_TOKEN_COUNT];
 RTC_DATA_ATTR MeterView view = MeterView::Dual;
+// Set when an alert chose the current view, so the next poll can restore firstView().
+// A view the user picked must keep surviving wakes, so only alert switches revert.
+RTC_DATA_ATTR bool viewFromAlert = false;
 RTC_DATA_ATTR time_t nextPollAt = 0;
 RTC_DATA_ATTR time_t lastNtpSync = 0;
 RTC_DATA_ATTR uint16_t partialRefreshes = 0;
@@ -166,6 +170,19 @@ const char *viewName(MeterView value)
     return "account 2 history";
   }
   return "?";
+}
+
+// The single-account view an alert for this account should show
+MeterView alertView(int account)
+{
+  return account == 0 ? MeterView::Account1 : MeterView::Account2;
+}
+
+// Advance to the next view at the user's request, which also ends any alert view
+void cycleView()
+{
+  view = nextView(view);
+  viewFromAlert = false;
 }
 
 // A USB host sends a start-of-frame every millisecond, whether or not a terminal has the port open
@@ -317,14 +334,54 @@ bool poll(bool force = false)
   return completePoll(pollUsage(usage, rtc, syncClock, force), start);
 }
 
-// Poll, draw the new figures, then play any alert they trigger
+// An alert view lasts one poll; drop the previous one before this poll draws
+void clearAlertView()
+{
+  if (viewFromAlert)
+  {
+    view = firstView();
+    viewFromAlert = false;
+  }
+}
+
+// Show the account that raised an alert, when exactly one did. Two accounts firing
+// leaves the dual view, which is already the relevant one. Quiet hours suppresses the
+// switch along with the sound.
+void applyAlertView(const AlertOutcome &outcome)
+{
+  if (outcome.silenced || outcome.firedCount != 1)
+  {
+    return;
+  }
+  for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+  {
+    if (!outcome.fired[i])
+    {
+      continue;
+    }
+    const MeterView target = alertView(i);
+    // A single-account device already shows this view, so there is nothing to revert
+    if (target != view && viewAvailable(target))
+    {
+      view = target;
+      viewFromAlert = true;
+      Serial.printf("Alert: showing %s\n", viewName(view));
+    }
+    return;
+  }
+}
+
+// Poll, draw the new figures on the view the result calls for, then play any alert
 bool pollAndShow(bool force = false)
 {
+  clearAlertView();
   if (!poll(force))
     return false;
   historyRecord(usage);
+  const AlertOutcome outcome = evaluateAlerts(usage, time(nullptr));
+  applyAlertView(outcome);
   render();
-  checkAlerts(usage, time(nullptr));
+  playAlertSounds(outcome);
   return true;
 }
 
@@ -385,7 +442,7 @@ void servicePanelUsagePolling()
     else if (completePoll(report, startedAtMs))
     {
       historyRecord(usage);
-      checkAlerts(usage, time(nullptr));
+      playAlertSounds(evaluateAlerts(usage, time(nullptr)));
       // The ePaper panel screen contains the URL/PIN, not usage values.
       // Don't stall HTTP with an unnecessary ePaper refresh on each poll.
     }
@@ -509,6 +566,7 @@ void printHelp()
   Serial.println("  token2 <value>             save Claude token 2; \"clear\" as the value removes a token");
   Serial.println("  account1 <name>            name account 1 (default \"Claude 1\"), max 20 chars");
   Serial.println("  account2 <name>            name account 2 (default \"Claude 2\"); \"clear\" restores the default");
+  Serial.println("  hostname <name>            mDNS name, max 15 chars of a-z 0-9 -; \"clear\" restores \"claude-meter\" (restart to apply)");
   Serial.println("  creds                      show saved credentials, masked");
   Serial.println("  scan                       list Wi-Fi networks in range, flagging the saved SSID");
   Serial.println("  tlscheck                   show api.anthropic.com's certificate chain (sends no token)");
@@ -534,6 +592,14 @@ void printStatus()
   const uint32_t millivolts = battery.readMillivolts();
   Serial.printf("Battery:   %.2f V  %u %%\n", millivolts / 1000.0f, Battery::percentFromMillivolts(millivolts));
   Serial.printf("View:      %s\n", viewName(view));
+  {
+    const String saved = settings::hostname();
+    const String active = panelMode ? panelDisplay.hostname : saved;
+    if (active != saved)
+      Serial.printf("Hostname:  %s.local (saved as %s.local, restart to apply)\n", active.c_str(), saved.c_str());
+    else
+      Serial.printf("Hostname:  %s.local\n", active.c_str());
+  }
   Serial.printf("Interval:  %u min, next poll in %ld s\n", settings::pollIntervalMinutes(), (long)nextPollAt - (long)now);
   Serial.printf("Warnings:  5h at %u%%, 7d at %u%%\n", settings::warningPercent5h(), settings::warningPercent7d());
   Serial.printf("Quiet:     %02u:%02u-%02u:%02u (%s)\n",
@@ -702,10 +768,13 @@ void runCommand(const String &line)
       Serial.println("Panel: usage refresh queued");
       return;
     }
+    clearAlertView();
     poll(true); // Explicit user requests may refresh during Pause Hours.
     printUsage(usage);
+    const AlertOutcome outcome = evaluateAlerts(usage, time(nullptr));
+    applyAlertView(outcome);
     render();
-    checkAlerts(usage, time(nullptr));
+    playAlertSounds(outcome);
   }
   else if (line.startsWith("warn5h ") || line.startsWith("warn7d "))
   {
@@ -801,7 +870,7 @@ void runCommand(const String &line)
   }
   else if (line == "view")
   {
-    view = nextView(view);
+    cycleView();
     Serial.printf("View: %s\n", viewName(view));
     render();
   }
@@ -863,6 +932,31 @@ void runCommand(const String &line)
   {
     settings::setWifiPassword(line.substring(5));
     Serial.printf("Wi-Fi password saved (%s)\n", settings::mask(settings::wifiPassword(), 0).c_str());
+  }
+  else if (line == "hostname")
+  {
+    const String saved = settings::hostname();
+    const String active = panelMode ? panelDisplay.hostname : saved;
+    Serial.printf("Hostname: %s.local\n", active.c_str());
+    if (saved != active)
+    {
+      Serial.printf("Saved as %s.local, applied on restart\n", saved.c_str());
+    }
+  }
+  else if (line.startsWith("hostname "))
+  {
+    String value = line.substring(9);
+    value.trim();
+    if (value == "clear")
+      value = "";
+    if (!settings::setHostname(value))
+    {
+      Serial.printf("Hostname must be 1 to %u characters of a-z, 0-9 and -, "
+                    "not starting or ending with -\n",
+                    (unsigned)HOSTNAME_LIMIT);
+      return;
+    }
+    Serial.printf("Hostname: %s.local (restart to apply)\n", settings::hostname().c_str());
   }
   else if (line == "creds")
   {
@@ -1021,7 +1115,7 @@ void handleBootButton()
         // Short press: cycle view when not in panel; no-op in panel mode (long press exits)
         if (!panelMode)
         {
-          view = nextView(view);
+          cycleView();
           Serial.printf("View: %s\n", viewName(view));
           render();
         }
@@ -1106,7 +1200,7 @@ void enterPanelMode()
     delay(300);
     Serial.printf("Panel: Wi-Fi up, IP %s\n", WiFi.localIP().toString().c_str());
   }
-  MDNS.begin("claude-meter");
+  MDNS.begin(settings::hostname().c_str());
   MDNS.addService("http", "tcp", 80);
   panelBegin(panelDisplay);
   panelMode = true;
@@ -1122,6 +1216,7 @@ void enterPanelMode()
   Serial.printf("Panel: http://%s.local  IP %s  PIN %s\n",
                 panelDisplay.hostname.c_str(), panelDisplay.ip.c_str(), panelDisplay.pin.c_str());
   view = MeterView::Panel;
+  viewFromAlert = false;
   render();
   // Headlines for the panel, fetched once per session; loop() runs it after the PIN is on screen
   newsRequestFetch();
@@ -1138,6 +1233,7 @@ void enterProvisionMode()
   provisionMode = true;
   wifiState = WifiState::Unknown;
   view = MeterView::Setup;
+  viewFromAlert = false;
   Serial.printf("Provisioning: SSID \"%s\"  URL http://%s\n",
                 provisionInfo.apSsid.c_str(), provisionInfo.apIp.c_str());
   render();
@@ -1171,6 +1267,7 @@ void exitPanelMode()
   // Restore debug-mode LED state (blink loop left it in an undefined position)
   applyDebugMode();
   view = firstView();
+  viewFromAlert = false;
   render();
   // Re-poll soon so the dashboard is current
   nextPollAt = time(nullptr) + 2;
@@ -1295,7 +1392,7 @@ void setup()
   if (bootWake && !comboLongPress)
   {
     // BOOT: next view from cached data, keeping the poll schedule unless a poll is due anyway
-    view = nextView(view);
+    cycleView();
     if (time(nullptr) >= nextPollAt)
     {
       if (!pollAndShow())
