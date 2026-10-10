@@ -145,7 +145,7 @@ lib/           local libraries (Battery, Epaper154, ES8311, PCF85063, ClaudeUsag
 assets/certs/  pinned root CAs for api.anthropic.com and the news feed (embedded at build time)
 scripts/       build_info.py: generates git revision; FW_VERSION is set in src/build_info.h
 data/          LittleFS payload: WAV alert sounds (gitignored)
-docs/          design notes: modes, buttons, battery, alert sounds, web panel, memory footprint
+docs/          design notes: modes, battery, alert sounds, web panel, memory footprint
 ```
 
 ## Security notes
