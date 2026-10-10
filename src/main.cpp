@@ -66,6 +66,11 @@ Pcf85063 rtc;
 Battery battery(PIN_BATTERY_ADC, BATTERY_DIVIDER_RATIO);
 Epaper epaper({PIN_EPD_SCK, PIN_EPD_MOSI, PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY});
 
+// Sampled only at the quiet points in the cycle, never during render(). A Li-ion cell
+// relaxes toward its resting voltage over seconds after a load drops, so a reading taken
+// just after a poll's Wi-Fi session still sits low on the curve and under-reports.
+uint8_t batteryPercent = 0;
+
 // The PWR button press that switched the board on must be released before a long press can switch it off
 bool powerOffArmed = false;
 bool pwrButtonWasDown = false;
@@ -231,6 +236,11 @@ const char *wifiFailReason(uint8_t status)
   }
 }
 
+void sampleBattery()
+{
+  batteryPercent = Battery::percentFromMillivolts(battery.readMillivolts());
+}
+
 void render()
 {
   MeterScreen screen = {};
@@ -246,7 +256,7 @@ void render()
   screen.view = view;
   screen.now = time(nullptr);
   screen.clockValid = clockValid();
-  screen.batteryPercent = Battery::percentFromMillivolts(battery.readMillivolts());
+  screen.batteryPercent = batteryPercent;
   screen.wifiState = wifiState;
   screen.wifiRssi = wifiRssi;
   if (view == MeterView::Panel)
@@ -375,6 +385,9 @@ void applyAlertView(const AlertOutcome &outcome)
 bool pollAndShow(bool force = false)
 {
   clearAlertView();
+  // Before poll() powers up Wi-Fi: in debug mode the board stays awake across many polls,
+  // so the setup() sample would otherwise go stale.
+  sampleBattery();
   if (!poll(force))
     return false;
   historyRecord(usage);
@@ -1295,6 +1308,11 @@ void setup()
   gpio_hold_dis((gpio_num_t)PIN_LED);
   pinMode(PIN_PWR_BUTTON, INPUT_PULLUP);
   pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP);
+
+  // The quietest point in the whole cycle: straight out of deep sleep the pack has been
+  // resting at microamps for a poll interval, so this is the closest reading to true
+  // open-circuit voltage the board can take. Before the display and audio rails come up.
+  sampleBattery();
 
   const esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
   const bool timerWake = wakeCause == ESP_SLEEP_WAKEUP_TIMER;

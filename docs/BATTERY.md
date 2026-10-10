@@ -28,10 +28,35 @@ pouch cell** (5 × 25 × 35 mm).
    two bracketing voltages, and linearly interpolates between their
    percent values.
 
-A fresh reading is taken once per draw in `src/main.cpp`
-(`screen.batteryPercent = Battery::percentFromMillivolts(...)`). The
-status bar in `src/meter_ui.cpp` picks one of five battery icons by
+The status bar in `src/meter_ui.cpp` picks one of five battery icons by
 thresholding the number (≥90, ≥65, ≥40, ≥15, else empty).
+
+## When the reading is taken
+
+A voltage-only gauge is only as good as the moment it samples, so
+`sampleBattery()` in `src/main.cpp` caches a percentage at the two
+quietest points in the cycle and `render()` reads the cache:
+
+- **Top of `setup()`**, before the display and audio rails come up.
+  Straight out of deep sleep the pack has been resting at microamps for
+  a whole poll interval, which is as close to open-circuit voltage as
+  this board can get.
+- **Top of `pollAndShow()`**, before `poll()` powers up Wi-Fi. In debug
+  mode the board stays awake across many polls, so the `setup()` sample
+  would otherwise go stale.
+
+Sampling inside `render()` would be worse than it looks. `pollUsage()`
+already calls `wifiOff()` before returning (`src/usage_poll.cpp`), so
+the radio is down by then — but a Li-ion cell relaxes toward its resting
+voltage over seconds to tens of seconds after a load drops. A reading
+taken immediately after a multi-second TLS session still sits low on the
+curve and under-reports.
+
+Two call sites deliberately still sample live, because they report an
+instantaneous voltage next to the percentage and are diagnostics rather
+than the user-facing gauge: the serial `status` command and the panel's
+Device card (`src/panel.cpp`). In panel mode Wi-Fi is up continuously,
+so those readings are expected to sit a few percent below the ePaper's.
 
 ## The shifted curve
 
@@ -106,10 +131,58 @@ average draw is ~400 h ≈ 16 days.
   drives one half of the dual LED on the board, not an ESP32 GPIO.
   The firmware can't tell "charging" from "charged" from the voltage
   reading alone.
-- Load regulation isn't compensated. During Wi-Fi transmit bursts the
-  pack voltage sags and the gauge temporarily drops.
+- Load regulation isn't compensated. The sleep-cycle gauge dodges this
+  by sampling only while the radio is off, but the live diagnostics in
+  `status` and the panel still read a sagged pack.
 - No coulomb counting. SoC resets each boot from whatever voltage the
   pack happens to read.
+
+## Open question: a full pack reads 90 %, not 100 %
+
+Unresolved as of 2026-10-10. After 11 hours on USB the gauge reported
+4.08 V / 90 %, so a voltage trend was logged every 30 s for 6.5 minutes
+with the board awake in debug mode:
+
+```
+22:10:36  4.08 V      22:14:06  4.08 V
+22:11:36  4.08 V      22:14:36  4.08 V
+22:12:06  4.08 V      22:15:07  4.08 V
+22:12:36  4.08 V      22:15:37  4.08 V
+22:13:06  4.08 V      22:16:07  4.08 V
+22:13:36  4.08 V      22:16:37  4.08 V
+```
+
+The reading never moved. (The percentage flickers between 89 and 90
+because 4080 mV is exactly the `{4080, 90}` table entry, so a few mV
+either side flips the digit.)
+
+Flat rules out the two obvious explanations. A terminated charger with
+the board drawing current would show a slow decline toward the recharge
+threshold; a recharge cycle would show a rise. A node that holds steady
+for 6.5 minutes under load is being actively regulated, which means the
+ETA6098 is sitting in CV.
+
+That points at a **systematic underread of roughly 100-120 mV**. If the
+charger holds its 4.2 V setpoint and the firmware measures 4.08 V, the
+error is ~2.9 % — enough to cancel out the deliberate 4.17 V = 100 %
+shift above, so a fully-charged pack reads 90 %. Candidate causes, none
+yet confirmed:
+
+- The 200 kΩ / 200 kΩ divider presents a 100 kΩ source impedance to the
+  SAR ADC. The ESP32 prefers a much stiffer source; an incompletely
+  charged sampling capacitor reads low.
+- eFuse calibration error, typically worth a few tens of mV at the
+  ~2.04 V the ADC actually sees, doubled by the divider ratio.
+- Real IR drop between the cell and the sense point, if any series
+  element sits between them.
+
+**To resolve:** measure the pack with a multimeter at the battery
+terminals while USB is connected. ~4.2 V means the gauge has a fixed
+offset worth correcting (either in `BATTERY_DIVIDER_RATIO` or as a
+calibration constant). ~4.08 V means the charger's CV setpoint is lower
+than assumed and the top of the curve should move instead. Do not adjust
+the curve until a reference measurement exists — the two fixes pull in
+opposite directions.
 
 ## Future upgrade path
 
@@ -118,5 +191,6 @@ LC709203F soldered across the pack and tied to the existing I²C bus
 (SDA = GPIO47, SCL = GPIO48). Pick an address that doesn't collide
 with 0x18 / 0x51 / 0x70. Firmware change is minimal — replace the
 curve lookup in `lib/Battery/battery.cpp` with the fuel gauge's I²C
-read. All call sites (`main.cpp:204`, `meter_ui.cpp:249`) are already
-percent-based and don't need to change.
+read. A real gauge also reports under load, so `sampleBattery()`'s
+timing would stop mattering. All call sites are already percent-based
+and don't need to change.
