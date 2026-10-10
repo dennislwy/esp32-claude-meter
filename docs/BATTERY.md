@@ -137,6 +137,53 @@ average draw is ~400 h ≈ 16 days.
 - No coulomb counting. SoC resets each boot from whatever voltage the
   pack happens to read.
 
+## Open question: a full pack reads 90 %, not 100 %
+
+Unresolved as of 2026-10-10. After 11 hours on USB the gauge reported
+4.08 V / 90 %, so a voltage trend was logged every 30 s for 6.5 minutes
+with the board awake in debug mode:
+
+```
+22:10:36  4.08 V      22:14:06  4.08 V
+22:11:36  4.08 V      22:14:36  4.08 V
+22:12:06  4.08 V      22:15:07  4.08 V
+22:12:36  4.08 V      22:15:37  4.08 V
+22:13:06  4.08 V      22:16:07  4.08 V
+22:13:36  4.08 V      22:16:37  4.08 V
+```
+
+The reading never moved. (The percentage flickers between 89 and 90
+because 4080 mV is exactly the `{4080, 90}` table entry, so a few mV
+either side flips the digit.)
+
+Flat rules out the two obvious explanations. A terminated charger with
+the board drawing current would show a slow decline toward the recharge
+threshold; a recharge cycle would show a rise. A node that holds steady
+for 6.5 minutes under load is being actively regulated, which means the
+ETA6098 is sitting in CV.
+
+That points at a **systematic underread of roughly 100-120 mV**. If the
+charger holds its 4.2 V setpoint and the firmware measures 4.08 V, the
+error is ~2.9 % — enough to cancel out the deliberate 4.17 V = 100 %
+shift above, so a fully-charged pack reads 90 %. Candidate causes, none
+yet confirmed:
+
+- The 200 kΩ / 200 kΩ divider presents a 100 kΩ source impedance to the
+  SAR ADC. The ESP32 prefers a much stiffer source; an incompletely
+  charged sampling capacitor reads low.
+- eFuse calibration error, typically worth a few tens of mV at the
+  ~2.04 V the ADC actually sees, doubled by the divider ratio.
+- Real IR drop between the cell and the sense point, if any series
+  element sits between them.
+
+**To resolve:** measure the pack with a multimeter at the battery
+terminals while USB is connected. ~4.2 V means the gauge has a fixed
+offset worth correcting (either in `BATTERY_DIVIDER_RATIO` or as a
+calibration constant). ~4.08 V means the charger's CV setpoint is lower
+than assumed and the top of the curve should move instead. Do not adjust
+the curve until a reference measurement exists — the two fixes pull in
+opposite directions.
+
 ## Future upgrade path
 
 If accurate SoC ever matters, the cheapest fix is a **MAX17048** or
