@@ -118,7 +118,8 @@ place of the token and password masks.
   enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s on a
   wake to toggle (awake, asleep, or on battery) — except on the PIN screen,
   where the chord arms a factory reset instead. To get serial at a battery PIN
-  prompt, power off and wake while holding both buttons for one second. It has
+  prompt, leave it untouched for two minutes so it deep-sleeps, then wake it
+  holding both buttons for one second. It has
   no idle timeout: the board stays awake and skips deep sleep until you turn it
   off with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
   Clear it before unplugging, or battery life drops well short of the
