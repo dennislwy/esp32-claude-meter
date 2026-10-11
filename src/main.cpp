@@ -20,6 +20,7 @@
 #include "panel.h"
 #include "panel_usage_poll.h"
 #include "pcf85063.h"
+#include "pin_entry.h"
 #include "provisioning.h"
 #include "settings.h"
 #include "secret_store.h"
@@ -92,6 +93,12 @@ String panelWifiPassword;
 bool provisionMode = false;
 ProvisionInfo provisionInfo;
 
+// Unlock prompt, cold boot only. Not RTC_DATA_ATTR: a wake from the prompt's
+// timeout starts a fresh entry rather than resuming a half-typed PIN.
+const PinEntry *unlockEntry = nullptr;
+bool unlockWrong = false;
+constexpr uint32_t UNLOCK_TIMEOUT_MS = 120UL * 1000UL;
+
 void enterPanelMode();
 void exitPanelMode();
 
@@ -127,6 +134,7 @@ bool viewAvailable(MeterView candidate)
     return accountConfigured(1) && historyHasData(1);
   case MeterView::Panel:
   case MeterView::Setup:
+  case MeterView::Unlock:
     // Explicit modes - set by code, not by cycling. Trust the caller.
     return true;
   }
@@ -270,6 +278,11 @@ void render()
   {
     screen.setupApSsid = provisionInfo.apSsid;
     screen.setupApIp = provisionInfo.apIp;
+  }
+  else if (view == MeterView::Unlock)
+  {
+    screen.unlockEntry = unlockEntry;
+    screen.unlockWrong = unlockWrong;
   }
   else if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
   {
@@ -521,6 +534,8 @@ void servicePanelUsagePolling()
   }
 }
 
+// sleepSeconds 0: no timer wake, so only BOOT or PWR brings the board back.
+// Used by the unlock prompt, where a timer wake would just redraw the prompt.
 [[noreturn]] void deepSleep(uint32_t sleepSeconds)
 {
   // A held button would wake the board straight away
@@ -531,7 +546,10 @@ void servicePanelUsagePolling()
   memcpy(savedFrame, epaper.frame(), sizeof(savedFrame));
   epaper.sleep();
 
-  esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL);
+  if (sleepSeconds > 0)
+  {
+    esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL);
+  }
   // ext1, not ext0: two pins (BOOT and PWR), and the wake status tells which one was pressed
   esp_sleep_enable_ext1_wakeup((1ULL << PIN_BOOT_BUTTON) | (1ULL << PIN_PWR_BUTTON), ESP_EXT1_WAKEUP_ANY_LOW);
   // Keep the battery latch high and the LED off while the chip sleeps
@@ -1080,6 +1098,118 @@ void handlePowerButton()
   pwrButtonWasDown = down;
 }
 
+// Cold boot with sealed credentials: the session key died with the power, so
+// nothing can be read until the PIN comes back in on the two buttons. BOOT
+// changes the digit under the cursor, PWR confirms it. Never returns - a
+// correct PIN restarts the board, and the timeout deep-sleeps it.
+[[noreturn]] void unlockGate()
+{
+  PinEntry entry;
+  unlockEntry = &entry;
+  unlockWrong = false;
+  view = MeterView::Unlock;
+  viewFromAlert = false;
+  Serial.println("Locked: enter the Device PIN on the buttons");
+  render();
+
+  // The press that powered the board on, or woke it from the timeout, has to
+  // be released before anything counts as input
+  bool armed = digitalRead(PIN_BOOT_BUTTON) == HIGH && digitalRead(PIN_PWR_BUTTON) == HIGH;
+  uint32_t bootDownAt = 0;
+  uint32_t pwrDownAt = 0;
+  uint32_t lastActivityMs = millis();
+
+  for (;;)
+  {
+    const bool bootDown = digitalRead(PIN_BOOT_BUTTON) == LOW;
+    const bool pwrDown = digitalRead(PIN_PWR_BUTTON) == LOW;
+    if (!armed)
+    {
+      armed = !bootDown && !pwrDown;
+      delay(10);
+      continue;
+    }
+    if (bootDown && bootDownAt == 0)
+    {
+      bootDownAt = millis();
+    }
+    if (pwrDown && pwrDownAt == 0)
+    {
+      pwrDownAt = millis();
+    }
+
+    // Long PWR alone is the board's power-off gesture, and it still works here.
+    // On USB the latch cannot cut power, so powerOff() returns and the prompt
+    // has to be redrawn: powerOff() blanks the panel on its way out.
+    if (pwrDown && !bootDown && millis() - pwrDownAt >= LONG_PRESS_MS)
+    {
+      powerOff();
+      pwrDownAt = 0;
+      lastActivityMs = millis();
+      render();
+      continue;
+    }
+
+    if (!bootDown && bootDownAt != 0)
+    {
+      const uint32_t held = millis() - bootDownAt;
+      bootDownAt = 0;
+      if (held >= BUTTON_MIN_PRESS_MS)
+      {
+        entry.increment();
+        unlockWrong = false;
+        lastActivityMs = millis();
+        render();
+      }
+      continue;
+    }
+
+    if (!pwrDown && pwrDownAt != 0)
+    {
+      const uint32_t held = millis() - pwrDownAt;
+      pwrDownAt = 0;
+      if (held < BUTTON_MIN_PRESS_MS)
+      {
+        continue;
+      }
+      lastActivityMs = millis();
+      if (!entry.confirm())
+      {
+        render(); // next slot
+        continue;
+      }
+      // Fourth digit confirmed. complete() makes the view read "Checking...",
+      // and the panel refresh covers most of the derivation's ~400 ms.
+      render();
+      char pin[PIN_DIGITS + 1];
+      entry.digits(pin);
+      const bool ok = secret_store::unlock(pin);
+      memset(pin, 0, sizeof(pin));
+      if (ok)
+      {
+        Serial.println("Unlocked");
+        Serial.flush();
+        // The session key lives in RTC RAM, which a software reset keeps, so
+        // the board comes straight back up unlocked and takes the ordinary
+        // cold-boot path - no special case anywhere in setup()'s wake
+        // branches. Task 3's provisioning reboot relies on the same retention.
+        ESP.restart();
+      }
+      entry.reset();
+      unlockWrong = true;
+      render();
+      continue;
+    }
+
+    if (millis() - lastActivityMs >= UNLOCK_TIMEOUT_MS)
+    {
+      Serial.println("Locked: no PIN entered, sleeping until a button is pressed");
+      deepSleep(0);
+    }
+    delay(10);
+  }
+}
+
 // Debug mode: serial console on and the LED lit while awake. Off: no serial and no LED, to save power.
 void applyDebugMode()
 {
@@ -1398,6 +1528,13 @@ void setup()
   {
     enterProvisionMode();
     return; // skip all sleep/poll branches; loop() pumps provisionService()
+  }
+
+  // Provisioned, but a cold boot lost the RTC session key: every credential is
+  // sealed and unreadable until the PIN is re-entered. Never returns.
+  if (secret_store::locked())
+  {
+    unlockGate();
   }
 
   if (timerWake)

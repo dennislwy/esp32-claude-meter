@@ -584,6 +584,60 @@ namespace
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -2);
   }
 
+  void unlockView(lv_obj_t *parent, const MeterScreen &screen)
+  {
+    const PinEntry &entry = *screen.unlockEntry;
+    const int y = STATUS_BAR_H + 6;
+    lv_obj_t *title = text(parent, "Locked", &lv_font_montserrat_16, BLACK);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
+
+    const char *message = entry.complete() ? "Checking..."
+                          : screen.unlockWrong ? "Wrong PIN - try again"
+                                               : "Enter your 4-digit PIN";
+    lv_obj_t *hint = text(parent, message, &lv_font_montserrat_12, BLACK);
+    lv_obj_set_width(hint, CONTENT_W);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, y + 24);
+
+    // Confirmed slots are masked; the slot under the cursor shows its digit so
+    // the BOOT button's effect is visible; the rest are empty.
+    String slots;
+    for (int i = 0; i < PIN_DIGITS; i++)
+    {
+      if (i > 0)
+      {
+        slots += " ";
+      }
+      if (i < entry.cursor())
+      {
+        slots += "*";
+      }
+      else if (i == entry.cursor())
+      {
+        slots += (char)('0' + entry.digit(i));
+      }
+      else
+      {
+        slots += "_";
+      }
+    }
+    lv_obj_t *digits = text(parent, slots.c_str(), &lv_font_montserrat_28, BLACK);
+    lv_obj_set_width(digits, CONTENT_W);
+    lv_obj_set_style_text_align(digits, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(digits, LV_ALIGN_TOP_MID, 0, y + 56);
+
+    const int lineH = lv_font_get_line_height(&lv_font_montserrat_10);
+    lv_obj_t *bootHint = text(parent, "BOOT = change digit", &lv_font_montserrat_10, BLACK);
+    lv_obj_set_width(bootHint, CONTENT_W);
+    lv_obj_set_style_text_align(bootHint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(bootHint, LV_ALIGN_BOTTOM_MID, 0, -2 - lineH);
+
+    lv_obj_t *pwrHint = text(parent, "PWR = confirm digit", &lv_font_montserrat_10, BLACK);
+    lv_obj_set_width(pwrHint, CONTENT_W);
+    lv_obj_set_style_text_align(pwrHint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(pwrHint, LV_ALIGN_BOTTOM_MID, 0, -2);
+  }
+
   void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)
   {
     const AccountUsage &account = screen.accounts[index];
@@ -646,6 +700,9 @@ void meterUiShow(const MeterScreen &screen)
     break;
   case MeterView::Setup:
     setupView(root, screen);
+    break;
+  case MeterView::Unlock:
+    unlockView(root, screen);
     break;
   }
 
