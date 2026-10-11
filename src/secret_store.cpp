@@ -1,6 +1,8 @@
 #include "secret_store.h"
 
 #include <Preferences.h>
+#include <WiFi.h>
+#include <bootloader_random.h>
 #include <esp_random.h>
 #include <string.h>
 
@@ -43,6 +45,25 @@ static_assert(sizeof(SLOT_KEY_FORMATS) / sizeof(SLOT_KEY_FORMATS[0]) == SLOT_COU
               "one key format per slot");
 // Longest key is "wifi_pass0"; 16 covers it with the NUL.
 constexpr size_t KEY_NAME_MAX = 16;
+
+// esp_fill_random() is only cryptographically strong while the RF subsystem is
+// feeding the entropy pool. The serial `pass` / `token<n>` commands re-seal
+// from the debug console with the radio off, so the bootloader's SAR-ADC
+// entropy source is enabled for the draw. A repeated GCM nonce under one key
+// would be keystream reuse, so this is never left to the caller.
+void fillRandomStrong(uint8_t *out, size_t len)
+{
+  const bool radioDown = WiFi.getMode() == WIFI_MODE_NULL;
+  if (radioDown)
+  {
+    bootloader_random_enable();
+  }
+  esp_fill_random(out, len);
+  if (radioDown)
+  {
+    bootloader_random_disable();
+  }
+}
 
 void slotKey(Slot slot, uint8_t generation, char *out, size_t len)
 {
@@ -110,7 +131,7 @@ bool sealRecord(const uint8_t *key, const String &plain, uint8_t *out, size_t &o
     return false;
   }
   out[0] = RECORD_VERSION;
-  esp_fill_random(out + 1, NONCE_LEN);
+  fillRandomStrong(out + 1, NONCE_LEN);
   mbedtls_gcm_context gcm;
   mbedtls_gcm_init(&gcm);
   // The version byte and nonce are authenticated as additional data, so
@@ -286,6 +307,25 @@ bool unlock(const char *pin)
     wipeCredentials();
     return false;
   }
+  // openFrom() cannot tell "wrong PIN" from "blob absent", so a missing
+  // verifier would answer "Wrong PIN" to all 10 000 of them forever. Probe for
+  // its presence first and self-heal exactly as a missing salt does.
+  {
+    char name[KEY_NAME_MAX];
+    slotKey(Slot::WifiPassword, generation, name, sizeof(name));
+    uint8_t probeRecord[RECORD_MAX];
+    size_t probeLen = 0;
+    const bool present = loadBlob(LIVE_NS, name, probeRecord, probeLen);
+    memset(probeRecord, 0, sizeof(probeRecord));
+    memset(name, 0, sizeof(name));
+    if (!present)
+    {
+      Serial.println("Secrets: verifier blob missing, wiping credentials");
+      memset(salt, 0, sizeof(salt));
+      wipeCredentials();
+      return false;
+    }
+  }
   uint8_t candidate[KEY_LEN];
   String probe;
   // The Wi-Fi password's GCM tag is the verifier. Nothing else is stored: a
@@ -312,7 +352,7 @@ bool provision(const char *pin, const String &wifiPassword)
   // an interruption leaves the old generation openable.
   const uint8_t generation = hasGeneration(LIVE_NS) ? (uint8_t)(liveGeneration(LIVE_NS) ^ 1) : 0;
   uint8_t salt[SALT_LEN];
-  esp_fill_random(salt, SALT_LEN);
+  fillRandomStrong(salt, SALT_LEN);
   uint8_t key[KEY_LEN];
   bool ok = deriveKey(pin, salt, key);
   if (ok)
@@ -366,7 +406,7 @@ bool changePin(const char *newPin)
     }
   }
   uint8_t salt[SALT_LEN];
-  esp_fill_random(salt, SALT_LEN);
+  fillRandomStrong(salt, SALT_LEN);
   uint8_t key[KEY_LEN];
   bool ok = deriveKey(newPin, salt, key);
   for (int i = 0; ok && i < SLOT_COUNT; i++)
@@ -405,21 +445,21 @@ String read(Slot slot)
   return value;
 }
 
-void write(Slot slot, const String &value)
+bool write(Slot slot, const String &value)
 {
   if (locked())
   {
     Serial.println("Secrets: locked, nothing written");
-    return;
+    return false;
   }
   // A single blob, written in place. Losing power mid-write costs only the
   // value the user just entered, so the A/B dance is not needed here.
-  // Nonce quality depends on esp_fill_random, which is only cryptographically
-  // strong while the RF subsystem is up — callers should ensure radio is on.
   if (!sealInto(LIVE_NS, rtcSessionKey, slot, liveGeneration(LIVE_NS), value))
   {
     Serial.printf("Secrets: slot %d failed to seal\n", (int)slot);
+    return false;
   }
+  return true;
 }
 
 void wipeCredentials()

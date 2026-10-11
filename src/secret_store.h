@@ -58,17 +58,19 @@ bool unlock(const char *pin);
 
 // First seal: fresh salt, derive, seal the password and two empty tokens into
 // the inactive generation, then commit. Leaves the device unlocked.
-// The radio must be up, because esp_random() is only truly random then.
+// Salt and nonce entropy is guaranteed internally, radio up or down.
 bool provision(const char *pin, const String &wifiPassword);
 
 // Re-seal every secret under a new PIN and commit the flip. Requires
-// !locked() and the radio up. An interruption leaves the old PIN working.
+// !locked(). An interruption leaves the old PIN working.
 bool changePin(const char *newPin);
 
 // "" when locked, or when the blob is missing or fails its tag.
 String read(Slot slot);
-// Silently ignored when locked, which is why callers gate on locked() first.
-void write(Slot slot, const String &value);
+// Seals value into slot. False when locked, or when the seal or the NVS write
+// failed — nothing is stored in either case, so callers must surface it rather
+// than report success.
+bool write(Slot slot, const String &value);
 
 // Erase every credential and the generation marker, including the pre-PIN
 // plaintext keys, the SSID and the account names. Settings and history
