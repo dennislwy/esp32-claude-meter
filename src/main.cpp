@@ -818,7 +818,12 @@ void runCommand(const String &line)
   }
   else if (isToken)
   {
-    settings::setClaudeToken(number, value);
+    // Never echo value: it is the token itself.
+    if (!settings::setClaudeToken(number, value))
+    {
+      Serial.printf("Claude token %d not saved: the seal was refused\n", number);
+      return;
+    }
     if (panelMode)
       reschedulePanelPoll();
     Serial.printf("Claude token %d %s (%s)\n", number, value.isEmpty() ? "cleared" : "saved",
@@ -1013,7 +1018,12 @@ void runCommand(const String &line)
   }
   else if (line.startsWith("pass "))
   {
-    settings::setWifiPassword(line.substring(5));
+    // Never echo the argument: it is the password itself.
+    if (!settings::setWifiPassword(line.substring(5)))
+    {
+      Serial.println("Wi-Fi password not saved: the seal was refused");
+      return;
+    }
     Serial.printf("Wi-Fi password saved (%s)\n", settings::mask(settings::wifiPassword(), 0).c_str());
   }
   else if (line == "hostname")
@@ -1180,6 +1190,10 @@ void handlePowerButton()
   uint32_t bootDownAt = 0;
   uint32_t pwrDownAt = 0;
   bool pwrLongPressHandled = false;
+  // Set when this physical PWR press has already done its job and its release
+  // must not be read as an answer. pwrDownAt cannot carry that, because it is
+  // re-armed on the next iteration while the button is still held.
+  bool pwrPressSpent = false;
   uint32_t lastActivityMs = millis();
 
   for (;;)
@@ -1190,6 +1204,13 @@ void handlePowerButton()
     if (!armed)
     {
       armed = !bootDown && !pwrDown;
+      // A button stuck low would otherwise keep a battery board awake forever,
+      // so this path honours the idle timeout as well.
+      if (millis() - lastActivityMs >= UNLOCK_TIMEOUT_MS)
+      {
+        Serial.println("Locked: no PIN entered, sleeping until a button is pressed");
+        deepSleep(0);
+      }
       delay(10);
       continue;
     }
@@ -1217,13 +1238,18 @@ void handlePowerButton()
       }
       bootDownAt = 0;
       pwrDownAt = 0;
+      // Both flags belong to presses the arming has just consumed. A stale one
+      // would swallow the first confirm press after the screen appears.
+      pwrLongPressHandled = false;
+      pwrPressSpent = false;
       continue;
     }
 
     // Long PWR alone is the board's power-off gesture, and it still works here.
     // On USB the latch cannot cut power, so powerOff() returns and the prompt
     // has to be redrawn: powerOff() blanks the panel on its way out.
-    if (pwrDown && !bootDown && !unlockResetArmed && !pwrLongPressHandled && millis() - pwrDownAt >= LONG_PRESS_MS)
+    if (pwrDown && !bootDown && !unlockResetArmed && !pwrLongPressHandled && !pwrPressSpent &&
+        millis() - pwrDownAt >= LONG_PRESS_MS)
     {
       pwrLongPressHandled = true;
       powerOff();
@@ -1242,7 +1268,9 @@ void handlePowerButton()
         if (unlockResetArmed)
         {
           unlockResetArmed = false;
-          pwrDownAt = 0; // the same chord's PWR release is not an answer
+          // The same chord's PWR is still held: mark the press spent so neither
+          // its release nor a long hold past it counts as an answer.
+          pwrPressSpent = true;
         }
         else
         {
@@ -1259,8 +1287,10 @@ void handlePowerButton()
       const uint32_t held = millis() - pwrDownAt;
       pwrDownAt = 0;
       const bool wasLongPress = pwrLongPressHandled;
+      const bool wasSpent = pwrPressSpent;
       pwrLongPressHandled = false;
-      if (held < BUTTON_MIN_PRESS_MS || wasLongPress)
+      pwrPressSpent = false;
+      if (held < BUTTON_MIN_PRESS_MS || wasLongPress || wasSpent)
       {
         continue;
       }
@@ -1643,8 +1673,11 @@ void setup()
   // Provisioned, unlocked, but no Claude token: a poll has nothing to ask for
   // and the dashboard has nothing to show, so serve the panel instead. Excluded
   // on a timer wake - a board left in this state would otherwise sit in panel
-  // mode after every poll interval and flatten the battery.
-  if (!timerWake && !settings::wifiSsid().isEmpty() && !accountConfigured(0) && !accountConfigured(1))
+  // mode after every poll interval and flatten the battery. Excluded on a PWR
+  // wake too: PWR means power-off everywhere else on this device, and it is not
+  // an invitation to the panel. A cold boot and a BOOT wake still offer it.
+  if (!timerWake && !pwrWake && !settings::wifiSsid().isEmpty() && !accountConfigured(0) &&
+      !accountConfigured(1))
   {
     Serial.println("No Claude token saved; starting the Web panel");
     enterPanelMode();
