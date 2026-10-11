@@ -778,6 +778,15 @@ bool allowedWhileLocked(const String &line)
   return false;
 }
 
+// Extract the first space-delimited word. Used when echoing a command verb back
+// to the user: pass/token<n> carry secrets in the trailing argument, so we must
+// never echo the full line.
+static String commandVerb(const String &line)
+{
+  int sp = line.indexOf(' ');
+  return sp < 0 ? line : line.substring(0, sp);
+}
+
 // settings::mask() reports an empty string as "(not set)". While locked a
 // sealed credential reads back empty, which is a different thing entirely.
 String maskedSecret(const String &value, size_t visibleTail = 4)
@@ -796,7 +805,7 @@ void runCommand(const String &line)
   {
     Serial.printf("Locked - \"%s\" needs the Device PIN. Available: help, status, creds, rtc,\n"
                   "files, selftest, debug off, reboot, reset\n",
-                  line.c_str());
+                  commandVerb(line).c_str());
     return;
   }
   int number;
@@ -1092,7 +1101,7 @@ void runCommand(const String &line)
   }
   else
   {
-    Serial.printf("Unknown command \"%s\" - type help\n", line.c_str());
+    Serial.printf("Unknown command \"%s\" - type help\n", commandVerb(line).c_str());
   }
 }
 
@@ -1233,6 +1242,7 @@ void handlePowerButton()
         if (unlockResetArmed)
         {
           unlockResetArmed = false;
+          pwrDownAt = 0; // the same chord's PWR release is not an answer
         }
         else
         {
@@ -1257,6 +1267,10 @@ void handlePowerButton()
       lastActivityMs = millis();
       if (unlockResetArmed)
       {
+        if (bootDown || bootDownAt != 0)
+        {
+          continue; // BOOT is in the chord too - its release cancels
+        }
         secret_store::wipeCredentials();
         Serial.println("Credentials erased - restarting into setup");
         Serial.flush();
