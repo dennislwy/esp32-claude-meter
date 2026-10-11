@@ -8,12 +8,13 @@
 #include <mbedtls/md.h>
 #include <mbedtls/pkcs5.h>
 
-// Retained across deep sleep and a software reset, re-initialised by a
-// power-on reset. The software-reset half is load-bearing: provisioning ends
-// in ESP.restart(), so without it the user would set a PIN and be challenged
-// for it seconds later.
-RTC_DATA_ATTR static uint8_t rtcSessionKey[secret_store::KEY_LEN];
-RTC_DATA_ATTR static bool rtcKeyValid = false;
+// RTC_NOINIT_ATTR lives in a NOLOAD section: the bootloader leaves it alone, so
+// it survives deep sleep and a software reset, and holds garbage after a
+// power-on reset. Garbage would satisfy a bool flag 255 times out of 256, so
+// validity is a magic word the odds cannot reasonably forge.
+constexpr uint32_t SESSION_MAGIC = 0x50494E31; // "PIN1"
+RTC_NOINIT_ATTR static uint8_t rtcSessionKey[secret_store::KEY_LEN];
+RTC_NOINIT_ATTR static uint32_t rtcKeyMagic;
 
 namespace
 {
@@ -256,7 +257,7 @@ bool validPin(const char *pin)
 
 bool locked()
 {
-  return !rtcKeyValid;
+  return rtcKeyMagic != SESSION_MAGIC;
 }
 
 bool legacy()
@@ -294,7 +295,7 @@ bool unlock(const char *pin)
   if (ok)
   {
     memcpy(rtcSessionKey, candidate, KEY_LEN);
-    rtcKeyValid = true;
+    rtcKeyMagic = SESSION_MAGIC;
   }
   memset(candidate, 0, sizeof(candidate));
   memset(salt, 0, sizeof(salt));
@@ -327,7 +328,7 @@ bool provision(const char *pin, const String &wifiPassword)
   if (ok)
   {
     memcpy(rtcSessionKey, key, KEY_LEN);
-    rtcKeyValid = true;
+    rtcKeyMagic = SESSION_MAGIC;
   }
   memset(key, 0, sizeof(key));
   memset(salt, 0, sizeof(salt));
@@ -442,7 +443,7 @@ void wipeCredentials()
   }
   prefs.end();
   memset(rtcSessionKey, 0, KEY_LEN);
-  rtcKeyValid = false;
+  rtcKeyMagic = 0;
 }
 
 bool selfTest()

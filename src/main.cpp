@@ -1117,6 +1117,8 @@ void handlePowerButton()
   bool armed = digitalRead(PIN_BOOT_BUTTON) == HIGH && digitalRead(PIN_PWR_BUTTON) == HIGH;
   uint32_t bootDownAt = 0;
   uint32_t pwrDownAt = 0;
+  bool bootLongPressHandled = false;
+  bool pwrLongPressHandled = false;
   uint32_t lastActivityMs = millis();
 
   for (;;)
@@ -1141,10 +1143,10 @@ void handlePowerButton()
     // Long PWR alone is the board's power-off gesture, and it still works here.
     // On USB the latch cannot cut power, so powerOff() returns and the prompt
     // has to be redrawn: powerOff() blanks the panel on its way out.
-    if (pwrDown && !bootDown && millis() - pwrDownAt >= LONG_PRESS_MS)
+    if (pwrDown && !bootDown && !pwrLongPressHandled && millis() - pwrDownAt >= LONG_PRESS_MS)
     {
+      pwrLongPressHandled = true;
       powerOff();
-      pwrDownAt = 0;
       lastActivityMs = millis();
       render();
       continue;
@@ -1154,6 +1156,7 @@ void handlePowerButton()
     {
       const uint32_t held = millis() - bootDownAt;
       bootDownAt = 0;
+      bootLongPressHandled = false;
       if (held >= BUTTON_MIN_PRESS_MS)
       {
         entry.increment();
@@ -1168,7 +1171,9 @@ void handlePowerButton()
     {
       const uint32_t held = millis() - pwrDownAt;
       pwrDownAt = 0;
-      if (held < BUTTON_MIN_PRESS_MS)
+      const bool wasLongPress = pwrLongPressHandled;
+      pwrLongPressHandled = false;
+      if (held < BUTTON_MIN_PRESS_MS || wasLongPress)
       {
         continue;
       }
