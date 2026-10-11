@@ -5,6 +5,7 @@
 #include <DNSServer.h>
 #include <ArduinoJson.h>
 #include "settings.h"
+#include "secret_store.h"
 
 namespace
 {
@@ -39,6 +40,7 @@ body{font:16px system-ui,-apple-system,sans-serif;margin:0;padding:16px;backgrou
 .card{max-width:420px;margin:0 auto;background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
 h1{font-size:20px;margin:0 0 4px}
 .sub{color:#6b7280;font-size:13px;margin-bottom:16px}
+.hint{color:#6b7280;font-size:12px;margin:6px 0 0;line-height:1.4}
 label{display:block;font-size:13px;color:#374151;margin:12px 0 4px}
 input,select,button{width:100%;font:inherit;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff}
 button{background:#111;color:#fff;border:none;margin-top:16px;cursor:pointer}
@@ -71,8 +73,18 @@ button:disabled{background:#9ca3af;cursor:default}
     <input id="ssid" readonly>
     <label>Password</label>
     <input id="pass" type="password" placeholder="Wi-Fi password" autocomplete="off" autocapitalize="off" autocorrect="off">
-    <button id="save" type="button">Save &amp; connect</button>
+    <button id="next" type="button">Next</button>
     <button id="back" type="button" style="background:#e5e7eb;color:#111;margin-top:8px">Back</button>
+  </div>
+
+  <div id="pane-pin" class="hidden">
+    <label>Device PIN</label>
+    <input id="pin" type="password" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+    <label>Confirm PIN</label>
+    <input id="pin2" type="password" inputmode="numeric" maxlength="4" placeholder="Repeat the 4 digits" autocomplete="off">
+    <div class="hint">The meter encrypts your Wi-Fi password and Claude tokens with this PIN, and asks for it on its own buttons after every power loss. It cannot be recovered: a forgotten PIN means a factory reset and setting the meter up again.</div>
+    <button id="save" type="button">Save &amp; connect</button>
+    <button id="pinback" type="button" style="background:#e5e7eb;color:#111;margin-top:8px">Back</button>
     <div id="status" class="status"></div>
   </div>
 </div>
@@ -114,25 +126,46 @@ $('#rescan').onclick=scan;
 $('#back').onclick=()=>{
   $('#pane-pass').classList.add('hidden');
   $('#pane-pick').classList.remove('hidden');
-  $('#status').textContent='';
+};
+$('#next').onclick=()=>{
+  $('#pin').value='';$('#pin2').value='';
+  $('#status').className='status';$('#status').textContent='';
+  $('#pane-pass').classList.add('hidden');
+  $('#pane-pin').classList.remove('hidden');
+  $('#pin').focus();
+};
+$('#pinback').onclick=()=>{
+  $('#pane-pin').classList.add('hidden');
+  $('#pane-pass').classList.remove('hidden');
+  $('#pass').focus();
 };
 
+const ERRORS={
+  bad_pin:'PIN must be exactly 4 digits',
+  seal_failed:'Could not store the credentials securely. Try again.',
+  empty_ssid:'Pick a network that has a name'
+};
+function fail(msg){$('#status').className='status err';$('#status').textContent=msg;}
+
 $('#save').onclick=async()=>{
+  const pin=$('#pin').value;
+  if(!/^[0-9]{4}$/.test(pin)){fail('PIN must be exactly 4 digits');return;}
+  if(pin!==$('#pin2').value){fail('The two PINs do not match');return;}
   const btn=$('#save');btn.disabled=true;
   $('#status').className='status';$('#status').textContent='Saving...';
   try{
     const r=await fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ssid:picked.ssid,pass:$('#pass').value})});
+      body:JSON.stringify({ssid:picked.ssid,pass:$('#pass').value,pin:pin})});
     const j=await r.json();
     if(j.ok){
       $('#status').className='status ok';
-      $('#status').textContent='Saved. The meter is rebooting and will connect to "'+picked.ssid+'". You can close this page.';
+      $('#status').textContent='Saved. The meter is rebooting and will connect to "'+picked.ssid+'". Remember your PIN - the meter asks for it on its buttons after every power loss. You can close this page.';
     }else{
-      $('#status').className='status err';$('#status').textContent=j.error||'Save failed';
+      fail(ERRORS[j.error]||'Save failed');
       btn.disabled=false;
     }
   }catch(e){
-    $('#status').className='status err';$('#status').textContent='Network error';
+    fail('Network error');
     btn.disabled=false;
   }
 };
@@ -192,14 +225,28 @@ void handleSave()
   }
   String ssid = String((const char *)(d["ssid"] | ""));
   String pass = String((const char *)(d["pass"] | ""));
+  String pin = String((const char *)(d["pin"] | ""));
   ssid.trim();
   if (ssid.isEmpty())
   {
     server->send(400, "application/json", "{\"error\":\"empty_ssid\"}");
     return;
   }
+  if (!secret_store::validPin(pin.c_str()))
+  {
+    server->send(400, "application/json", "{\"error\":\"bad_pin\"}");
+    return;
+  }
+  // Seal first, store the SSID second. A stored SSID with no generation marker
+  // is precisely what legacy() reports, so sealing after the SSID would make a
+  // failed seal look like old firmware and wipe on the next boot. The AP is up,
+  // so esp_random() has the radio it needs for the salt.
+  if (!secret_store::provision(pin.c_str(), pass))
+  {
+    server->send(500, "application/json", "{\"error\":\"seal_failed\"}");
+    return;
+  }
   settings::setWifiSsid(ssid);
-  settings::setWifiPassword(pass);
   server->send(200, "application/json", "{\"ok\":true}");
   rebootPending = true;
   rebootAtMs = millis() + 1200; // let the response flush before restart

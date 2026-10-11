@@ -14,6 +14,14 @@ handleScan() always answers 200 with a JSON array and has no error path, so
 the page only reaches "Scan failed" when the request itself dies -- the board
 rebooting or the radio dropping during the blocking scan. --scan fail closes
 the connection without replying, which is what the page sees in that case.
+
+--save reaches the save-failure branch:
+
+    --save ok          the seal succeeds (default)
+    --save seal-fail   answers 500 {"error":"seal_failed"}
+
+seal_failed means the board could not derive a key or write NVS, so there is
+no way to provoke it from a browser against real hardware.
 """
 
 import argparse
@@ -50,6 +58,7 @@ CAPTIVE_PATHS = ("/generate_204", "/gen_204", "/hotspot-detect.html",
                  "/redirect")
 
 SCAN_MODE = "ok"
+SAVE_MODE = "ok"
 
 
 def setup_html():
@@ -98,9 +107,16 @@ class PreviewHandler(BaseHTTPRequestHandler):
         ssid = str(body.get("ssid", "")).strip()
         if not ssid:
             return self.reply(400, {"error": "empty_ssid"})
+        pin = str(body.get("pin", ""))
+        # The firmware compares each character against '0'..'9'; str.isdigit()
+        # alone would also accept non-ASCII digits like "١٢٣٤".
+        if len(pin) != 4 or not pin.isdigit() or not pin.isascii():
+            return self.reply(400, {"error": "bad_pin"})
+        if SAVE_MODE == "seal-fail":
+            return self.reply(500, {"error": "seal_failed"})
         password = str(body.get("pass", ""))
-        print('Would save SSID "%s" with a %d-character password, then reboot.'
-              % (ssid, len(password)), flush=True)
+        print('Would seal a %d-character password under a 4-digit PIN for SSID '
+              '"%s", then reboot.' % (len(password), ssid), flush=True)
         self.reply(200, {"ok": True})
 
     def log_message(self, *_):
@@ -123,8 +139,10 @@ if __name__ == "__main__":
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8081)
     parser.add_argument("--scan", choices=("ok", "empty", "fail"), default="ok")
+    parser.add_argument("--save", choices=("ok", "seal-fail"), default="ok")
     args = parser.parse_args()
     SCAN_MODE = args.scan
+    SAVE_MODE = args.save
     try:
         server = PreviewServer(("127.0.0.1", args.port), PreviewHandler)
     except OSError as exc:
@@ -132,8 +150,8 @@ if __name__ == "__main__":
             raise
         server = PreviewServer(("127.0.0.1", 0), PreviewHandler)
         print("Port %s is unavailable; using a free port." % args.port, flush=True)
-    print("Setup preview: http://127.0.0.1:%s · scan=%s · Nothing is saved"
-          % (server.server_port, args.scan), flush=True)
+    print("Setup preview: http://127.0.0.1:%s · scan=%s · save=%s · Nothing is saved"
+          % (server.server_port, args.scan, args.save), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

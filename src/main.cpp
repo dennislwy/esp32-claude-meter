@@ -1388,6 +1388,10 @@ void setup()
   lvglPortBegin(epaper);
   lvglPortSetRotation(settings::displayRotation());
 
+  // Credentials from pre-PIN firmware cannot be unsealed, so wipe them here and
+  // fall straight into provisioning: the wipe clears the SSID too.
+  settings::migrateLegacyCredentials();
+
   // No stored Wi-Fi SSID → bring up the AP captive portal and stay awake until
   // the user saves creds (which reboots the board back through this same path).
   if (settings::wifiSsid().isEmpty())
