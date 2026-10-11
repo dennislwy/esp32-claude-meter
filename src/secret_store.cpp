@@ -334,6 +334,16 @@ bool provision(const char *pin, const String &wifiPassword)
   return ok;
 }
 
+// Overwrites each String's heap buffer before releasing it so the plaintext
+// does not linger in freed memory after changePin() returns.
+static void zeroStrings(String *arr, int count)
+{
+  for (int i = 0; i < count; i++)
+  {
+    memset((char *)arr[i].c_str(), 0, arr[i].length());
+  }
+}
+
 bool changePin(const char *newPin)
 {
   if (locked() || !validPin(newPin))
@@ -350,6 +360,7 @@ bool changePin(const char *newPin)
     if (!openFrom(LIVE_NS, rtcSessionKey, (Slot)i, live, plain[i]))
     {
       Serial.printf("Secrets: slot %d unreadable, PIN unchanged\n", i);
+      zeroStrings(plain, i); // zero slots already decrypted before this failure
       return false;
     }
   }
@@ -370,6 +381,7 @@ bool changePin(const char *newPin)
     memcpy(rtcSessionKey, key, KEY_LEN);
     removeGeneration(LIVE_NS, live);
   }
+  zeroStrings(plain, SLOT_COUNT);
   memset(key, 0, sizeof(key));
   memset(salt, 0, sizeof(salt));
   return ok;
@@ -401,6 +413,8 @@ void write(Slot slot, const String &value)
   }
   // A single blob, written in place. Losing power mid-write costs only the
   // value the user just entered, so the A/B dance is not needed here.
+  // Nonce quality depends on esp_fill_random, which is only cryptographically
+  // strong while the RF subsystem is up — callers should ensure radio is on.
   if (!sealInto(LIVE_NS, rtcSessionKey, slot, liveGeneration(LIVE_NS), value))
   {
     Serial.printf("Secrets: slot %d failed to seal\n", (int)slot);
