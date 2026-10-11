@@ -109,9 +109,8 @@ Type `help` for the full list. Highlights:
 
 While the board is locked the console answers only `help`, `status`, `creds`,
 `rtc`, `files`, `selftest`, `debug off`, `reboot`, `reset` and `reset confirm`
-— everything
-else would need a credential it cannot read. `creds` prints `(locked)` in
-place of the token and password masks.
+— everything else would need a credential it cannot read. `creds` prints
+`(locked)` in place of the token and password masks.
 
 ## Operation
 
@@ -119,11 +118,11 @@ place of the token and password masks.
   enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s on a
   wake to toggle (awake, asleep, or on battery) — except on the PIN screen,
   where the chord instead arms the credential wipe described above (the screen
-  asks `Factory reset?`, but only the credentials go). To get serial at a battery PIN
-  prompt, leave it untouched for two minutes so it deep-sleeps, then wake it
-  holding both buttons for one second. It has
-  no idle timeout: the board stays awake and skips deep sleep until you turn it
-  off with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
+  asks `Factory reset?`, but only the credentials go). To get serial at a
+  battery PIN prompt, leave it untouched for two minutes so it deep-sleeps,
+  then wake it holding both buttons for one second. Debug mode has no idle
+  timeout: the board stays awake and skips deep sleep until you turn it off
+  with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
   Clear it before unplugging, or battery life drops well short of the
   normal-mode figure.
 - **Normal mode** (battery): serial and LED off to save power. The board
