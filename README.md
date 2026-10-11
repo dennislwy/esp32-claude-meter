@@ -108,7 +108,8 @@ Type `help` for the full list. Highlights:
 | `selftest`                            | Verify the credential encryption; touches no stored credential          |
 
 While the board is locked the console answers only `help`, `status`, `creds`,
-`rtc`, `files`, `selftest`, `debug off`, `reboot`, and `reset` — everything
+`rtc`, `files`, `selftest`, `debug off`, `reboot`, `reset` and `reset confirm`
+— everything
 else would need a credential it cannot read. `creds` prints `(locked)` in
 place of the token and password masks.
 
@@ -117,7 +118,8 @@ place of the token and password masks.
 - **Debug mode** (default when USB host is attached at cold boot): serial
   enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s on a
   wake to toggle (awake, asleep, or on battery) — except on the PIN screen,
-  where the chord arms a factory reset instead. To get serial at a battery PIN
+  where the chord instead arms the credential wipe described above (the screen
+  asks `Factory reset?`, but only the credentials go). To get serial at a battery PIN
   prompt, leave it untouched for two minutes so it deep-sleeps, then wake it
   holding both buttons for one second. It has
   no idle timeout: the board stays awake and skips deep sleep until you turn it

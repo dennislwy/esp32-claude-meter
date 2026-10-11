@@ -17,7 +17,7 @@ and get a strike-through.
 | ~~**SEC-1**~~ | ~~**PIN-encrypted token**~~          | **Closed 2026-10-11:** AES-256-GCM encrypts the OAuth token; PIN is never stored — the GCM tag is the only oracle. Wi-Fi password and both tokens are now sealed under the Device PIN (R9 shipped). |
 | **SEC-2**     | **24-hour session cookie**           | `Max-Age=86400`, survives panel re-entry. Ours is RAM-only; any reboot or panel exit kills it.                                             |
 | ~~**SEC-3**~~ | ~~**Multiple concurrent sessions**~~ | **Closed 2026-10-05:** 4 session slots; a 5th login evicts the slot idle longest.                                                          |
-| **SEC-4**     | **Token rotation re-prompts PIN**    | Changing the token requires the PIN again so the current blob can be decrypted first. N/A for us until SEC-1 lands.                        |
+| **SEC-4**     | **Token rotation re-prompts PIN**    | Changing the token requires the PIN again so the current blob can be decrypted first. Still open now SEC-1 has landed: we re-seal with the live session key and never re-verify the PIN. |
 | ~~**SEC-5**~~ | ~~**Token save probes the API**~~    | **Closed 2026-10-05:** `/api/tokens` probes each newly saved token and returns `probes[]`.                                                 |
 
 ## Status &amp; observability (OBS)
