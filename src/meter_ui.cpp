@@ -591,7 +591,7 @@ namespace
 
     if (screen.unlockResetArmed)
     {
-      lv_obj_t *warn = text(parent, "Factory reset?", &lv_font_montserrat_16, BLACK);
+      lv_obj_t *warn = text(parent, "Erase credentials?", &lv_font_montserrat_16, BLACK);
       lv_obj_align(warn, LV_ALIGN_TOP_MID, 0, y);
 
       lv_obj_t *body = text(parent,

@@ -74,8 +74,10 @@ notes](#security-notes). The device begins polling immediately and starts the
 deep-sleep cycle once a USB host is no longer detected.
 
 **The PIN is asked for again after every power loss.** The key lives in RTC
-RAM, which survives deep sleep and a `reboot` but not a battery pull or a PWR
-power-off. Enter it on the device: `BOOT` changes the digit under the cursor,
+RAM, which survives deep sleep and a `reboot` but not a loss of power — a
+battery pull, a flat pack, or a PWR power-off while on battery. On USB the PWR
+long-press cannot cut the latch, so the board stays powered and stays
+unlocked. Enter it on the device: `BOOT` changes the digit under the cursor,
 `PWR` confirms it. Forgotten it? Hold `BOOT + PWR` for 5 seconds on the PIN
 screen to erase the credentials and PIN and return to step 1 (serial
 `reset confirm` does the same, but serial is only active when a USB host was
@@ -117,14 +119,13 @@ While the board is locked the console answers only `help`, `status`, `creds`,
 - **Debug mode** (default when USB host is attached at cold boot): serial
   enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s on a
   wake to toggle (awake, asleep, or on battery) — except on the PIN screen,
-  where the chord instead arms the credential wipe described above (the screen
-  asks `Factory reset?`, but only the credentials go). To get serial at a
-  battery PIN prompt, leave it untouched for two minutes so it deep-sleeps,
-  then wake it holding both buttons for one second. Debug mode has no idle
-  timeout: the board stays awake and skips deep sleep until you turn it off
-  with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
-  Clear it before unplugging, or battery life drops well short of the
-  normal-mode figure.
+  where the chord instead arms the credential wipe described above. To get
+  serial at a battery PIN prompt, leave it untouched for two minutes so it
+  deep-sleeps, then wake it holding both buttons for one second. Debug mode
+  has no idle timeout: the board stays awake and skips deep sleep until you
+  turn it off with `BOOT + PWR`, serial `debug off`, or a cold boot with no
+  USB host. Clear it before unplugging, or battery life drops well short of
+  the normal-mode figure.
 - **Normal mode** (battery): serial and LED off to save power. The board
   wakes on its poll timer, polls, draws, and deep-sleeps again. During enabled
   Pause Hours it sleeps until the window ends without automatic usage
@@ -148,15 +149,15 @@ While the board is locked the console answers only `help`, `status`, `creds`,
   when you're done, or the radio will flatten the battery.
   See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
   and [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
-- **Locked** (after any cold boot — battery pull, PWR power-off, or first
-  power-up of a provisioned board): the radio stays off and the ePaper shows
-  `Locked`, `Enter your 4-digit PIN`, and four digit slots. `BOOT` cycles the
-  digit under the cursor 0-9, `PWR` confirms it and moves to the next slot;
-  the fourth `PWR` tries the PIN.
-  A correct PIN restarts the board straight into normal operation. Two
-  minutes with no button press deep-sleeps the board until a button wakes it,
-  so a locked meter in a drawer is not a flat battery. See
-  [docs/MODES.md](docs/MODES.md).
+- **Locked** (after any cold boot — battery pull, a PWR power-off on battery,
+  or first power-up of a provisioned board): the radio stays off and the ePaper
+  shows `Locked`, `Enter your 4-digit PIN`, and four digit slots. `BOOT`
+  cycles the digit under the cursor 0-9, `PWR` confirms it and moves to the
+  next slot; the fourth `PWR` tries the PIN. A long `PWR` press still powers
+  the board off from here. A correct PIN restarts the board straight into
+  normal operation. Two minutes with no button press deep-sleeps the board
+  until a button wakes it, so a locked meter in a drawer is not a flat
+  battery. See [docs/MODES.md](docs/MODES.md).
 
 The usage ring survives power cycles (persisted to LittleFS; written only
 when the 30-min slot advances — ~48 writes/day).
@@ -205,6 +206,11 @@ docs/          design notes: modes, battery, alert sounds, web panel, memory foo
   someone who dumps the flash. The derivation key is not bound to an eFuse,
   so the work factor is all there is. This defends a lost, stolen, or resold
   device against casual inspection — not against a determined attacker.
+- **Setup happens over an open Wi-Fi network and plain HTTP.** The
+  provisioning AP has no password, so the Device PIN, your Wi-Fi password and
+  both OAuth tokens cross the air unencrypted while you type them in. Anyone
+  in range can capture them passively. Provision somewhere you would not mind
+  being overheard.
 - **Everything else in NVS is plain text**, including the Wi-Fi SSID, the
   account display names, the hostname, and every setting. Anyone with the
   device and a USB cable can read those back.

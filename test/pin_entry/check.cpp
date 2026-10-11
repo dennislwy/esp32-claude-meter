@@ -1,4 +1,8 @@
 // Host regression: compile this with src/pin_entry.cpp (no board required).
+#ifdef NDEBUG
+#error "this suite asserts; NDEBUG would compile every check away"
+#endif
+
 #include "pin_entry.h"
 #include <assert.h>
 #include <stdio.h>

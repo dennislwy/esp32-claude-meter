@@ -146,9 +146,12 @@ in Normal mode with the key still in RTC RAM.
 Entry: boot with a stored `wifi.ssid` and no session key — a battery pull,
 a power-off, or first power-up after charging.
 
-Exit: correct PIN → restart into Normal mode. Two minutes idle → deep sleep
-with no timer wake, so only a button press brings the prompt back. A wrong
-PIN just clears the four slots; there is no attempt counter in this phase.
+Exit: correct PIN → restart into Normal mode. A long PWR press (≥ 1 s, BOOT
+not held) still powers the board off from the prompt, exactly as it does
+elsewhere; on USB the latch cannot cut power, so the prompt is redrawn
+instead. Two minutes idle → deep sleep with no timer wake, so only a button
+press brings the prompt back. A wrong PIN just clears the four slots; there
+is no attempt counter in this phase.
 
 Forgot it: serial `reset confirm`, or hold **BOOT + PWR** for five seconds
 at the prompt and confirm with PWR. Both erase the Wi-Fi password, both
