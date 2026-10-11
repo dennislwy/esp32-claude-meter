@@ -588,6 +588,28 @@ namespace
   {
     const PinEntry &entry = *screen.unlockEntry;
     const int y = STATUS_BAR_H + 6;
+
+    if (screen.unlockResetArmed)
+    {
+      lv_obj_t *warn = text(parent, "Factory reset?", &lv_font_montserrat_16, BLACK);
+      lv_obj_align(warn, LV_ALIGN_TOP_MID, 0, y);
+
+      lv_obj_t *body = text(parent,
+                            "Erases the Wi-Fi password,\nboth tokens and the PIN.\n"
+                            "Settings and history are kept.",
+                            &lv_font_montserrat_12, BLACK);
+      lv_obj_set_width(body, CONTENT_W);
+      lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+      lv_obj_set_style_text_align(body, LV_TEXT_ALIGN_CENTER, 0);
+      lv_obj_align(body, LV_ALIGN_TOP_MID, 0, y + 30);
+
+      lv_obj_t *keys = text(parent, "PWR = erase    BOOT = cancel", &lv_font_montserrat_10, BLACK);
+      lv_obj_set_width(keys, CONTENT_W);
+      lv_obj_set_style_text_align(keys, LV_TEXT_ALIGN_CENTER, 0);
+      lv_obj_align(keys, LV_ALIGN_BOTTOM_MID, 0, -2);
+      return;
+    }
+
     lv_obj_t *title = text(parent, "Locked", &lv_font_montserrat_16, BLACK);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
 
@@ -630,12 +652,17 @@ namespace
     lv_obj_t *bootHint = text(parent, "BOOT = change digit", &lv_font_montserrat_10, BLACK);
     lv_obj_set_width(bootHint, CONTENT_W);
     lv_obj_set_style_text_align(bootHint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(bootHint, LV_ALIGN_BOTTOM_MID, 0, -2 - lineH);
+    lv_obj_align(bootHint, LV_ALIGN_BOTTOM_MID, 0, -2 - 2 * lineH);
 
     lv_obj_t *pwrHint = text(parent, "PWR = confirm digit", &lv_font_montserrat_10, BLACK);
     lv_obj_set_width(pwrHint, CONTENT_W);
     lv_obj_set_style_text_align(pwrHint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(pwrHint, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_align(pwrHint, LV_ALIGN_BOTTOM_MID, 0, -2 - lineH);
+
+    lv_obj_t *resetHint = text(parent, "Hold both 5 s = reset", &lv_font_montserrat_10, BLACK);
+    lv_obj_set_width(resetHint, CONTENT_W);
+    lv_obj_set_style_text_align(resetHint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(resetHint, LV_ALIGN_BOTTOM_MID, 0, -2);
   }
 
   void singleView(lv_obj_t *parent, const MeterScreen &screen, int index)

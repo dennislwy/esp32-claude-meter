@@ -98,6 +98,8 @@ ProvisionInfo provisionInfo;
 const PinEntry *unlockEntry = nullptr;
 bool unlockWrong = false;
 constexpr uint32_t UNLOCK_TIMEOUT_MS = 120UL * 1000UL;
+bool unlockResetArmed = false;
+constexpr uint32_t RESET_HOLD_MS = 5000UL;
 
 void enterPanelMode();
 void exitPanelMode();
@@ -283,6 +285,7 @@ void render()
   {
     screen.unlockEntry = unlockEntry;
     screen.unlockWrong = unlockWrong;
+    screen.unlockResetArmed = unlockResetArmed;
   }
   else if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
   {
@@ -600,6 +603,7 @@ void printHelp()
   Serial.println("  account2 <name>            name account 2 (default \"Claude 2\"); \"clear\" restores the default");
   Serial.println("  hostname <name>            mDNS name, max 15 chars of a-z 0-9 -; \"clear\" restores \"claude-meter\" (restart to apply)");
   Serial.println("  creds                      show saved credentials, masked");
+  Serial.println("  reset                      erase credentials and the PIN; \"reset confirm\" does it (settings and history kept)");
   Serial.println("  scan                       list Wi-Fi networks in range, flagging the saved SSID");
   Serial.println("  tlscheck                   show api.anthropic.com's certificate chain (sends no token)");
   Serial.println("  selftest                   verify the credential encryption (no credentials touched)");
@@ -755,9 +759,46 @@ void setClock(const String &line)
   render();
 }
 
+// While locked, every credential reads back as an empty string. Commands that
+// would print or overwrite one are refused instead, so a wrong answer never
+// looks like a real one. Exact matches only: "rtc set ..." and "token1 ..."
+// are deliberately not on the list.
+bool allowedWhileLocked(const String &line)
+{
+  static const char *const ALLOWED[] = {"help", "status", "creds", "rtc", "files",
+                                        "selftest", "debug off", "reboot",
+                                        "reset", "reset confirm"};
+  for (const char *allowed : ALLOWED)
+  {
+    if (line == allowed)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+// settings::mask() reports an empty string as "(not set)". While locked a
+// sealed credential reads back empty, which is a different thing entirely.
+String maskedSecret(const String &value, size_t visibleTail = 4)
+{
+  if (secret_store::locked())
+  {
+    return "(locked)";
+  }
+  return settings::mask(value, visibleTail);
+}
+
 // Serial commands; "help" lists them
 void runCommand(const String &line)
 {
+  if (secret_store::locked() && !allowedWhileLocked(line))
+  {
+    Serial.printf("Locked - \"%s\" needs the Device PIN. Available: help, status, creds, rtc,\n"
+                  "files, selftest, debug off, reboot, reset\n",
+                  line.c_str());
+    return;
+  }
   int number;
   String value;
   const bool isToken = parseNumbered(line, "token", number, value);
@@ -994,12 +1035,24 @@ void runCommand(const String &line)
   else if (line == "creds")
   {
     Serial.printf("Wi-Fi SSID:     \"%s\"\n", settings::wifiSsid().c_str());
-    Serial.printf("Wi-Fi password: %s\n", settings::mask(settings::wifiPassword(), 0).c_str());
+    Serial.printf("Wi-Fi password: %s\n", maskedSecret(settings::wifiPassword(), 0).c_str());
     for (number = 1; number <= settings::CLAUDE_TOKEN_COUNT; number++)
     {
       Serial.printf("Account %d:      \"%s\", token %s\n", number, settings::accountName(number).c_str(),
-                    settings::mask(settings::claudeToken(number)).c_str());
+                    maskedSecret(settings::claudeToken(number)).c_str());
     }
+  }
+  else if (line == "reset")
+  {
+    Serial.println("This erases the Wi-Fi password, both Claude tokens, the account names");
+    Serial.println("and the Device PIN. Settings and history are kept. Type \"reset confirm\".");
+  }
+  else if (line == "reset confirm")
+  {
+    secret_store::wipeCredentials();
+    Serial.println("Credentials erased - restarting into setup");
+    Serial.flush();
+    ESP.restart();
   }
   else if (line == "scan")
   {
@@ -1117,12 +1170,12 @@ void handlePowerButton()
   bool armed = digitalRead(PIN_BOOT_BUTTON) == HIGH && digitalRead(PIN_PWR_BUTTON) == HIGH;
   uint32_t bootDownAt = 0;
   uint32_t pwrDownAt = 0;
-  bool bootLongPressHandled = false;
   bool pwrLongPressHandled = false;
   uint32_t lastActivityMs = millis();
 
   for (;;)
   {
+    handleSerialCommands();
     const bool bootDown = digitalRead(PIN_BOOT_BUTTON) == LOW;
     const bool pwrDown = digitalRead(PIN_PWR_BUTTON) == LOW;
     if (!armed)
@@ -1140,10 +1193,28 @@ void handlePowerButton()
       pwrDownAt = millis();
     }
 
+    // Both buttons held: arm the wipe. The screen asks to confirm, so the
+    // gesture alone cannot erase anything.
+    if (!unlockResetArmed && bootDown && pwrDown &&
+        millis() - bootDownAt >= RESET_HOLD_MS && millis() - pwrDownAt >= RESET_HOLD_MS)
+    {
+      unlockResetArmed = true;
+      lastActivityMs = millis();
+      render();
+      // Both presses are spent on the arming; neither release is an answer
+      while (digitalRead(PIN_BOOT_BUTTON) == LOW || digitalRead(PIN_PWR_BUTTON) == LOW)
+      {
+        delay(10);
+      }
+      bootDownAt = 0;
+      pwrDownAt = 0;
+      continue;
+    }
+
     // Long PWR alone is the board's power-off gesture, and it still works here.
     // On USB the latch cannot cut power, so powerOff() returns and the prompt
     // has to be redrawn: powerOff() blanks the panel on its way out.
-    if (pwrDown && !bootDown && !pwrLongPressHandled && millis() - pwrDownAt >= LONG_PRESS_MS)
+    if (pwrDown && !bootDown && !unlockResetArmed && !pwrLongPressHandled && millis() - pwrDownAt >= LONG_PRESS_MS)
     {
       pwrLongPressHandled = true;
       powerOff();
@@ -1156,12 +1227,18 @@ void handlePowerButton()
     {
       const uint32_t held = millis() - bootDownAt;
       bootDownAt = 0;
-      bootLongPressHandled = false;
       if (held >= BUTTON_MIN_PRESS_MS)
       {
-        entry.increment();
-        unlockWrong = false;
         lastActivityMs = millis();
+        if (unlockResetArmed)
+        {
+          unlockResetArmed = false;
+        }
+        else
+        {
+          entry.increment();
+          unlockWrong = false;
+        }
         render();
       }
       continue;
@@ -1178,6 +1255,13 @@ void handlePowerButton()
         continue;
       }
       lastActivityMs = millis();
+      if (unlockResetArmed)
+      {
+        secret_store::wipeCredentials();
+        Serial.println("Credentials erased - restarting into setup");
+        Serial.flush();
+        ESP.restart();
+      }
       if (!entry.confirm())
       {
         render(); // next slot

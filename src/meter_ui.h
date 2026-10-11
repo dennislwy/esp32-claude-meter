@@ -49,6 +49,7 @@ struct MeterScreen
   // Only used when view == Unlock
   const PinEntry *unlockEntry; // slots and cursor to draw
   bool unlockWrong;            // the previous attempt failed its tag check
+  bool unlockResetArmed;       // the BOOT+PWR hold is waiting for a confirmation
 };
 
 // Rebuilds the LVGL screen. The caller refreshes the panel (lv_refr_now).
