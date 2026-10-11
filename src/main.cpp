@@ -1640,6 +1640,20 @@ void setup()
     unlockGate();
   }
 
+  // Provisioned, unlocked, but no Claude token: a poll has nothing to ask for
+  // and the dashboard has nothing to show, so serve the panel instead. Excluded
+  // on a timer wake - a board left in this state would otherwise sit in panel
+  // mode after every poll interval and flatten the battery.
+  if (!timerWake && !settings::wifiSsid().isEmpty() && !accountConfigured(0) && !accountConfigured(1))
+  {
+    Serial.println("No Claude token saved; starting the Web panel");
+    enterPanelMode();
+    if (panelMode)
+    {
+      return; // loop() services the panel session
+    }
+  }
+
   if (timerWake)
   {
     wakeCount++;

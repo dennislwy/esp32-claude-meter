@@ -153,6 +153,14 @@ class PreviewHandler(BaseHTTPRequestHandler):
             STATE["wifi_ssid"] = body.get("ssid", STATE["wifi_ssid"])
         elif path == "/api/history/clear":
             HISTORY_CLEARED = True
+        elif path == "/api/pin":
+            pin = str(body.get("pin", ""))
+            # isdigit() alone accepts "١٢٣٤"; the firmware wants ASCII 0-9
+            if len(pin) != 4 or not pin.isdigit() or not pin.isascii():
+                return self.reply(400, {"error": "bad_pin"})
+            if pin != str(body.get("pin2", "")):
+                return self.reply(400, {"error": "pin_mismatch"})
+            print("Would re-encrypt every secret under PIN %s." % pin, flush=True)
         elif path not in ("/api/refresh", "/api/sounds/play", "/api/reboot", "/api/factory-reset"):
             return self.reply(404, {"error": "not_found"})
         self.reply(200, {"ok": True})

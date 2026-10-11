@@ -16,6 +16,7 @@
 #include "news.h"
 #include "panel_html.h"
 #include "panel_usage_poll.h"
+#include "secret_store.h"
 #include "hostname.h"
 #include "settings.h"
 
@@ -731,6 +732,45 @@ namespace
     sendJson(200, d);
   }
 
+  void handlePin()
+  {
+    if (!requireAuth())
+      return;
+    JsonDocument body;
+    if (!readJsonBody(body))
+      return;
+    const String pin = body["pin"].as<String>();
+    const String pin2 = body["pin2"].as<String>();
+    if (!secret_store::validPin(pin.c_str()))
+    {
+      sendErr(400, "bad_pin");
+      return;
+    }
+    if (pin != pin2)
+    {
+      sendErr(400, "pin_mismatch");
+      return;
+    }
+    if (secret_store::locked())
+    {
+      // Unreachable in practice - the panel needs Wi-Fi, which needs the sealed
+      // password - but changePin() cannot report "no session key" distinctly, so
+      // the caller gets a specific answer rather than seal_failed.
+      sendErr(409, "locked");
+      return;
+    }
+    // changePin() re-seals every secret under the new key and flips the
+    // generation marker last, so an interruption leaves the old PIN working.
+    if (!secret_store::changePin(pin.c_str()))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
+    JsonDocument d;
+    d["ok"] = true;
+    sendJson(200, d);
+  }
+
   void handleReboot()
   {
     if (!requireAuth())
@@ -790,6 +830,7 @@ void panelBegin(PanelDisplay &out)
   server->on("/api/sounds/play", HTTP_POST, handleSoundsPlay);
   server->on("/api/news", HTTP_GET, handleNews);
   server->on("/api/factory-reset", HTTP_POST, handleFactoryReset);
+  server->on("/api/pin", HTTP_POST, handlePin);
   server->on("/api/reboot", HTTP_POST, handleReboot);
   server->onNotFound(handleNotFound);
   server->begin();
