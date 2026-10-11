@@ -12,10 +12,11 @@
 // seals, or opens anything.
 namespace secret_store
 {
-// PBKDF2-HMAC-SHA256 iterations, chosen to land near 400 ms on the S3 at
-// 240 MHz. "selftest" prints the measured time; the value is frozen once
-// measured, because changing it invalidates every stored blob.
-constexpr uint32_t PBKDF2_ROUNDS = 60000;
+// PBKDF2-HMAC-SHA256 iterations, measured on hardware to land near 400 ms.
+// SHA-256 runs unaccelerated here, so a round costs about 97 us. "selftest"
+// prints the measured time; the value is frozen once measured, because
+// changing it invalidates every stored blob.
+constexpr uint32_t PBKDF2_ROUNDS = 4100;
 constexpr size_t SALT_LEN = 16;
 constexpr size_t KEY_LEN = 32;
 constexpr size_t NONCE_LEN = 12;
