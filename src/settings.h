@@ -94,8 +94,10 @@ String hostname();
 bool setHostname(const String &value);
 
 void setWifiSsid(const String &value);
-void setWifiPassword(const String &value);
-void setClaudeToken(int number, const String &value);
+// Both seal into encrypted NVS: false means nothing was stored, because the
+// device is locked or the seal failed. Callers must report the failure.
+bool setWifiPassword(const String &value);
+bool setClaudeToken(int number, const String &value);
 // An empty name restores the default
 void setAccountName(int number, const String &value);
 

@@ -290,13 +290,13 @@ bool setHostname(const String &value)
 }
 
 void setWifiSsid(const String &value) { store(KEY_WIFI_SSID, value); }
-void setWifiPassword(const String &value) { secret_store::write(secret_store::Slot::WifiPassword, value); }
-void setClaudeToken(int number, const String &value)
+bool setWifiPassword(const String &value)
 {
-  if (validNumber(number))
-  {
-    secret_store::write(tokenSlot(number), value);
-  }
+  return secret_store::write(secret_store::Slot::WifiPassword, value);
+}
+bool setClaudeToken(int number, const String &value)
+{
+  return validNumber(number) && secret_store::write(tokenSlot(number), value);
 }
 
 void setAccountName(int number, const String &value)

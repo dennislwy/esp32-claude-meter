@@ -430,10 +430,23 @@ namespace
     const bool tokensChanged = !t1.isEmpty() || !t2.isEmpty();
     if (tokensChanged)
       cancelPanelUsagePoll();
-    if (!t1.isEmpty())
-      settings::setClaudeToken(1, t1);
-    if (!t2.isEmpty())
-      settings::setClaudeToken(2, t2);
+    // A refused seal stores nothing, so it must not be answered with ok:true.
+    // locked() is distinguished for the same reason handlePin() does it.
+    if (tokensChanged && secret_store::locked())
+    {
+      sendErr(409, "locked");
+      return;
+    }
+    if (!t1.isEmpty() && !settings::setClaudeToken(1, t1))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
+    if (!t2.isEmpty() && !settings::setClaudeToken(2, t2))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
     settings::setAccountName(1, n1);
     settings::setAccountName(2, n2);
     if (tokensChanged)
@@ -471,10 +484,20 @@ namespace
       return;
     const String ssid = body["ssid"].as<String>();
     const String pass = body["pass"].as<String>();
+    // The password is sealed, so it can be refused. Check before storing the
+    // SSID, or a failed seal would leave the two halves out of step.
+    if (!pass.isEmpty() && secret_store::locked())
+    {
+      sendErr(409, "locked");
+      return;
+    }
+    if (!pass.isEmpty() && !settings::setWifiPassword(pass))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
     if (!ssid.isEmpty())
       settings::setWifiSsid(ssid);
-    if (!pass.isEmpty())
-      settings::setWifiPassword(pass);
     JsonDocument d;
     d["ok"] = true;
     sendJson(200, d);
@@ -717,6 +740,10 @@ namespace
       sendErr(400, "confirm_required");
       return;
     }
+    // First, so the keys still exist (no spurious per-key NVS error logs) and
+    // so the session key in RTC RAM is zeroed too: nvs clear() cannot reach it,
+    // and it would otherwise survive the reboot below.
+    secret_store::wipeCredentials();
     Preferences prefs;
     prefs.begin("meter", false);
     prefs.clear();
