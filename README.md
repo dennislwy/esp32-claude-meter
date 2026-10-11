@@ -76,9 +76,11 @@ deep-sleep cycle once a USB host is no longer detected.
 **The PIN is asked for again after every power loss.** The key lives in RTC
 RAM, which survives deep sleep and a `reboot` but not a battery pull or a PWR
 power-off. Enter it on the device: `BOOT` changes the digit under the cursor,
-`PWR` confirms it. Forgotten it? Serial `reset confirm`, or hold
-`BOOT + PWR` for 5 seconds on the PIN screen, erases the credentials and the
-PIN and returns the board to step 1. Settings and history survive both.
+`PWR` confirms it. Forgotten it? Hold `BOOT + PWR` for 5 seconds on the PIN
+screen to erase the credentials and PIN and return to step 1 (serial
+`reset confirm` does the same, but serial is only active when a USB host was
+detected at cold boot — on battery the button hold is the only way out).
+Settings and history survive both.
 
 ### Serial commands
 
@@ -113,10 +115,12 @@ place of the token and password masks.
 ## Operation
 
 - **Debug mode** (default when USB host is attached at cold boot): serial
-  enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s to
-  toggle at any time (awake, asleep, or on battery). It has no idle
-  timeout: the board stays awake and skips deep sleep until you turn it off
-  with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
+  enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s on a
+  wake to toggle (awake, asleep, or on battery) — except on the PIN screen,
+  where the chord arms a factory reset instead. To get serial at a battery PIN
+  prompt, power off and wake while holding both buttons for one second. It has
+  no idle timeout: the board stays awake and skips deep sleep until you turn it
+  off with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
   Clear it before unplugging, or battery life drops well short of the
   normal-mode figure.
 - **Normal mode** (battery): serial and LED off to save power. The board
