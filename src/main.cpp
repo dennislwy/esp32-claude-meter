@@ -22,6 +22,7 @@
 #include "pcf85063.h"
 #include "provisioning.h"
 #include "settings.h"
+#include "secret_store.h"
 #include "usage_poll.h"
 
 // How the meter runs:
@@ -583,6 +584,7 @@ void printHelp()
   Serial.println("  creds                      show saved credentials, masked");
   Serial.println("  scan                       list Wi-Fi networks in range, flagging the saved SSID");
   Serial.println("  tlscheck                   show api.anthropic.com's certificate chain (sends no token)");
+  Serial.println("  selftest                   verify the credential encryption (no credentials touched)");
   Serial.println("  files                      list the file system");
   Serial.println("  play <file>                play a WAV, e.g. play 5h-warning.wav");
 }
@@ -998,6 +1000,10 @@ void runCommand(const String &line)
       return;
     }
     runTlsCheck();
+  }
+  else if (line == "selftest")
+  {
+    secret_store::selfTest();
   }
   else if (line == "files")
   {
