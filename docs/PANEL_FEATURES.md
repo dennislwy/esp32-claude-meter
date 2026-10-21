@@ -333,12 +333,13 @@ confirm", second tap within 5 s executes.
   reverts to "no history yet". No reboot.
 - **Reboot** — `ESP.restart()` after flushing the HTTP response (~1 s
   delay). Session is lost; device re-enters Normal mode after boot.
-- **Factory reset** — wipes NVS (`meter` + `alerts` namespaces) and
-  history, then reboots. This erases the Device PIN along with everything
-  else. Device comes up in [AP provisioning mode](WEB_SERVER.md#provisioning-phase-2)
-  because Wi-Fi SSID is empty. You will need to re-enter the SSID,
-  password, a new PIN, and your Claude tokens. Serial `reset confirm` is the
-  narrower version: credentials and PIN only, settings and history kept.
+- **Factory reset** — erases the whole NVS partition and history, then
+  reboots. This erases the Device PIN along with everything else, including
+  any Wi-Fi driver or earlier-firmware copies. Device comes up in
+  [AP provisioning mode](WEB_SERVER.md#provisioning-phase-2) because Wi-Fi
+  SSID is empty. You will need to re-enter the SSID, password, a new PIN, and
+  your Claude tokens. Serial `reset confirm` and BOOT + PWR at the PIN prompt
+  run the same reset.
 
 The `/api/factory-reset` route requires `{"confirm":"wipe"}` in the
 JSON body — a stray POST returns 400. The two-tap UI arm is a second
@@ -355,5 +356,5 @@ Serial commands without a panel equivalent (noted in [WEB_SERVER.md](WEB_SERVER.
 - `debug off` — turn off debug mode (serial + LED) without rebooting
 - `play <file>` — arbitrary WAV playback (deliberately restricted)
 - `selftest` — verify the credential encryption on the device
-- `reset` / `reset confirm` — erase credentials and the Device PIN while
-  keeping settings and history (Factory reset is the broader hammer)
+- `reset` / `reset confirm` — the same factory reset as the panel's, for
+  when the panel is unreachable (e.g. a forgotten PIN)

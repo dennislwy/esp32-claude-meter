@@ -3,7 +3,6 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
-#include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
 #include "audio_player.h"
@@ -12,6 +11,7 @@
 #include "build_info.h"
 #include "clock.h"
 #include "daily_window.h"
+#include "factory_reset.h"
 #include "history.h"
 #include "news.h"
 #include "panel_html.h"
@@ -740,18 +740,7 @@ namespace
       sendErr(400, "confirm_required");
       return;
     }
-    // First, so the keys still exist (no spurious per-key NVS error logs) and
-    // so the session key in RTC RAM is zeroed too: nvs clear() cannot reach it,
-    // and it would otherwise survive the reboot below.
-    secret_store::wipeCredentials();
-    Preferences prefs;
-    prefs.begin("meter", false);
-    prefs.clear();
-    prefs.end();
-    prefs.begin("alerts", false);
-    prefs.clear();
-    prefs.end();
-    historyErase();
+    factoryReset();
     pendingActions |= PANEL_ACT_REBOOT;
     JsonDocument d;
     d["ok"] = true;

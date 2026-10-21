@@ -155,9 +155,10 @@ press brings the prompt back. A wrong PIN just clears the four slots; there
 is no attempt counter in this phase.
 
 Forgot it: serial `reset confirm`, or hold **BOOT + PWR** for five seconds
-at the prompt and confirm with PWR. Both erase the Wi-Fi password, both
-tokens, the account names and the PIN, then restart into AP provisioning.
-Settings and the 7-day history survive. There is no recovery of the sealed
+at the prompt and confirm with PWR. Both run the factory reset — the same
+one as the panel's — which erases the whole NVS partition (credentials, PIN,
+settings, alert state) and the 7-day history, then restarts into AP
+provisioning. Only the sound files survive. There is no recovery of the sealed
 values — that is the point of sealing them.
 
 Serial is alive here, but only `help`, `status`, `creds`, `rtc`, `files`,

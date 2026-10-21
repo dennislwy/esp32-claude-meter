@@ -56,10 +56,11 @@ bool legacy();
 // time whether the PIN is right or wrong.
 bool unlock(const char *pin);
 
-// First seal: fresh salt, derive, seal the password and two empty tokens into
+// First seal: fresh salt, derive, seal the password and optional tokens into
 // the inactive generation, then commit. Leaves the device unlocked.
 // Salt and nonce entropy is guaranteed internally, radio up or down.
-bool provision(const char *pin, const String &wifiPassword);
+bool provision(const char *pin, const String &wifiPassword,
+               const String &token1 = "", const String &token2 = "");
 
 // Re-seal every secret under a new PIN and commit the flip. Requires
 // !locked(). An interruption leaves the old PIN working.
@@ -73,9 +74,16 @@ String read(Slot slot);
 bool write(Slot slot, const String &value);
 
 // Erase every credential and the generation marker, including the pre-PIN
-// plaintext keys, the SSID and the account names. Settings and history
-// survive. Serves both the legacy migration and the forgotten-PIN reset.
+// plaintext keys, the SSID and the account names, and zero the session key.
+// Settings and history survive. Serves the legacy migration, the unlock
+// self-heal, and factoryReset(), which erases the rest.
 void wipeCredentials();
+
+// Erase plaintext credential copies that live outside the sealed store: the
+// Wi-Fi driver's own SSID and password (nvs.net80211), and the namespaces the
+// board's factory demo firmware leaves behind. Writes flash only when one of
+// them is present, so it is cheap to call on every cold boot.
+void purgePlaintextCopies();
 
 // Serial "selftest": derivation timing, the seal/open round-trip, wrong-key
 // and tamper rejection, key naming, and the A/B generation commit. Prints

@@ -12,6 +12,7 @@
 #include "board_pins.h"
 #include "clock.h"
 #include "epaper.h"
+#include "factory_reset.h"
 #include "history.h"
 #include "hostname.h"
 #include "lvgl_port.h"
@@ -603,7 +604,7 @@ void printHelp()
   Serial.println("  account2 <name>            name account 2 (default \"Claude 2\"); \"clear\" restores the default");
   Serial.println("  hostname <name>            mDNS name, max 15 chars of a-z 0-9 -; \"clear\" restores \"claude-meter\" (restart to apply)");
   Serial.println("  creds                      show saved credentials, masked");
-  Serial.println("  reset                      erase credentials and the PIN; \"reset confirm\" does it (settings and history kept)");
+  Serial.println("  reset                      factory reset: credentials, PIN, settings, history; \"reset confirm\" does it");
   Serial.println("  scan                       list Wi-Fi networks in range, flagging the saved SSID");
   Serial.println("  tlscheck                   show api.anthropic.com's certificate chain (sends no token)");
   Serial.println("  selftest                   verify the credential encryption (no credentials touched)");
@@ -1063,13 +1064,13 @@ void runCommand(const String &line)
   }
   else if (line == "reset")
   {
-    Serial.println("This erases the Wi-Fi password, both Claude tokens, the account names");
-    Serial.println("and the Device PIN. Settings and history are kept. Type \"reset confirm\".");
+    Serial.println("Factory reset: erases Wi-Fi, both Claude tokens, the account names, the Device PIN,");
+    Serial.println("all settings and history. Sound files are kept. Type \"reset confirm\".");
   }
   else if (line == "reset confirm")
   {
-    secret_store::wipeCredentials();
-    Serial.println("Credentials erased - restarting into setup");
+    factoryReset();
+    Serial.println("Factory reset done - restarting into setup");
     Serial.flush();
     ESP.restart();
   }
@@ -1362,8 +1363,8 @@ static void IRAM_ATTR unlockGatePwrIsr()
         {
           continue; // BOOT is in the chord too - its release cancels
         }
-        secret_store::wipeCredentials();
-        Serial.println("Credentials erased - restarting into setup");
+        factoryReset();
+        Serial.println("Factory reset done - restarting into setup");
         Serial.flush();
         ESP.restart();
       }
@@ -1638,6 +1639,9 @@ void setup()
   gpio_hold_dis((gpio_num_t)PIN_LED);
   pinMode(PIN_PWR_BUTTON, INPUT_PULLUP);
   pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP);
+  // Before anything brings Wi-Fi up: by default the driver saves the SSID and password in
+  // plaintext NVS, outside the PIN-sealed store
+  WiFi.persistent(false);
 
   // The quietest point in the whole cycle: straight out of deep sleep the pack has been
   // resting at microamps for a poll interval, so this is the closest reading to true
@@ -1725,6 +1729,11 @@ void setup()
   // Credentials from pre-PIN firmware cannot be unsealed, so wipe them here and
   // fall straight into provisioning: the wipe clears the SSID too.
   settings::migrateLegacyCredentials();
+  // Not on a wake from deep sleep: nothing can have written a copy since the last cold boot
+  if (!resumed)
+  {
+    secret_store::purgePlaintextCopies();
+  }
 
   // No stored Wi-Fi SSID → bring up the AP captive portal and stay awake until
   // the user saves creds (which reboots the board back through this same path).

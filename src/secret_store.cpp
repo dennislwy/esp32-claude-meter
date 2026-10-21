@@ -4,6 +4,8 @@
 #include <WiFi.h>
 #include <bootloader_random.h>
 #include <esp_random.h>
+#include <nvs.h>
+#include <nvs_flash.h>
 #include <string.h>
 
 #include <mbedtls/gcm.h>
@@ -336,7 +338,8 @@ bool unlock(const char *pin)
   return ok;
 }
 
-bool provision(const char *pin, const String &wifiPassword)
+bool provision(const char *pin, const String &wifiPassword,
+               const String &token1, const String &token2)
 {
   if (!validPin(pin))
   {
@@ -351,11 +354,11 @@ bool provision(const char *pin, const String &wifiPassword)
   bool ok = deriveKey(pin, salt, key);
   if (ok)
   {
-    // Both tokens are sealed empty so that every slot exists from the start
-    // and a later write is a replacement rather than a create.
+    // Commit all credentials together. Omitted tokens are sealed empty so
+    // every slot exists for accounts added later in the Web Panel.
     ok = sealInto(LIVE_NS, key, Slot::WifiPassword, generation, wifiPassword) &&
-         sealInto(LIVE_NS, key, Slot::ClaudeToken1, generation, "") &&
-         sealInto(LIVE_NS, key, Slot::ClaudeToken2, generation, "") &&
+         sealInto(LIVE_NS, key, Slot::ClaudeToken1, generation, token1) &&
+         sealInto(LIVE_NS, key, Slot::ClaudeToken2, generation, token2) &&
          storeSalt(LIVE_NS, generation, salt) &&
          commitGeneration(LIVE_NS, generation);
   }
@@ -478,6 +481,31 @@ void wipeCredentials()
   prefs.end();
   memset(rtcSessionKey, 0, KEY_LEN);
   rtcKeyMagic = 0;
+}
+
+void purgePlaintextCopies()
+{
+  // nvs.net80211 is where WiFi.begin() saves the SSID and password unless
+  // WiFi.persistent(false) came first. "wifi", "mqtt" and "websocket" hold the
+  // demo firmware's Wi-Fi password, MQTT password and websocket token.
+  static const char *const NAMESPACES[] = {"nvs.net80211", "wifi", "mqtt", "websocket"};
+  for (const char *ns : NAMESPACES)
+  {
+    nvs_iterator_t it = nullptr;
+    const bool present = nvs_entry_find(NVS_DEFAULT_PART_NAME, ns, NVS_TYPE_ANY, &it) == ESP_OK;
+    nvs_release_iterator(it);
+    if (!present)
+    {
+      continue;
+    }
+    nvs_handle_t handle;
+    if (nvs_open(ns, NVS_READWRITE, &handle) == ESP_OK)
+    {
+      const bool erased = nvs_erase_all(handle) == ESP_OK && nvs_commit(handle) == ESP_OK;
+      nvs_close(handle);
+      Serial.printf("Secrets: plaintext copies in \"%s\" %s\n", ns, erased ? "erased" : "NOT erased");
+    }
+  }
 }
 
 bool selfTest()

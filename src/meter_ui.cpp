@@ -578,19 +578,18 @@ namespace
 
     if (screen.unlockResetArmed)
     {
-      lv_obj_t *warn = text(parent, "Erase credentials?", &lv_font_montserrat_16, BLACK);
+      lv_obj_t *warn = text(parent, "Factory reset?", &lv_font_montserrat_16, BLACK);
       lv_obj_align(warn, LV_ALIGN_TOP_MID, 0, y);
 
       lv_obj_t *body = text(parent,
-                            "Erases the Wi-Fi password,\nboth tokens and the PIN.\n"
-                            "Settings and history are kept.",
+                            "Erases Wi-Fi, both tokens,\nthe PIN, all settings\nand history.",
                             &lv_font_montserrat_12, BLACK);
       lv_obj_set_width(body, CONTENT_W);
       lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
       lv_obj_set_style_text_align(body, LV_TEXT_ALIGN_CENTER, 0);
       lv_obj_align(body, LV_ALIGN_TOP_MID, 0, y + 30);
 
-      lv_obj_t *keys = text(parent, "PWR = erase    BOOT = cancel", &lv_font_montserrat_10, BLACK);
+      lv_obj_t *keys = text(parent, "PWR = reset    BOOT = cancel", &lv_font_montserrat_10, BLACK);
       lv_obj_set_width(keys, CONTENT_W);
       lv_obj_set_style_text_align(keys, LV_TEXT_ALIGN_CENTER, 0);
       lv_obj_align(keys, LV_ALIGN_BOTTOM_MID, 0, -2);
