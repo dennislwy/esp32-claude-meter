@@ -16,6 +16,7 @@
 #include "news.h"
 #include "panel_html.h"
 #include "panel_usage_poll.h"
+#include "secret_store.h"
 #include "hostname.h"
 #include "settings.h"
 
@@ -429,10 +430,23 @@ namespace
     const bool tokensChanged = !t1.isEmpty() || !t2.isEmpty();
     if (tokensChanged)
       cancelPanelUsagePoll();
-    if (!t1.isEmpty())
-      settings::setClaudeToken(1, t1);
-    if (!t2.isEmpty())
-      settings::setClaudeToken(2, t2);
+    // A refused seal stores nothing, so it must not be answered with ok:true.
+    // locked() is distinguished for the same reason handlePin() does it.
+    if (tokensChanged && secret_store::locked())
+    {
+      sendErr(409, "locked");
+      return;
+    }
+    if (!t1.isEmpty() && !settings::setClaudeToken(1, t1))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
+    if (!t2.isEmpty() && !settings::setClaudeToken(2, t2))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
     settings::setAccountName(1, n1);
     settings::setAccountName(2, n2);
     if (tokensChanged)
@@ -470,10 +484,20 @@ namespace
       return;
     const String ssid = body["ssid"].as<String>();
     const String pass = body["pass"].as<String>();
+    // The password is sealed, so it can be refused. Check before storing the
+    // SSID, or a failed seal would leave the two halves out of step.
+    if (!pass.isEmpty() && secret_store::locked())
+    {
+      sendErr(409, "locked");
+      return;
+    }
+    if (!pass.isEmpty() && !settings::setWifiPassword(pass))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
     if (!ssid.isEmpty())
       settings::setWifiSsid(ssid);
-    if (!pass.isEmpty())
-      settings::setWifiPassword(pass);
     JsonDocument d;
     d["ok"] = true;
     sendJson(200, d);
@@ -716,6 +740,10 @@ namespace
       sendErr(400, "confirm_required");
       return;
     }
+    // First, so the keys still exist (no spurious per-key NVS error logs) and
+    // so the session key in RTC RAM is zeroed too: nvs clear() cannot reach it,
+    // and it would otherwise survive the reboot below.
+    secret_store::wipeCredentials();
     Preferences prefs;
     prefs.begin("meter", false);
     prefs.clear();
@@ -728,6 +756,45 @@ namespace
     JsonDocument d;
     d["ok"] = true;
     d["rebooting_in_ms"] = 1000;
+    sendJson(200, d);
+  }
+
+  void handlePin()
+  {
+    if (!requireAuth())
+      return;
+    JsonDocument body;
+    if (!readJsonBody(body))
+      return;
+    const String pin = body["pin"].as<String>();
+    const String pin2 = body["pin2"].as<String>();
+    if (!secret_store::validPin(pin.c_str()))
+    {
+      sendErr(400, "bad_pin");
+      return;
+    }
+    if (pin != pin2)
+    {
+      sendErr(400, "pin_mismatch");
+      return;
+    }
+    if (secret_store::locked())
+    {
+      // Unreachable in practice - the panel needs Wi-Fi, which needs the sealed
+      // password - but changePin() cannot report "no session key" distinctly, so
+      // the caller gets a specific answer rather than seal_failed.
+      sendErr(409, "locked");
+      return;
+    }
+    // changePin() re-seals every secret under the new key and flips the
+    // generation marker last, so an interruption leaves the old PIN working.
+    if (!secret_store::changePin(pin.c_str()))
+    {
+      sendErr(500, "seal_failed");
+      return;
+    }
+    JsonDocument d;
+    d["ok"] = true;
     sendJson(200, d);
   }
 
@@ -790,6 +857,7 @@ void panelBegin(PanelDisplay &out)
   server->on("/api/sounds/play", HTTP_POST, handleSoundsPlay);
   server->on("/api/news", HTTP_GET, handleNews);
   server->on("/api/factory-reset", HTTP_POST, handleFactoryReset);
+  server->on("/api/pin", HTTP_POST, handlePin);
   server->on("/api/reboot", HTTP_POST, handleReboot);
   server->onNotFound(handleNotFound);
   server->begin();

@@ -3,6 +3,7 @@
 #include <Preferences.h>
 #include "daily_window.h"
 #include "hostname.h"
+#include "secret_store.h"
 
 namespace
 {
@@ -23,16 +24,18 @@ const char *const KEY_TIME_ZONE = "tz";
 const char *const KEY_TIME_ZONE_NAME = "tz_name";
 const char *const KEY_ROTATION = "rotation";
 const char *const KEY_HOSTNAME = "hostname";
-const char *const KEY_WIFI_PASSWORD = "wifi_pass";
 const char *const KEY_POLL_INTERVAL = "poll_minutes";
 const char *const KEY_WARNING_5H = "warn_5h";
 const char *const KEY_WARNING_7D = "warn_7d";
-// Token 1 keeps the original single-token key so an existing save carries over
-const char *const KEY_CLAUDE_TOKENS[] = {"claude_token", "claude_token2"};
-constexpr int TOKEN_COUNT = sizeof(KEY_CLAUDE_TOKENS) / sizeof(KEY_CLAUDE_TOKENS[0]);
-static_assert(TOKEN_COUNT == settings::CLAUDE_TOKEN_COUNT, "one key per token");
+constexpr int TOKEN_COUNT = settings::CLAUDE_TOKEN_COUNT;
+static_assert(TOKEN_COUNT == 2, "tokenSlot() maps exactly two tokens");
 const char *const KEY_ACCOUNT_NAMES[] = {"account1", "account2"};
 static_assert(sizeof(KEY_ACCOUNT_NAMES) / sizeof(KEY_ACCOUNT_NAMES[0]) == TOKEN_COUNT, "one name per token");
+
+secret_store::Slot tokenSlot(int number)
+{
+  return number == 1 ? secret_store::Slot::ClaudeToken1 : secret_store::Slot::ClaudeToken2;
+}
 
 bool validNumber(int number)
 {
@@ -251,10 +254,10 @@ uint8_t displayRotation() { return loadByte(KEY_ROTATION, 0, 0, 3); }
 void setDisplayRotation(uint8_t quarterTurns) { storeByte(KEY_ROTATION, quarterTurns, 0, 3); }
 
 String wifiSsid() { return load(KEY_WIFI_SSID); }
-String wifiPassword() { return load(KEY_WIFI_PASSWORD); }
+String wifiPassword() { return secret_store::read(secret_store::Slot::WifiPassword); }
 String claudeToken(int number)
 {
-  return validNumber(number) ? load(KEY_CLAUDE_TOKENS[number - 1]) : "";
+  return validNumber(number) ? secret_store::read(tokenSlot(number)) : "";
 }
 
 String accountName(int number)
@@ -287,13 +290,13 @@ bool setHostname(const String &value)
 }
 
 void setWifiSsid(const String &value) { store(KEY_WIFI_SSID, value); }
-void setWifiPassword(const String &value) { store(KEY_WIFI_PASSWORD, value); }
-void setClaudeToken(int number, const String &value)
+bool setWifiPassword(const String &value)
 {
-  if (validNumber(number))
-  {
-    store(KEY_CLAUDE_TOKENS[number - 1], value);
-  }
+  return secret_store::write(secret_store::Slot::WifiPassword, value);
+}
+bool setClaudeToken(int number, const String &value)
+{
+  return validNumber(number) && secret_store::write(tokenSlot(number), value);
 }
 
 void setAccountName(int number, const String &value)
@@ -302,6 +305,17 @@ void setAccountName(int number, const String &value)
   {
     store(KEY_ACCOUNT_NAMES[number - 1], value.substring(0, ACCOUNT_NAME_MAX));
   }
+}
+
+bool migrateLegacyCredentials()
+{
+  if (!secret_store::legacy())
+  {
+    return false;
+  }
+  Serial.println("Pre-PIN credentials found; wiping so the device re-provisions with a Device PIN");
+  secret_store::wipeCredentials();
+  return true;
 }
 
 String mask(const String &secret, size_t visibleTail)

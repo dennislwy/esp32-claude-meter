@@ -20,8 +20,10 @@
 #include "panel.h"
 #include "panel_usage_poll.h"
 #include "pcf85063.h"
+#include "pin_entry.h"
 #include "provisioning.h"
 #include "settings.h"
+#include "secret_store.h"
 #include "usage_poll.h"
 
 // How the meter runs:
@@ -91,6 +93,14 @@ String panelWifiPassword;
 bool provisionMode = false;
 ProvisionInfo provisionInfo;
 
+// Unlock prompt, cold boot only. Not RTC_DATA_ATTR: a wake from the prompt's
+// timeout starts a fresh entry rather than resuming a half-typed PIN.
+const PinEntry *unlockEntry = nullptr;
+bool unlockWrong = false;
+constexpr uint32_t UNLOCK_TIMEOUT_MS = 120UL * 1000UL;
+bool unlockResetArmed = false;
+constexpr uint32_t RESET_HOLD_MS = 5000UL;
+
 void enterPanelMode();
 void exitPanelMode();
 
@@ -126,6 +136,7 @@ bool viewAvailable(MeterView candidate)
     return accountConfigured(1) && historyHasData(1);
   case MeterView::Panel:
   case MeterView::Setup:
+  case MeterView::Unlock:
     // Explicit modes - set by code, not by cycling. Trust the caller.
     return true;
   }
@@ -265,10 +276,16 @@ void render()
     screen.panelIp = panelDisplay.ip;
     screen.panelPin = panelDisplay.pin;
   }
-  if (view == MeterView::Setup)
+  else if (view == MeterView::Setup)
   {
     screen.setupApSsid = provisionInfo.apSsid;
     screen.setupApIp = provisionInfo.apIp;
+  }
+  else if (view == MeterView::Unlock)
+  {
+    screen.unlockEntry = unlockEntry;
+    screen.unlockWrong = unlockWrong;
+    screen.unlockResetArmed = unlockResetArmed;
   }
   else if (settings::wifiSsid().isEmpty() || (!accountConfigured(0) && !accountConfigured(1)))
   {
@@ -520,6 +537,8 @@ void servicePanelUsagePolling()
   }
 }
 
+// sleepSeconds 0: no timer wake, so only BOOT or PWR brings the board back.
+// Used by the unlock prompt, where a timer wake would just redraw the prompt.
 [[noreturn]] void deepSleep(uint32_t sleepSeconds)
 {
   // A held button would wake the board straight away
@@ -530,7 +549,10 @@ void servicePanelUsagePolling()
   memcpy(savedFrame, epaper.frame(), sizeof(savedFrame));
   epaper.sleep();
 
-  esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL);
+  if (sleepSeconds > 0)
+  {
+    esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL);
+  }
   // ext1, not ext0: two pins (BOOT and PWR), and the wake status tells which one was pressed
   esp_sleep_enable_ext1_wakeup((1ULL << PIN_BOOT_BUTTON) | (1ULL << PIN_PWR_BUTTON), ESP_EXT1_WAKEUP_ANY_LOW);
   // Keep the battery latch high and the LED off while the chip sleeps
@@ -581,8 +603,10 @@ void printHelp()
   Serial.println("  account2 <name>            name account 2 (default \"Claude 2\"); \"clear\" restores the default");
   Serial.println("  hostname <name>            mDNS name, max 15 chars of a-z 0-9 -; \"clear\" restores \"claude-meter\" (restart to apply)");
   Serial.println("  creds                      show saved credentials, masked");
+  Serial.println("  reset                      erase credentials and the PIN; \"reset confirm\" does it (settings and history kept)");
   Serial.println("  scan                       list Wi-Fi networks in range, flagging the saved SSID");
   Serial.println("  tlscheck                   show api.anthropic.com's certificate chain (sends no token)");
+  Serial.println("  selftest                   verify the credential encryption (no credentials touched)");
   Serial.println("  files                      list the file system");
   Serial.println("  play <file>                play a WAV, e.g. play 5h-warning.wav");
 }
@@ -735,9 +759,55 @@ void setClock(const String &line)
   render();
 }
 
+// While locked, every credential reads back as an empty string. Commands that
+// would print or overwrite one are refused instead, so a wrong answer never
+// looks like a real one. Exact matches only: "rtc set ..." and "token1 ..."
+// are deliberately not on the list.
+bool allowedWhileLocked(const String &line)
+{
+  static const char *const ALLOWED[] = {"help", "status", "creds", "rtc", "files",
+                                        "selftest", "debug off", "reboot",
+                                        "reset", "reset confirm"};
+  for (const char *allowed : ALLOWED)
+  {
+    if (line == allowed)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Extract the first space-delimited word. Used when echoing a command verb back
+// to the user: pass/token<n> carry secrets in the trailing argument, so we must
+// never echo the full line.
+static String commandVerb(const String &line)
+{
+  int sp = line.indexOf(' ');
+  return sp < 0 ? line : line.substring(0, sp);
+}
+
+// settings::mask() reports an empty string as "(not set)". While locked a
+// sealed credential reads back empty, which is a different thing entirely.
+String maskedSecret(const String &value, size_t visibleTail = 4)
+{
+  if (secret_store::locked())
+  {
+    return "(locked)";
+  }
+  return settings::mask(value, visibleTail);
+}
+
 // Serial commands; "help" lists them
 void runCommand(const String &line)
 {
+  if (secret_store::locked() && !allowedWhileLocked(line))
+  {
+    Serial.printf("Locked - \"%s\" needs the Device PIN. Available: help, status, creds, rtc,\n"
+                  "files, selftest, debug off, reboot, reset\n",
+                  commandVerb(line).c_str());
+    return;
+  }
   int number;
   String value;
   const bool isToken = parseNumbered(line, "token", number, value);
@@ -748,7 +818,12 @@ void runCommand(const String &line)
   }
   else if (isToken)
   {
-    settings::setClaudeToken(number, value);
+    // Never echo value: it is the token itself.
+    if (!settings::setClaudeToken(number, value))
+    {
+      Serial.printf("Claude token %d not saved: the seal was refused\n", number);
+      return;
+    }
     if (panelMode)
       reschedulePanelPoll();
     Serial.printf("Claude token %d %s (%s)\n", number, value.isEmpty() ? "cleared" : "saved",
@@ -943,7 +1018,12 @@ void runCommand(const String &line)
   }
   else if (line.startsWith("pass "))
   {
-    settings::setWifiPassword(line.substring(5));
+    // Never echo the argument: it is the password itself.
+    if (!settings::setWifiPassword(line.substring(5)))
+    {
+      Serial.println("Wi-Fi password not saved: the seal was refused");
+      return;
+    }
     Serial.printf("Wi-Fi password saved (%s)\n", settings::mask(settings::wifiPassword(), 0).c_str());
   }
   else if (line == "hostname")
@@ -974,12 +1054,24 @@ void runCommand(const String &line)
   else if (line == "creds")
   {
     Serial.printf("Wi-Fi SSID:     \"%s\"\n", settings::wifiSsid().c_str());
-    Serial.printf("Wi-Fi password: %s\n", settings::mask(settings::wifiPassword(), 0).c_str());
+    Serial.printf("Wi-Fi password: %s\n", maskedSecret(settings::wifiPassword(), 0).c_str());
     for (number = 1; number <= settings::CLAUDE_TOKEN_COUNT; number++)
     {
       Serial.printf("Account %d:      \"%s\", token %s\n", number, settings::accountName(number).c_str(),
-                    settings::mask(settings::claudeToken(number)).c_str());
+                    maskedSecret(settings::claudeToken(number)).c_str());
     }
+  }
+  else if (line == "reset")
+  {
+    Serial.println("This erases the Wi-Fi password, both Claude tokens, the account names");
+    Serial.println("and the Device PIN. Settings and history are kept. Type \"reset confirm\".");
+  }
+  else if (line == "reset confirm")
+  {
+    secret_store::wipeCredentials();
+    Serial.println("Credentials erased - restarting into setup");
+    Serial.flush();
+    ESP.restart();
   }
   else if (line == "scan")
   {
@@ -999,6 +1091,10 @@ void runCommand(const String &line)
     }
     runTlsCheck();
   }
+  else if (line == "selftest")
+  {
+    secret_store::selfTest();
+  }
   else if (line == "files")
   {
     listFiles();
@@ -1015,7 +1111,7 @@ void runCommand(const String &line)
   }
   else
   {
-    Serial.printf("Unknown command \"%s\" - type help\n", line.c_str());
+    Serial.printf("Unknown command \"%s\" - type help\n", commandVerb(line).c_str());
   }
 }
 
@@ -1072,6 +1168,238 @@ void handlePowerButton()
     render();
   }
   pwrButtonWasDown = down;
+}
+
+// Cold boot with sealed credentials: the session key died with the power, so
+// nothing can be read until the PIN comes back in on the two buttons. BOOT
+// changes the digit under the cursor, PWR confirms it. Never returns - a
+// correct PIN restarts the board, and the timeout deep-sleeps it.
+// Captured by the FALLING-edge ISRs below. The main loop zeroes a slot after
+// synthesizing a short press from it. 0 means "no edge pending"; the OR with 1
+// in the ISR keeps a millis() of 0 from reading as empty on the first ms of
+// uptime.
+volatile uint32_t unlockBootEdgeMs = 0;
+volatile uint32_t unlockPwrEdgeMs = 0;
+
+// A press-and-release that both fall inside a ~500 ms LVGL partial refresh is
+// invisible to the main loop's digitalRead. These ISRs latch the FALLING edge
+// so the loop can still see it after the refresh returns. They only latch the
+// first edge until the main loop consumes it, so chatter inside one press is
+// collapsed to one record.
+static void IRAM_ATTR unlockGateBootIsr()
+{
+  if (unlockBootEdgeMs == 0)
+  {
+    unlockBootEdgeMs = millis() | 1;
+  }
+}
+
+static void IRAM_ATTR unlockGatePwrIsr()
+{
+  if (unlockPwrEdgeMs == 0)
+  {
+    unlockPwrEdgeMs = millis() | 1;
+  }
+}
+
+[[noreturn]] void unlockGate()
+{
+  PinEntry entry;
+  unlockEntry = &entry;
+  unlockWrong = false;
+  view = MeterView::Unlock;
+  viewFromAlert = false;
+  Serial.println("Locked: enter the Device PIN on the buttons");
+  // Attach before the first render(), so a press during the initial draw is
+  // still caught. Any edges captured here are cleared when `armed` flips.
+  unlockBootEdgeMs = 0;
+  unlockPwrEdgeMs = 0;
+  attachInterrupt(digitalPinToInterrupt(PIN_BOOT_BUTTON), unlockGateBootIsr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_PWR_BUTTON), unlockGatePwrIsr, FALLING);
+  render();
+
+  // The press that powered the board on, or woke it from the timeout, has to
+  // be released before anything counts as input
+  bool armed = digitalRead(PIN_BOOT_BUTTON) == HIGH && digitalRead(PIN_PWR_BUTTON) == HIGH;
+  uint32_t bootDownAt = 0;
+  uint32_t pwrDownAt = 0;
+  bool pwrLongPressHandled = false;
+  // Set when this physical PWR press has already done its job and its release
+  // must not be read as an answer. pwrDownAt cannot carry that, because it is
+  // re-armed on the next iteration while the button is still held.
+  bool pwrPressSpent = false;
+  uint32_t lastActivityMs = millis();
+
+  for (;;)
+  {
+    handleSerialCommands();
+    const bool bootDown = digitalRead(PIN_BOOT_BUTTON) == LOW;
+    const bool pwrDown = digitalRead(PIN_PWR_BUTTON) == LOW;
+    if (!armed)
+    {
+      armed = !bootDown && !pwrDown;
+      // The ISR latched the wake press's falling edge. Drop it so it is not
+      // replayed as a slot increment the moment armed flips to true.
+      if (armed)
+      {
+        unlockBootEdgeMs = 0;
+        unlockPwrEdgeMs = 0;
+      }
+      // A button stuck low would otherwise keep a battery board awake forever,
+      // so this path honours the idle timeout as well.
+      if (millis() - lastActivityMs >= UNLOCK_TIMEOUT_MS)
+      {
+        Serial.println("Locked: no PIN entered, sleeping until a button is pressed");
+        deepSleep(0);
+      }
+      delay(10);
+      continue;
+    }
+    // Synthesize bootDownAt / pwrDownAt from any FALLING edge the ISR caught
+    // during a previous render(). The button has since been released (we see
+    // it HIGH now), so the release handler below will fire this iteration and
+    // treat it as a short press. If the button is still held, the ordinary
+    // digitalRead path captures the hold and this ISR record is redundant.
+    if (unlockBootEdgeMs != 0 && bootDownAt == 0 && !bootDown)
+    {
+      bootDownAt = unlockBootEdgeMs;
+    }
+    unlockBootEdgeMs = 0;
+    if (unlockPwrEdgeMs != 0 && pwrDownAt == 0 && !pwrDown)
+    {
+      pwrDownAt = unlockPwrEdgeMs;
+    }
+    unlockPwrEdgeMs = 0;
+    if (bootDown && bootDownAt == 0)
+    {
+      bootDownAt = millis();
+    }
+    if (pwrDown && pwrDownAt == 0)
+    {
+      pwrDownAt = millis();
+    }
+
+    // Both buttons held: arm the wipe. The screen asks to confirm, so the
+    // gesture alone cannot erase anything.
+    if (!unlockResetArmed && bootDown && pwrDown &&
+        millis() - bootDownAt >= RESET_HOLD_MS && millis() - pwrDownAt >= RESET_HOLD_MS)
+    {
+      unlockResetArmed = true;
+      lastActivityMs = millis();
+      render();
+      // Both presses are spent on the arming; neither release is an answer
+      while (digitalRead(PIN_BOOT_BUTTON) == LOW || digitalRead(PIN_PWR_BUTTON) == LOW)
+      {
+        delay(10);
+      }
+      bootDownAt = 0;
+      pwrDownAt = 0;
+      // Both flags belong to presses the arming has just consumed. A stale one
+      // would swallow the first confirm press after the screen appears. Clear
+      // any ISR edges that fired during the blocking release-wait, same reason.
+      pwrLongPressHandled = false;
+      pwrPressSpent = false;
+      unlockBootEdgeMs = 0;
+      unlockPwrEdgeMs = 0;
+      continue;
+    }
+
+    // Long PWR alone is the board's power-off gesture, and it still works here.
+    // On USB the latch cannot cut power, so powerOff() returns and the prompt
+    // has to be redrawn: powerOff() blanks the panel on its way out.
+    if (pwrDown && !bootDown && !unlockResetArmed && !pwrLongPressHandled && !pwrPressSpent &&
+        millis() - pwrDownAt >= LONG_PRESS_MS)
+    {
+      pwrLongPressHandled = true;
+      powerOff();
+      lastActivityMs = millis();
+      render();
+      continue;
+    }
+
+    if (!bootDown && bootDownAt != 0)
+    {
+      const uint32_t held = millis() - bootDownAt;
+      bootDownAt = 0;
+      if (held >= BUTTON_MIN_PRESS_MS)
+      {
+        lastActivityMs = millis();
+        if (unlockResetArmed)
+        {
+          unlockResetArmed = false;
+          // The same chord's PWR is still held: mark the press spent so neither
+          // its release nor a long hold past it counts as an answer.
+          pwrPressSpent = true;
+        }
+        else
+        {
+          entry.increment();
+          unlockWrong = false;
+        }
+        render();
+      }
+      continue;
+    }
+
+    if (!pwrDown && pwrDownAt != 0)
+    {
+      const uint32_t held = millis() - pwrDownAt;
+      pwrDownAt = 0;
+      const bool wasLongPress = pwrLongPressHandled;
+      const bool wasSpent = pwrPressSpent;
+      pwrLongPressHandled = false;
+      pwrPressSpent = false;
+      if (held < BUTTON_MIN_PRESS_MS || wasLongPress || wasSpent)
+      {
+        continue;
+      }
+      lastActivityMs = millis();
+      if (unlockResetArmed)
+      {
+        if (bootDown || bootDownAt != 0)
+        {
+          continue; // BOOT is in the chord too - its release cancels
+        }
+        secret_store::wipeCredentials();
+        Serial.println("Credentials erased - restarting into setup");
+        Serial.flush();
+        ESP.restart();
+      }
+      if (!entry.confirm())
+      {
+        render(); // next slot
+        continue;
+      }
+      // Fourth digit confirmed. complete() makes the view read "Checking...",
+      // and the panel refresh covers most of the derivation's ~400 ms.
+      render();
+      char pin[PIN_DIGITS + 1];
+      entry.digits(pin);
+      const bool ok = secret_store::unlock(pin);
+      memset(pin, 0, sizeof(pin));
+      if (ok)
+      {
+        Serial.println("Unlocked");
+        Serial.flush();
+        // The session key lives in RTC RAM, which a software reset keeps, so
+        // the board comes straight back up unlocked and takes the ordinary
+        // cold-boot path - no special case anywhere in setup()'s wake
+        // branches. Task 3's provisioning reboot relies on the same retention.
+        ESP.restart();
+      }
+      entry.reset();
+      unlockWrong = true;
+      render();
+      continue;
+    }
+
+    if (millis() - lastActivityMs >= UNLOCK_TIMEOUT_MS)
+    {
+      Serial.println("Locked: no PIN entered, sleeping until a button is pressed");
+      deepSleep(0);
+    }
+    delay(10);
+  }
 }
 
 // Debug mode: serial console on and the LED lit while awake. Off: no serial and no LED, to save power.
@@ -1382,12 +1710,40 @@ void setup()
   lvglPortBegin(epaper);
   lvglPortSetRotation(settings::displayRotation());
 
+  // Credentials from pre-PIN firmware cannot be unsealed, so wipe them here and
+  // fall straight into provisioning: the wipe clears the SSID too.
+  settings::migrateLegacyCredentials();
+
   // No stored Wi-Fi SSID → bring up the AP captive portal and stay awake until
   // the user saves creds (which reboots the board back through this same path).
   if (settings::wifiSsid().isEmpty())
   {
     enterProvisionMode();
     return; // skip all sleep/poll branches; loop() pumps provisionService()
+  }
+
+  // Provisioned, but a cold boot lost the RTC session key: every credential is
+  // sealed and unreadable until the PIN is re-entered. Never returns.
+  if (secret_store::locked())
+  {
+    unlockGate();
+  }
+
+  // Provisioned, unlocked, but no Claude token: a poll has nothing to ask for
+  // and the dashboard has nothing to show, so serve the panel instead. Excluded
+  // on a timer wake - a board left in this state would otherwise sit in panel
+  // mode after every poll interval and flatten the battery. Excluded on a PWR
+  // wake too: PWR means power-off everywhere else on this device, and it is not
+  // an invitation to the panel. A cold boot and a BOOT wake still offer it.
+  if (!timerWake && !pwrWake && !settings::wifiSsid().isEmpty() && !accountConfigured(0) &&
+      !accountConfigured(1))
+  {
+    Serial.println("No Claude token saved; starting the Web panel");
+    enterPanelMode();
+    if (panelMode)
+    {
+      return; // loop() services the panel session
+    }
   }
 
   if (timerWake)

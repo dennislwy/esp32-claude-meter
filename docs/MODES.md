@@ -1,6 +1,6 @@
 # Operating modes
 
-The firmware runs in one of four **modes** at a time, plus an orthogonal
+The firmware runs in one of five **modes** at a time, plus an orthogonal
 **debug** flag that only matters in Normal mode.
 
 | #   | Mode                | Wi-Fi radio                              | MCU                              | LED                        | When                                      |
@@ -9,6 +9,7 @@ The firmware runs in one of four **modes** at a time, plus an orthogonal
 | 2   | **Web Panel**       | STA, always on                           | Always awake                     | 1 Hz blink                 | User-triggered: long BOOT, serial `panel` |
 | 3   | **AP provisioning** | SoftAP + DNS, always on                  | Always awake                     | 4 Hz blink                 | Boot with no Wi-Fi SSID stored            |
 | 4   | **Powered off**     | Off                                      | Chip is off (VBAT latch dropped) | Off                        | Long PWR on battery                       |
+| 5   | **Locked**          | Off                                      | Awake, polling the two buttons   | Off (or solid if debug on) | Cold boot with credentials sealed by a PIN |
 
 ## 1 — Normal
 
@@ -130,6 +131,41 @@ flag on.
 
 Exit: single press of either button (re-latches VBAT, cold-boot).
 
+## 5 — Locked
+
+The Device PIN prompt. Credentials are encrypted at rest with a key derived
+from the PIN; that key lives in RTC RAM, which survives deep sleep and a
+software reset but not a power cut. So every cold boot of a provisioned
+board starts here, and until the PIN is entered the Wi-Fi password and both
+Claude tokens read back as empty strings.
+
+BOOT changes the digit under the cursor, PWR confirms it. A correct PIN
+restores the session key and calls `ESP.restart()`; the board comes back up
+in Normal mode with the key still in RTC RAM.
+
+Entry: boot with a stored `wifi.ssid` and no session key — a battery pull,
+a power-off, or first power-up after charging.
+
+Exit: correct PIN → restart into Normal mode. A long PWR press (≥ 1 s, BOOT
+not held) still powers the board off from the prompt, exactly as it does
+elsewhere; on USB the latch cannot cut power, so the prompt is redrawn
+instead. Two minutes idle → deep sleep with no timer wake, so only a button
+press brings the prompt back. A wrong PIN just clears the four slots; there
+is no attempt counter in this phase.
+
+Forgot it: serial `reset confirm`, or hold **BOOT + PWR** for five seconds
+at the prompt and confirm with PWR. Both erase the Wi-Fi password, both
+tokens, the account names and the PIN, then restart into AP provisioning.
+Settings and the 7-day history survive. There is no recovery of the sealed
+values — that is the point of sealing them.
+
+Serial is alive here, but only `help`, `status`, `creds`, `rtc`, `files`,
+`selftest`, `debug off`, `reboot` and `reset` are accepted; `creds` reports
+sealed values as `(locked)`. The radio never comes up, so no poll happens
+and the panel is unreachable.
+
+LED: whatever debug mode says — the prompt does not change it.
+
 ## State transitions
 
 ```
@@ -142,31 +178,49 @@ Exit: single press of either button (re-latches VBAT, cold-boot).
                               │
                    yes ◄──────┴──────► no
                    │                   │
-                   ▼                   ▼
-            ┌─────────────┐    ┌─────────────┐
-            │ Provision   │    │   Normal    │◄───────┐
-            │ (4 Hz LED)  │    │             │        │
-            └──────┬──────┘    └──┬───┬──────┘        │
-                   │              │   │               │
-          save creds│   long BOOT │   │ long PWR      │
-          → restart │              │   │ (battery)    │
-                   │              ▼   │               │
-                   │        ┌──────────────┐          │
-                   │        │  Web Panel   │          │
-                   │        │  (1 Hz LED)  │          │
-                   │        └──────┬───────┘          │
-                   │               │ long BOOT /      │
-                   │               │ 5 min idle       │
-                   │               └──────────────────┘
-                   │                   │
                    │                   ▼
-                   │             ┌──────────────┐
-                   │             │ Powered off  │
-                   │             └──────┬───────┘
-                   │                    │ any button
-                   └────────────────────┤
-                                        ▼
-                                    (cold boot)
+                   │         ┌───────────────────┐
+                   │         │ RTC session key?  │
+                   │         └─────────┬─────────┘
+                   │                   │
+                   │          gone ◄───┴───► held
+                   │          │                 │
+                   │          ▼                 │
+                   │   ┌─────────────┐          │
+                   │   │   Locked    │          │
+                   │   │ PIN prompt  │          │
+                   │   └──┬──────┬───┘          │
+                   │      │      │ 2 min        │
+                   │  PIN │      │ idle         │
+                   │   ok │      ▼              │
+                   │      │  (deep sleep,       │
+                   │      │   button wakes)     │
+                   │      └─────────────────────┤
+                   ▼                            ▼
+            ┌─────────────┐           ┌─────────────┐
+            │ Provision   │           │   Normal    │◄───────┐
+            │ (4 Hz LED)  │           │             │        │
+            └──────┬──────┘           └──┬───┬──────┘        │
+                   │                     │   │               │
+         save creds│           long BOOT │   │ long PWR      │
+         → restart │                     │   │ (battery)     │
+                   │                     ▼   │               │
+                   │              ┌──────────────┐           │
+                   │              │  Web Panel   │           │
+                   │              │  (1 Hz LED)  │           │
+                   │              └──────┬───────┘           │
+                   │                     │ long BOOT /       │
+                   │                     │ 5 min idle        │
+                   │                     └───────────────────┘
+                   │                             │
+                   │                             ▼
+                   │                       ┌──────────────┐
+                   │                       │ Powered off  │
+                   │                       └───────┬──────┘
+                   │                               │ any button
+                   └───────────────────────────────┤
+                                                   ▼
+                                               (cold boot)
 ```
 
 Debug toggle (long **BOOT + PWR**) can be invoked anywhere Normal mode is

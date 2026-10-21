@@ -39,15 +39,19 @@ light and dark themes, with normal text size and the keyboard closed.
 Enlarged text and shorter viewports can scroll naturally.
 
 Entering or pasting six digits signs in automatically. Incomplete or
-non-numeric PINs are not submitted; a pending sign-in cannot submit twice.
+non-numeric codes are not submitted; a pending sign-in cannot submit twice.
 The button and Enter key also support manual retries after an error.
 
-Enter the 6-digit PIN shown on the ePaper → mint a `sid` cookie
+Enter the 6-digit sign-in code shown on the ePaper → mint a `sid` cookie
 (`HttpOnly`, `SameSite=Strict`), held in RAM. Up to 4 sessions at once
 (e.g. phone + laptop); a 5th login evicts the one idle longest.
 
-Five wrong PINs in a row → throttle: 60 s lockout, doubles each extra
+Five wrong codes in a row → throttle: 60 s lockout, doubles each extra
 miss, capped at 5 min. Exiting panel mode resets the counter.
+
+This code is not the 4-digit **Device PIN** that unlocks the meter itself. It
+is random per panel session and is only ever shown on the ePaper. Phase 2
+merges the two.
 
 ## Status
 
@@ -178,8 +182,9 @@ to the source page in a new tab.
   Blocks ~2-3 s per token. The token is saved even if the probe fails.
 
 Tokens are never read back by the panel — the fields are POST-only and
-blank means unchanged. Tokens are stored unencrypted in NVS (R9 is
-pending).
+blank means unchanged. Both tokens are encrypted in NVS with a key derived
+from the Device PIN, so they are readable only while the meter is unlocked —
+which it always is while the panel is up.
 
 ## Wi-Fi
 
@@ -193,6 +198,27 @@ Under Device → Wi-Fi connection.
   polls for results, so the panel stays responsive.
 - **Save Wi-Fi** persists to NVS; takes effect at the next poll (the
   current session stays on the old network).
+
+## Device PIN
+
+Under Device → Device PIN. Change the 4-digit PIN that unlocks the meter
+after a power loss.
+
+- Both fields take exactly four digits and must match; the panel checks that
+  before it sends anything
+- **Change PIN** re-encrypts the Wi-Fi password and both tokens under a key
+  derived from the new PIN. The old PIN stops working the moment it answers
+  `PIN changed`
+- There is no "current PIN" field: a signed-in panel session already holds the
+  decrypted secrets, so asking for the old PIN would check nothing the session
+  does not already prove
+- If it answers `Could not re-encrypt your secrets`, nothing changed and the
+  old PIN still works — the device re-seals onto a spare slot and only then
+  switches over
+
+The new PIN is needed at the next cold boot, not immediately: the running
+session key is unaffected, so the meter keeps polling and serial `creds`
+keeps showing its masks.
 
 ## Alerts &amp; sound
 
@@ -305,9 +331,11 @@ confirm", second tap within 5 s executes.
 - **Reboot** — `ESP.restart()` after flushing the HTTP response (~1 s
   delay). Session is lost; device re-enters Normal mode after boot.
 - **Factory reset** — wipes NVS (`meter` + `alerts` namespaces) and
-  history, then reboots. Device comes up in [AP provisioning mode](WEB_SERVER.md#provisioning-phase-2)
+  history, then reboots. This erases the Device PIN along with everything
+  else. Device comes up in [AP provisioning mode](WEB_SERVER.md#provisioning-phase-2)
   because Wi-Fi SSID is empty. You will need to re-enter the SSID,
-  password, and Claude tokens.
+  password, a new PIN, and your Claude tokens. Serial `reset confirm` is the
+  narrower version: credentials and PIN only, settings and history kept.
 
 The `/api/factory-reset` route requires `{"confirm":"wipe"}` in the
 JSON body — a stray POST returns 400. The two-tap UI arm is a second
@@ -323,3 +351,6 @@ Serial commands without a panel equivalent (noted in [WEB_SERVER.md](WEB_SERVER.
 - `files` — LittleFS directory listing
 - `debug off` — turn off debug mode (serial + LED) without rebooting
 - `play <file>` — arbitrary WAV playback (deliberately restricted)
+- `selftest` — verify the credential encryption on the device
+- `reset` / `reset confirm` — erase credentials and the Device PIN while
+  keeping settings and history (Factory reset is the broader hammer)

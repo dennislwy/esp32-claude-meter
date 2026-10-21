@@ -89,11 +89,11 @@ the build timestamp has been removed. The release constant lives in
 The topbar is hidden at 760px and below, recovering its 48px mobile height.
 
 The sign-in screen has compact typography and spacing below 480px. At
-360 × 780 CSS pixels with DPR 3, the welcome copy, PIN field, 44px sign-in
-button, help, and attribution fit without scrolling in both themes, with
-the keyboard closed and normal text size. Shorter viewports, the on-screen
+360 × 780 CSS pixels with DPR 3, the welcome copy, sign-in code field, 44px
+sign-in button, help, and attribution fit without scrolling in both themes,
+with the keyboard closed and normal text size. Shorter viewports, the on-screen
 keyboard, and enlarged text can scroll naturally; content is not clipped.
-Entering or pasting a complete six-digit PIN automatically signs in;
+Entering or pasting a complete six-digit sign-in code automatically signs in;
 manual retry remains available and pending requests cannot submit twice.
 Quiet hours uses a native checkbox styled as an accessible switch: a
 36 × 20px blue track, white 16px thumb, and gray off state matching the

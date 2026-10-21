@@ -43,19 +43,46 @@ Close the serial monitor before flashing — it holds COM5.
 
 ## First-time setup
 
-Connect USB, open the serial monitor at 115200, then:
+A fresh board has no Device PIN, so it has no key to encrypt anything with.
+Setup therefore starts on the device's own Wi-Fi, not on the serial console.
+
+1. Power the board. It comes up as the open access point
+   `claude-meter-XXXXXX` and shows that name plus `http://192.168.4.1` on the
+   ePaper.
+2. Join that network. The captive-portal popup opens the setup page by
+   itself; if your phone doesn't offer it, browse to `http://192.168.4.1`.
+3. Pick your network, type its password, and choose a **4-digit Device PIN**.
+   The password is encrypted with a key derived from that PIN before anything
+   is written to NVS, then the board reboots onto your Wi-Fi.
+4. No Claude token is saved yet, so the board opens the [Web
+   panel](docs/PANEL_FEATURES.md) by itself and shows its URL and a six-digit
+   sign-in code on the ePaper. Sign in, open **Accounts**, and paste your
+   tokens there.
+
+The serial console at 115200 does the same job once the board is unlocked:
 
 ```
-ssid <your Wi-Fi network>
-pass <your Wi-Fi password>
 token1 <sk-ant-oat01-... from `claude setup-token`>
 token2 <optional second account token>
 account1 <display name>
 account2 <display name>
 ```
 
-Credentials are stored in NVS. The device begins polling immediately and
-starts the deep-sleep cycle once a USB host is no longer detected.
+Settings and usage history are stored in NVS as plain values; the Wi-Fi
+password and both tokens are encrypted — see [Security
+notes](#security-notes). The device begins polling immediately and starts the
+deep-sleep cycle once a USB host is no longer detected.
+
+**The PIN is asked for again after every power loss.** The key lives in RTC
+RAM, which survives deep sleep and a `reboot` but not a loss of power — a
+battery pull, a flat pack, or a PWR power-off while on battery. On USB the PWR
+long-press cannot cut the latch, so the board stays powered and stays
+unlocked. Enter it on the device: `BOOT` changes the digit under the cursor,
+`PWR` confirms it. Forgotten it? Hold `BOOT + PWR` for 5 seconds on the PIN
+screen to erase the credentials and PIN and return to step 1 (serial
+`reset confirm` does the same, but serial is only active when a USB host was
+detected at cold boot — on battery the button hold is the only way out).
+Settings and history survive both.
 
 ### Serial commands
 
@@ -79,16 +106,26 @@ Type `help` for the full list. Highlights:
 | `scan`, `tlscheck`                    | Diagnostics                                                             |
 | `files`, `play <file.wav>`            | LittleFS tools                                                          |
 | `debug off`                           | Turn off serial & LED, start the sleep cycle                            |
+| `reset` / `reset confirm`             | Erase the Wi-Fi password, tokens, and the Device PIN (settings and history are kept) |
+| `selftest`                            | Verify the credential encryption; touches no stored credential          |
+
+While the board is locked the console answers only `help`, `status`, `creds`,
+`rtc`, `files`, `selftest`, `debug off`, `reboot`, `reset` and `reset confirm`
+— everything else would need a credential it cannot read. `creds` prints
+`(locked)` in place of the token and password masks.
 
 ## Operation
 
 - **Debug mode** (default when USB host is attached at cold boot): serial
-  enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s to
-  toggle at any time (awake, asleep, or on battery). It has no idle
-  timeout: the board stays awake and skips deep sleep until you turn it off
-  with `BOOT + PWR`, serial `debug off`, or a cold boot with no USB host.
-  Clear it before unplugging, or battery life drops well short of the
-  normal-mode figure.
+  enabled, LED lit while awake. Long-press `BOOT + PWR` together ≥ 1 s on a
+  wake to toggle (awake, asleep, or on battery) — except on the PIN screen,
+  where the chord instead arms the credential wipe described above. To get
+  serial at a battery PIN prompt, leave it untouched for two minutes so it
+  deep-sleeps, then wake it holding both buttons for one second. Debug mode
+  has no idle timeout: the board stays awake and skips deep sleep until you
+  turn it off with `BOOT + PWR`, serial `debug off`, or a cold boot with no
+  USB host. Clear it before unplugging, or battery life drops well short of
+  the normal-mode figure.
 - **Normal mode** (battery): serial and LED off to save power. The board
   wakes on its poll timer, polls, draws, and deep-sleeps again. During enabled
   Pause Hours it sleeps until the window ends without automatic usage
@@ -98,9 +135,9 @@ Type `help` for the full list. Highlights:
   depletion, or reset for one account switches the screen to that account's
   view until the next poll.
 - **Web Panel**: a long `BOOT` press opens a browser control panel on
-  your Wi-Fi (PIN on the ePaper). Time zone (default Asia/Kuala_Lumpur)
+  your Wi-Fi (six-digit sign-in code on the ePaper). Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,
-  Wi-Fi, alerts, sounds, and the mDNS device name (applied at the next
+  Wi-Fi, the Device PIN, alerts, sounds, and the mDNS device name (applied at the next
   restart). Usage continues polling automatically at the
   configured interval, except during Pause Hours. HTTPS requests run on a
   worker while the panel serves cached state; completed results update the
@@ -112,6 +149,15 @@ Type `help` for the full list. Highlights:
   when you're done, or the radio will flatten the battery.
   See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
   and [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
+- **Locked** (after any cold boot — battery pull, a PWR power-off on battery,
+  or first power-up of a provisioned board): the radio stays off and the ePaper
+  shows `Locked`, `Enter your 4-digit PIN`, and four digit slots. `BOOT`
+  cycles the digit under the cursor 0-9, `PWR` confirms it and moves to the
+  next slot; the fourth `PWR` tries the PIN. A long `PWR` press still powers
+  the board off from here. A correct PIN restarts the board straight into
+  normal operation. Two minutes with no button press deep-sleeps the board
+  until a button wakes it, so a locked meter in a drawer is not a flat
+  battery. See [docs/MODES.md](docs/MODES.md).
 
 The usage ring survives power cycles (persisted to LittleFS; written only
 when the 30-min slot advances — ~48 writes/day).
@@ -150,8 +196,24 @@ docs/          design notes: modes, battery, alert sounds, web panel, memory foo
 
 ## Security notes
 
-- NVS is **not** encrypted on this board. Anyone with the device and a
-  USB cable can read back the Wi-Fi password and Claude tokens.
+- **The Wi-Fi password and both Claude tokens are encrypted in NVS.**
+  AES-256-GCM under a key derived from the 4-digit Device PIN with
+  PBKDF2-HMAC-SHA256 (~400 ms on this chip). The key exists only in RTC RAM,
+  so a cold boot or a battery pull leaves nothing readable until the PIN is
+  entered on the device.
+- **A 4-digit PIN is a speed bump, not a vault.** There are 10 000
+  candidates; at ~400 ms each that is under an hour of offline guessing for
+  someone who dumps the flash. The derivation key is not bound to an eFuse,
+  so the work factor is all there is. This defends a lost, stolen, or resold
+  device against casual inspection — not against a determined attacker.
+- **Setup happens over an open Wi-Fi network and plain HTTP.** The
+  provisioning AP has no password, so the Device PIN, your Wi-Fi password and
+  both OAuth tokens cross the air unencrypted while you type them in. Anyone
+  in range can capture them passively. Provision somewhere you would not mind
+  being overheard.
+- **Everything else in NVS is plain text**, including the Wi-Fi SSID, the
+  account display names, the hostname, and every setting. Anyone with the
+  device and a USB cable can read those back.
 - `.env` and `*.wav` are gitignored; keep tokens out of source control.
 
 ## Credits

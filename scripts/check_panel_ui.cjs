@@ -89,6 +89,10 @@ const initialState = {
       return route.fulfill({ status: 200, contentType: 'text/csv; charset=utf-8', headers: { 'Content-Disposition': 'attachment; filename="claude-meter-1791000000-1791001800.csv"' }, body: csvBody });
     }
     if (endpoint === '/api/history/clear') clearHistory = true;
+    if (endpoint === '/api/pin') {
+      if (body.pin === '9999') return reply({ error: 'seal_failed' }, 500);
+      return reply({ ok: true });
+    }
     return reply({ ok: true });
   };
   await page.route('**/api/**', routeApi);
@@ -658,6 +662,22 @@ const initialState = {
     await page.evaluate(() => refreshState());
     assert.equal(await page.locator('#hostnameInput').inputValue(), 'mid-edit', 'Unsaved hostname edits survive the poll');
     await page.locator('#hostnameInput').fill('claude-meter'); await page.locator('#btnHostname').click(); await waitFor('#hostnameStatus', 'Saved');
+    await page.locator('#pin1').fill('24'); await page.locator('#pin2').fill('24');
+    await page.locator('#btnPin').click(); await waitFor('#pinStatus', 'exactly four digits');
+    assert.equal(latestPost('/api/pin'), undefined, 'A short PIN never reaches the API');
+    await page.locator('#pin1').fill('12a4'); await page.locator('#pin2').fill('12a4');
+    await page.locator('#btnPin').click(); await waitFor('#pinStatus', 'exactly four digits');
+    assert.equal(latestPost('/api/pin'), undefined, 'maxlength allows a four-character paste; the regex rejects it');
+    await page.locator('#pin1').fill('2468'); await page.locator('#pin2').fill('2469');
+    await page.locator('#btnPin').click(); await waitFor('#pinStatus', 'do not match');
+    assert.equal(latestPost('/api/pin'), undefined, 'A mismatch never reaches the API');
+    await page.locator('#pin1').fill('9999'); await page.locator('#pin2').fill('9999');
+    await page.locator('#btnPin').click(); await waitFor('#pinStatus', 'Nothing changed');
+    assert.equal(await page.locator('#pin1').inputValue(), '9999', 'A failed change keeps the typed PIN');
+    await page.locator('#pin1').fill('2468'); await page.locator('#pin2').fill('2468');
+    await page.locator('#btnPin').click(); await waitFor('#pinStatus', 'PIN changed');
+    assert.deepEqual(latestPost('/api/pin'), { pin: '2468', pin2: '2468' });
+    assert.equal(await page.locator('#pin1').inputValue(), '', 'A successful change clears both fields');
     await select('alerts');
     assert.equal(await page.locator('[data-view=alerts]').textContent(), 'Polling & alerts');
     assert.equal(await page.locator('#currentView').textContent(), 'Polling & alerts');

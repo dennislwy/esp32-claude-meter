@@ -3,7 +3,10 @@
 #include <Arduino.h>
 
 // Wi-Fi and Claude credentials, kept in NVS so they never live in source code.
-// NVS is not encrypted: anyone with the board and a USB cable can read them back.
+// The Wi-Fi password and the Claude tokens are sealed with a key derived from
+// the Device PIN (see secret_store.h), so reads return "" until the device is
+// unlocked. The SSID and the account names stay plaintext, so a locked board
+// can still tell whether it has been provisioned and which accounts to label.
 namespace settings
 {
 constexpr int CLAUDE_TOKEN_COUNT = 2;
@@ -91,10 +94,17 @@ String hostname();
 bool setHostname(const String &value);
 
 void setWifiSsid(const String &value);
-void setWifiPassword(const String &value);
-void setClaudeToken(int number, const String &value);
+// Both seal into encrypted NVS: false means nothing was stored, because the
+// device is locked or the seal failed. Callers must report the failure.
+bool setWifiPassword(const String &value);
+bool setClaudeToken(int number, const String &value);
 // An empty name restores the default
 void setAccountName(int number, const String &value);
+
+// Pre-PIN firmware stored the password and tokens as plaintext. Wipe them so
+// the board re-provisions with a Device PIN; returns true when it wiped.
+// Call once at boot, before testing wifiSsid() for provisioning.
+bool migrateLegacyCredentials();
 
 // For logs: length and the last few characters only, never the secret itself
 String mask(const String &secret, size_t visibleTail = 4);
