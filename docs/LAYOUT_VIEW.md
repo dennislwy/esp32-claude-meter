@@ -50,8 +50,8 @@ Each card is 87 px tall.
 |   +---------------------------------------------------+   |
 |   |###################### 7-DAY               78%    |   |
 |   +---------------------------------------------------+   |
-| 5H resets SAT 3 Oct 01:10 in 1h 14m                       |   10 px UPPERCASE
-| 7D resets FRI 9 Oct 13:00 in 6d 13h                       |
+| 5H resets 1:10 in 1h 14m                                  |   10 px
+| 7D resets Fri 13:00 in 6d 13h                             |
 +===========================================================+ y=111  (2-px divider)
 | Claude 2                                      2m ago      |
 |                                                           |
@@ -61,8 +61,8 @@ Each card is 87 px tall.
 |   +---------------------------------------------------+   |
 |   |############################### 7-DAY       92%   |   |
 |   +---------------------------------------------------+   |
-| 5H resets SAT 3 Oct 05:40 in 5h 44m                       |
-| 7D resets FRI 9 Oct 13:00 in 6d 13h                       |
+| 5H resets 5:40 in 5h 44m                                  |
+| 7D resets Fri 13:00 in 6d 13h                             |
 +-----------------------------------------------------------+ y=200
 ```
 
@@ -81,8 +81,8 @@ Per-card y offsets (relative to the card's top-left):
 | Age        | +4       | Montserrat 10, right     |
 | 5-HOUR bar | +20      | 18 px tall               |
 | 7-DAY bar  | +40      | 18 px tall               |
-| 5H resets  | +60      | Montserrat 10 UPPERCASE  |
-| 7D resets  | +72      | Montserrat 10 UPPERCASE  |
+| 5H resets  | +60      | Montserrat 10            |
+| 7D resets  | +72      | Montserrat 10            |
 
 ## Single-account view (R2 / Layout #1 style)
 
@@ -100,14 +100,14 @@ short BOOT press, cycling dual -> account 1 -> account 2.
 |   +---------------------------------------------------+   |
 |   |#####################                              |   |   14 px bar
 |   +---------------------------------------------------+   |
-|   [R] Sat 3 Oct 01:10 in 1h 14m                           |   12 px Title case
+|   [R] 1:10 in 1h 14m                                      |   16 px
 |                                                           |
 |                                                           |
 |   7D                                             78%      |
 |   +---------------------------------------------------+   |
 |   |##########################################         |   |
 |   +---------------------------------------------------+   |
-|   [R] Fri 9 Oct 13:00 in 6d 13h                           |
+|   [R] Fri 13:00 in 6d 13h                                 |
 |                                                           |
 +-----------------------------------------------------------+ y=200
 ```
@@ -122,7 +122,7 @@ Per-window y offsets (`singleWindow()`, relative to the window's top-left):
 | `5H` / `7D`   | 0        | Montserrat 28, black     |
 | Value `NN%`   | 0        | Montserrat 28, right     |
 | Bar track     | +32      | 14 px tall               |
-| Reset line    | +49      | Montserrat 12 Title case |
+| Reset line    | +49      | Montserrat 16            |
 
 Window pitch = 76 px (so `7D` starts 76 px below `5H`).
 
@@ -145,7 +145,7 @@ A history view is skipped when its account has no recorded samples yet.
 +-----------------------------------------------------------+ y=0
 | [M] [fan]          12:34               [bat] 85%          |   status bar (24)
 +-----------------------------------------------------------+ y=24
-| Claude 1 - 7-day            5H --   7D ==                 |   title (14) + legend (10)
+| Claude 1                    5H --   7D ==                 |   title (14) + legend (10)
 |                                                           |
 | 100 -|                                                    |
 |      |                                                    |
@@ -192,11 +192,15 @@ Y-axis ticks and labels at 25 % intervals (`0 / 25 / 50 / 75 / 100`),
 right of `CHART_RIGHT`. The baseline (`CHART_BOTTOM`, 0 %) carries the
 `0` label but no extra tick (the axis itself is the tick).
 
-X-axis: one tick (1 px x 2 px) per day label, 24 columns apart, 7 ticks
-total. Labels use single-letter abbreviations (`S / M / T / W / T / F /
-S`); duplicates for Sun/Sat and Tue/Thu are intentional. The newest day
-sits above the rightmost tick (col 155), each previous day 24 columns to
-the left.
+X-axis: one tick (1 px x 2 px) at each local midnight, 24 columns apart.
+The 168-column window always holds exactly 7 midnights, so there are 7
+ticks. Each tick carries the single-letter initial of the day that starts
+there (`S / M / T / W / T / F / S`; duplicates for Sun/Sat and Tue/Thu are
+intentional), centred under the tick by its measured width. The rightmost
+tick is today's midnight, at column `167 - <current hour>`. The partial
+day left of the first tick has no label. Weekdays are counted back from
+today's rather than derived from `newest - d * 86400`, so a DST change
+cannot shift a label by a day.
 
 Visibility of a line segment requires >= 2 adjacent valid columns, i.e.
 roughly 2 hours of continuous polling after a cold boot.
@@ -215,8 +219,16 @@ roughly 2 hours of continuous polling after a cold boot.
 
 `formatResetLine()` builds strings like:
 
-- Dual view: `5H resets SAT 3 Oct 01:10 in 1h 14m` (`DayCase::Upper`)
-- Single view: `[R] Sat 3 Oct 01:10 in 1h 14m` (`DayCase::Title`)
+- Dual view: `5H resets 1:10 in 1h 14m`, `7D resets Fri 13:00 in 6d 13h`
+- Single view: `[R] 1:10 in 1h 14m`, `[R] Fri 13:00 in 6d 13h`
+
+The weekday appears only on the 7D line, and only while the reset is a
+day or more away (`7D resets 6:00 in 22h 1m` under that). Without a day
+part the countdown settles which day `1:10` falls on, so the 5H line, which
+always resets within five hours, never shows one. Times are
+24-hour with no leading zero on the hour. The time of day comes from
+`formatResetWhen()` in `src/reset_time.cpp`, covered by the host check in
+`test/reset_time/`.
 
 Countdown shows the two most significant units via `formatDuration()`:
 

@@ -193,11 +193,12 @@ function toTimeStr(h,m){return pad2(h)+':'+pad2(m)}
 function parseTime(s){const m=/^(\d{1,2}):(\d{2})$/.exec(s||'');return m?{h:+m[1],m:+m[2]}:null}
 const DAYS3=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONS3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function fmtReset(epoch,nowEpoch){
+// "Resets at 6:20 in 1h 59m", or "Resets at Fri 13:00 in 1d 22h" with showWeekday once the reset is a day or more away
+function fmtReset(epoch,nowEpoch,showWeekday){
   if(!epoch)return'';
   const d=zonedParts(epoch);
-  const when=d.weekday+' '+d.day+' '+d.month+' '+d.hour+':'+d.minute;
   const diff=epoch-nowEpoch;
+  const when=(showWeekday&&diff>=86400?d.weekday+' ':'')+(+d.hour)+':'+d.minute;
   const tail=diff>0?' in '+fmtDur(diff):' (now)';
   return 'Resets at '+when+tail;
 }
@@ -237,7 +238,7 @@ async function refreshState(){
     const name=document.createElement('h2');name.className='account-name';name.textContent=a.name||'Account '+(i+1);
     const meta=document.createElement('p');meta.className='account-meta';meta.textContent=!a.configured?'Not connected':a.has_data?'Updated '+a.age:'Waiting for usage data';
     identity.append(name,meta);head.append(avatar,identity);d.append(head);
-    [['Current session','h5','h5_reset',s.warn5],['This week','d7','d7_reset',s.warn7]].forEach(([label,key,reset,threshold])=>{
+    [['Current session','h5','h5_reset',s.warn5,false],['This week','d7','d7_reset',s.warn7,true]].forEach(([label,key,reset,threshold,showWeekday])=>{
       const section=document.createElement('div');section.className='usage-window';
       const row=document.createElement('div');row.className='usage-label';
       const text=document.createElement('span');text.textContent=label;
@@ -247,7 +248,7 @@ async function refreshState(){
       const bar=document.createElement('div');bar.className='bar'+(a.has_data&&a[key]>=100?' depleted':a.has_data&&a[key]>=threshold?' warn':'');
       if(a.has_data){bar.setAttribute('role','progressbar');bar.setAttribute('aria-label',(a.name||'Account '+(i+1))+' '+label);bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');bar.setAttribute('aria-valuenow',String(Math.max(0,Math.min(100,a[key]))))}
       const fill=document.createElement('i');fill.style.width=(a.has_data?Math.max(0,Math.min(100,a[key])):0)+'%';bar.append(fill);
-      const resetline=document.createElement('p');resetline.className='resetline';resetline.textContent=a.has_data?(fmtReset(a[reset],nowE)||'Reset time unavailable'):a.configured?'Usage will appear after a successful poll.':'Add a token in Accounts to get started.';
+      const resetline=document.createElement('p');resetline.className='resetline';resetline.textContent=a.has_data?(fmtReset(a[reset],nowE,showWeekday)||'Reset time unavailable'):a.configured?'Usage will appear after a successful poll.':'Add a token in Accounts to get started.';
       section.append(row,bar,resetline);d.append(section);
     });
     acc.appendChild(d);

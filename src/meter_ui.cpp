@@ -2,6 +2,7 @@
 
 #include <lvgl.h>
 #include "history.h"
+#include "reset_time.h"
 
 extern "C" const lv_image_dsc_t claude_icon;
 
@@ -25,7 +26,7 @@ namespace
   constexpr int SINGLE_BAR_Y_OFFSET = 32;
   constexpr int SINGLE_RESET_Y_OFFSET = SINGLE_BAR_Y_OFFSET + THIN_BAR_H + 3;
   // Pitch between 5H and 7D windows (the second starts this many pixels below the first)
-  constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 12 + 15;
+  constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 18 + 9;
 
   // Wi-Fi icon in the status bar: a dot with three concentric arcs fanning upwards
   constexpr int WIFI_ICON_W = 22; // width of the outer arc's 90-degree wedge
@@ -108,35 +109,23 @@ namespace
     return buf;
   }
 
-  enum class DayCase
-  {
-    Upper, // "SAT"
-    Title, // "Sat", narrower
-  };
-
-  // prefix + " SAT 3 Oct 01:10 in 1h 14m", e.g. "5H resets SAT 3 Oct 01:10 in 1h 14m"
+  // prefix + " 1:10 in 1h 14m", or prefix + " Fri 13:00 in 6d 13h" with showWeekday. The weekday is
+  // dropped when the reset is under a day away (the countdown then has no day part and settles
+  // which day "1:10" means), so the 5-hour window never needs one.
   String formatResetLine(const MeterScreen &screen, const AccountUsage &account, const char *prefix, uint32_t reset,
-                         DayCase dayCase = DayCase::Upper)
+                         bool showWeekday)
   {
-    static const char *const UPPER_DAYS[] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
-    static const char *const TITLE_DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-    static const char *const MONTHS[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    const char *const *DAYS = dayCase == DayCase::Upper ? UPPER_DAYS : TITLE_DAYS;
     String line = String(prefix) + " ";
     if (!account.hasData)
     {
       return line + "--";
     }
-    const time_t resetTime = reset;
-    struct tm local;
-    localtime_r(&resetTime, &local);
-    char when[24];
-    snprintf(when, sizeof(when), "%s %d %s %02d:%02d", DAYS[local.tm_wday], local.tm_mday, MONTHS[local.tm_mon],
-             local.tm_hour, local.tm_min);
+    const long seconds = (long)reset - (long)screen.now;
+    char when[16];
+    formatResetWhen(reset, showWeekday && !(screen.clockValid && seconds < 86400), when, sizeof(when));
     line += when;
     if (screen.clockValid)
     {
-      const long seconds = (long)reset - (long)screen.now;
       line += seconds > 0 ? " in " + formatDuration(seconds) : String(" (now)");
     }
     return line;
@@ -296,17 +285,16 @@ namespace
     splitBar(parent, PAD, y + 20, "5-HOUR", account.fiveHourPercent, formatPercent(account, account.fiveHourPercent).c_str());
     splitBar(parent, PAD, y + 40, "7-DAY", account.sevenDayPercent, formatPercent(account, account.sevenDayPercent).c_str());
 
-    // Up to ~195 px at the longest ("WED 30 Sep ... in 4h 59m"), so these start nearer the edge
-    const String reset5h = formatResetLine(screen, account, "5H resets", account.fiveHourReset);
-    const String reset7d = formatResetLine(screen, account, "7D resets", account.sevenDayReset);
+    const String reset5h = formatResetLine(screen, account, "5H resets", account.fiveHourReset, false);
+    const String reset7d = formatResetLine(screen, account, "7D resets", account.sevenDayReset, true);
     lv_obj_set_pos(text(parent, reset5h.c_str(), &lv_font_montserrat_10, BLACK), RESET_LINE_X, y + 60);
     lv_obj_set_pos(text(parent, reset7d.c_str(), &lv_font_montserrat_10, BLACK), RESET_LINE_X, y + 72);
   }
 
   // One window in the single-account view: window name ("5H") left and large % right in the same
-  // style, thin bar, "<refresh icon> Sat 3 Oct 01:10 in ..."
+  // style, thin bar, "<refresh icon> 1:10 in ..." (weekday only for the 7-day window)
   void singleWindow(lv_obj_t *parent, int y, const MeterScreen &screen, const AccountUsage &account,
-                    const char *windowName, float percent, uint32_t reset)
+                    const char *windowName, float percent, uint32_t reset, bool showWeekday)
   {
     lv_obj_set_pos(text(parent, windowName, &lv_font_montserrat_28, BLACK), PAD, y);
     textRight(parent, formatPercent(account, percent).c_str(), &lv_font_montserrat_28, BLACK, WIDTH - PAD, y);
@@ -320,10 +308,9 @@ namespace
       box(track, 0, 0, fillW, THIN_BAR_H - 2, BLACK);
     }
 
-    // A refresh icon instead of "Resets", and "Wed" rather than "WED", keep the longest form
-    // ("Wed 20 May 00:00 in 4h 48m") to ~195 px at 12 px, so it starts nearer the edge
-    const String resets = formatResetLine(screen, account, LV_SYMBOL_REFRESH, reset, DayCase::Title);
-    lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_12, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
+    // The longest form ("Wed 20:00 in 6d 20h" after the icon) is ~188 px at 16 px, ending near x = 190
+    const String resets = formatResetLine(screen, account, LV_SYMBOL_REFRESH, reset, showWeekday);
+    lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_16, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
   }
 
   // Chart geometry (used by historyView and chartSeries). Shifted left so the right-side
@@ -385,8 +372,7 @@ namespace
   void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
   {
     const int y = STATUS_BAR_H + 4;
-    const String title = screen.names[index] + " - 7-day";
-    lv_obj_set_pos(text(parent, title.c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
+    lv_obj_set_pos(text(parent, screen.names[index].c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
 
     // Legend top-right: "5H" with a thin line sample, "7D" with a thick one
     lv_obj_set_pos(text(parent, "5H", &lv_font_montserrat_10, BLACK), 118, y + 4);
@@ -445,46 +431,26 @@ namespace
     chartSeries(parent, points5h, cols5h, 1);
     chartSeries(parent, points7d, cols7d, 2);
 
-    // X-axis: ticks at local midnight boundaries, one-letter day labels centred on each day's slice
+    // X-axis: a tick at each local midnight, with the initial of the day that starts there centred under it
     if (newest != 0)
     {
       static const char *const DAY_INITIALS[] = {"S", "M", "T", "W", "T", "F", "S"};
       const time_t newestT = (time_t)newest;
       struct tm newestLocal;
       localtime_r(&newestT, &newestLocal);
-      // Column at the local midnight that started "today" (col 167 = newest hour)
+      // Column at the local midnight that started "today" (col 167 = newest hour). The 168 columns
+      // always hold exactly 7 midnights, the earliest at col 23 - hour.
       const int midnightCol = CHART_COLS - 1 - newestLocal.tm_hour;
-      for (int d = 0; d <= 7; d++)
+      for (int d = 0; midnightCol - d * 24 >= 0; d++)
       {
         const int col = midnightCol - d * 24;
-        if (col >= 0 && col < CHART_COLS)
-        {
-          box(parent, CHART_LEFT + col, CHART_BOTTOM + 1, 1, 2, BLACK);
-        }
-      }
-      for (int d = 0; d < 8; d++)
-      {
-        int sliceStart = midnightCol - d * 24;
-        int sliceEnd = d == 0 ? CHART_COLS - 1 : sliceStart + 23;
-        if (sliceEnd < 0)
-        {
-          break;
-        }
-        if (sliceStart < 0)
-        {
-          sliceStart = 0;
-        }
-        if (sliceEnd >= CHART_COLS)
-        {
-          sliceEnd = CHART_COLS - 1;
-        }
-        const int colCentre = (sliceStart + sliceEnd) / 2;
-        const time_t t = newestT - (time_t)(d * 86400);
-        struct tm local;
-        localtime_r(&t, &local);
-        // Single letter is ~5 px wide; shift by -2 to centre under the tick
-        lv_obj_set_pos(text(parent, DAY_INITIALS[local.tm_wday], &lv_font_montserrat_10, BLACK),
-                       CHART_LEFT + colCentre - 2, CHART_BOTTOM + 4);
+        box(parent, CHART_LEFT + col, CHART_BOTTOM + 1, 1, 2, BLACK);
+        // Counted back from today's weekday; newest - d * 86400 can land on the wrong day across DST
+        const char *initial = DAY_INITIALS[(newestLocal.tm_wday - d + 7) % 7];
+        lv_point_t size;
+        lv_text_get_size(&size, initial, &lv_font_montserrat_10, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        lv_obj_set_pos(text(parent, initial, &lv_font_montserrat_10, BLACK), CHART_LEFT + col - size.x / 2,
+                       CHART_BOTTOM + 4);
       }
     }
   }
@@ -673,8 +639,9 @@ namespace
     textRight(parent, formatAge(screen, account).c_str(), &lv_font_montserrat_10, BLACK, WIDTH - PAD, y + 2);
 
     const int y5h = y + 22;
-    singleWindow(parent, y5h, screen, account, "5H", account.fiveHourPercent, account.fiveHourReset);
-    singleWindow(parent, y5h + SINGLE_WINDOW_PITCH, screen, account, "7D", account.sevenDayPercent, account.sevenDayReset);
+    singleWindow(parent, y5h, screen, account, "5H", account.fiveHourPercent, account.fiveHourReset, false);
+    singleWindow(parent, y5h + SINGLE_WINDOW_PITCH, screen, account, "7D", account.sevenDayPercent, account.sevenDayReset,
+                 true);
   }
 
   lv_obj_t *clearScreen()
