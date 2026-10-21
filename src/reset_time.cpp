@@ -5,7 +5,7 @@
 void formatResetWhen(time_t reset, bool showWeekday, char *out, size_t len)
 {
   static const char *const DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-  struct tm local;
+  struct tm local = {};
 #ifdef _WIN32
   localtime_s(&local, &reset);
 #else

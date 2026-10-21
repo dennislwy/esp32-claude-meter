@@ -26,7 +26,7 @@ namespace
   constexpr int SINGLE_BAR_Y_OFFSET = 32;
   constexpr int SINGLE_RESET_Y_OFFSET = SINGLE_BAR_Y_OFFSET + THIN_BAR_H + 3;
   // Pitch between 5H and 7D windows (the second starts this many pixels below the first)
-  constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 12 + 15;
+  constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 16 + 11;
 
   // Wi-Fi icon in the status bar: a dot with three concentric arcs fanning upwards
   constexpr int WIFI_ICON_W = 22; // width of the outer arc's 90-degree wedge
