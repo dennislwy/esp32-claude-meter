@@ -107,20 +107,14 @@ bool commitGeneration(const char *ns, uint8_t generation)
 
 bool deriveKey(const char *pin, const uint8_t *salt, uint8_t *keyOut)
 {
-  mbedtls_md_context_t md;
-  mbedtls_md_init(&md);
-  const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-  // The 1 selects HMAC mode, which is what PBKDF2 needs. mbedtls 2.28 has no
-  // _ext entry point, so the context has to be set up by hand.
-  bool ok = info != nullptr && mbedtls_md_setup(&md, info, 1) == 0;
-  if (ok)
-  {
-    ok = mbedtls_pkcs5_pbkdf2_hmac(&md, (const unsigned char *)pin, strlen(pin),
-                                   salt, SALT_LEN, secret_store::PBKDF2_ROUNDS,
-                                   KEY_LEN, keyOut) == 0;
-  }
-  mbedtls_md_free(&md);
-  return ok;
+  // ESP-IDF's mbedtls config defines MBEDTLS_DEPRECATED_REMOVED, so the old
+  // context-passing _hmac entry point is gone. _ext does the same RFC 2898
+  // PBKDF2-HMAC-SHA256 with the same salt and PIN bytes, so sealed blobs
+  // from either entry point remain mutually openable.
+  return mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256,
+                                       (const unsigned char *)pin, strlen(pin),
+                                       salt, SALT_LEN, secret_store::PBKDF2_ROUNDS,
+                                       KEY_LEN, keyOut) == 0;
 }
 
 bool sealRecord(const uint8_t *key, const String &plain, uint8_t *out, size_t &outLen)
