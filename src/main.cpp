@@ -276,7 +276,7 @@ void render()
     screen.panelIp = panelDisplay.ip;
     screen.panelPin = panelDisplay.pin;
   }
-  if (view == MeterView::Setup)
+  else if (view == MeterView::Setup)
   {
     screen.setupApSsid = provisionInfo.apSsid;
     screen.setupApIp = provisionInfo.apIp;
@@ -1174,6 +1174,34 @@ void handlePowerButton()
 // nothing can be read until the PIN comes back in on the two buttons. BOOT
 // changes the digit under the cursor, PWR confirms it. Never returns - a
 // correct PIN restarts the board, and the timeout deep-sleeps it.
+// Captured by the FALLING-edge ISRs below. The main loop zeroes a slot after
+// synthesizing a short press from it. 0 means "no edge pending"; the OR with 1
+// in the ISR keeps a millis() of 0 from reading as empty on the first ms of
+// uptime.
+volatile uint32_t unlockBootEdgeMs = 0;
+volatile uint32_t unlockPwrEdgeMs = 0;
+
+// A press-and-release that both fall inside a ~500 ms LVGL partial refresh is
+// invisible to the main loop's digitalRead. These ISRs latch the FALLING edge
+// so the loop can still see it after the refresh returns. They only latch the
+// first edge until the main loop consumes it, so chatter inside one press is
+// collapsed to one record.
+static void IRAM_ATTR unlockGateBootIsr()
+{
+  if (unlockBootEdgeMs == 0)
+  {
+    unlockBootEdgeMs = millis() | 1;
+  }
+}
+
+static void IRAM_ATTR unlockGatePwrIsr()
+{
+  if (unlockPwrEdgeMs == 0)
+  {
+    unlockPwrEdgeMs = millis() | 1;
+  }
+}
+
 [[noreturn]] void unlockGate()
 {
   PinEntry entry;
@@ -1182,6 +1210,12 @@ void handlePowerButton()
   view = MeterView::Unlock;
   viewFromAlert = false;
   Serial.println("Locked: enter the Device PIN on the buttons");
+  // Attach before the first render(), so a press during the initial draw is
+  // still caught. Any edges captured here are cleared when `armed` flips.
+  unlockBootEdgeMs = 0;
+  unlockPwrEdgeMs = 0;
+  attachInterrupt(digitalPinToInterrupt(PIN_BOOT_BUTTON), unlockGateBootIsr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(PIN_PWR_BUTTON), unlockGatePwrIsr, FALLING);
   render();
 
   // The press that powered the board on, or woke it from the timeout, has to
@@ -1204,6 +1238,13 @@ void handlePowerButton()
     if (!armed)
     {
       armed = !bootDown && !pwrDown;
+      // The ISR latched the wake press's falling edge. Drop it so it is not
+      // replayed as a slot increment the moment armed flips to true.
+      if (armed)
+      {
+        unlockBootEdgeMs = 0;
+        unlockPwrEdgeMs = 0;
+      }
       // A button stuck low would otherwise keep a battery board awake forever,
       // so this path honours the idle timeout as well.
       if (millis() - lastActivityMs >= UNLOCK_TIMEOUT_MS)
@@ -1214,6 +1255,21 @@ void handlePowerButton()
       delay(10);
       continue;
     }
+    // Synthesize bootDownAt / pwrDownAt from any FALLING edge the ISR caught
+    // during a previous render(). The button has since been released (we see
+    // it HIGH now), so the release handler below will fire this iteration and
+    // treat it as a short press. If the button is still held, the ordinary
+    // digitalRead path captures the hold and this ISR record is redundant.
+    if (unlockBootEdgeMs != 0 && bootDownAt == 0 && !bootDown)
+    {
+      bootDownAt = unlockBootEdgeMs;
+    }
+    unlockBootEdgeMs = 0;
+    if (unlockPwrEdgeMs != 0 && pwrDownAt == 0 && !pwrDown)
+    {
+      pwrDownAt = unlockPwrEdgeMs;
+    }
+    unlockPwrEdgeMs = 0;
     if (bootDown && bootDownAt == 0)
     {
       bootDownAt = millis();
@@ -1239,9 +1295,12 @@ void handlePowerButton()
       bootDownAt = 0;
       pwrDownAt = 0;
       // Both flags belong to presses the arming has just consumed. A stale one
-      // would swallow the first confirm press after the screen appears.
+      // would swallow the first confirm press after the screen appears. Clear
+      // any ISR edges that fired during the blocking release-wait, same reason.
       pwrLongPressHandled = false;
       pwrPressSpent = false;
+      unlockBootEdgeMs = 0;
+      unlockPwrEdgeMs = 0;
       continue;
     }
 
