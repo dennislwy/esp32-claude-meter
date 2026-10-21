@@ -222,8 +222,10 @@ roughly 2 hours of continuous polling after a cold boot.
 - Dual view: `5H resets 1:10 in 1h 14m`, `7D resets Fri 13:00 in 6d 13h`
 - Single view: `[R] 1:10 in 1h 14m`, `[R] Fri 13:00 in 6d 13h`
 
-The 5H line carries no weekday: that window always resets within five
-hours, so the countdown settles which day `1:10` falls on. Times are
+The weekday appears only on the 7D line, and only while the reset is a
+day or more away (`7D resets 6:00 in 22h 1m` under that). Without a day
+part the countdown settles which day `1:10` falls on, so the 5H line, which
+always resets within five hours, never shows one. Times are
 24-hour with no leading zero on the hour. The time of day comes from
 `formatResetWhen()` in `src/reset_time.cpp`, covered by the host check in
 `test/reset_time/`.

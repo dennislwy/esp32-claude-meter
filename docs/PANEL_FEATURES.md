@@ -69,8 +69,11 @@ complete diagnostics.
 - Firmware: release version + git revision (`0.0.9-aae7f66-dirty`).
   `FW_VERSION` is set in `src/build_info.h`; `scripts/build_info.py`
   generates the git revision. No build timestamp is shown.
-- Per-account 5 H / 7 D bars with a `resets Sun 4 Oct 17:01 in 1h 4m`
-  line each, formatted in the device's selected time zone. Missing usage
+- Per-account 5 H / 7 D bars with a `Resets at 6:20 in 1h 59m` line
+  each, formatted in the device's selected time zone, 24-hour with no
+  leading zero on the hour. The 7 D line adds the weekday while the reset
+  is a day or more away (`Resets at Fri 13:00 in 1d 22h`); the 5 H line
+  never does. Missing usage
   displays a dash instead of a fabricated percentage. Warning and exhausted
   windows use distinct bar colors.
 - **Refresh now** — forces an on-demand `/api/refresh` poll (device

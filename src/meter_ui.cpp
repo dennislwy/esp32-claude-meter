@@ -109,8 +109,9 @@ namespace
     return buf;
   }
 
-  // prefix + " 1:10 in 1h 14m", or prefix + " Fri 13:00 in 6d 13h" with showWeekday. The 5-hour
-  // window always resets within five hours, so the countdown settles which day "1:10" means.
+  // prefix + " 1:10 in 1h 14m", or prefix + " Fri 13:00 in 6d 13h" with showWeekday. The weekday is
+  // dropped when the reset is under a day away (the countdown then has no day part and settles
+  // which day "1:10" means), so the 5-hour window never needs one.
   String formatResetLine(const MeterScreen &screen, const AccountUsage &account, const char *prefix, uint32_t reset,
                          bool showWeekday)
   {
@@ -119,12 +120,12 @@ namespace
     {
       return line + "--";
     }
+    const long seconds = (long)reset - (long)screen.now;
     char when[16];
-    formatResetWhen(reset, showWeekday, when, sizeof(when));
+    formatResetWhen(reset, showWeekday && !(screen.clockValid && seconds < 86400), when, sizeof(when));
     line += when;
     if (screen.clockValid)
     {
-      const long seconds = (long)reset - (long)screen.now;
       line += seconds > 0 ? " in " + formatDuration(seconds) : String(" (now)");
     }
     return line;
