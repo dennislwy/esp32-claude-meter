@@ -1118,7 +1118,9 @@ void runCommand(const String &line)
 void handleSerialCommands()
 {
   static String line;
-  while (Serial.available())
+  // > 0, not truthy: available() is -1 when Serial was never begun (battery cold boot, debug
+  // off), and read() then returns -1 forever, so a bare while would never exit
+  while (Serial.available() > 0)
   {
     const char c = Serial.read();
     if (c != '\n' && c != '\r')
