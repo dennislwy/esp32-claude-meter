@@ -15,4 +15,7 @@
 #define LV_FONT_MONTSERRAT_16 1
 #define LV_FONT_MONTSERRAT_28 1
 
+// Panel view QR code for the web panel URL
+#define LV_USE_QRCODE 1
+
 #endif

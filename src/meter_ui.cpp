@@ -457,10 +457,42 @@ namespace
 
   void panelView(lv_obj_t *parent, const MeterScreen &screen)
   {
+    // QR code on the left; the title and PIN centred in the column to its right. An IP URL
+    // ("http://255.255.255.255" at most) is a version 2 code, 25 modules, so 75 px is 3 px per
+    // module. The screen's white around it is the quiet zone.
+    constexpr int QR_SIZE = 75;
+    constexpr int QR_X = 8;
+    constexpr int QR_GAP = 6;
+    constexpr int COLUMN_LEFT = QR_X + QR_SIZE + QR_GAP;
+    // Offset of the column's centre from the screen's, for LV_ALIGN_TOP_MID
+    constexpr int COLUMN_DX = (COLUMN_LEFT + WIDTH - PAD) / 2 - WIDTH / 2;
     const int y = STATUS_BAR_H + 6;
-    lv_obj_t *title = text(parent, "Web Panel", &lv_font_montserrat_16, BLACK);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, y);
 
+    // The IP, not the .local name: Android browsers don't resolve mDNS
+    const String ipUrl = String("http://") + screen.panelIp;
+    if (screen.panelIp.length() > 0)
+    {
+      lv_obj_t *qr = lv_qrcode_create(parent);
+      lv_qrcode_set_size(qr, QR_SIZE);
+      lv_qrcode_set_dark_color(qr, BLACK);
+      lv_qrcode_set_light_color(qr, WHITE);
+      lv_qrcode_update(qr, ipUrl.c_str(), ipUrl.length());
+      lv_obj_set_pos(qr, QR_X, y);
+    }
+
+    lv_obj_t *title = text(parent, "Web Panel", &lv_font_montserrat_16, BLACK);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, COLUMN_DX, y + 2);
+
+    lv_obj_t *pinHint = text(parent, "PIN", &lv_font_montserrat_10, BLACK);
+    lv_obj_align(pinHint, LV_ALIGN_TOP_MID, COLUMN_DX, y + 28);
+
+    // No fixed width: the widest 6-digit PIN at 28 px is a few px wider than the column, and
+    // a fixed width would wrap it rather than let it spill harmlessly into the margins
+    lv_obj_t *pin = text(parent, screen.panelPin.c_str(), &lv_font_montserrat_28, BLACK);
+    lv_obj_align(pin, LV_ALIGN_TOP_MID, COLUMN_DX, y + 40);
+
+    // Both URLs full width under the QR code
+    const int urlY = y + QR_SIZE + 10;
     const String url = String("http://") + screen.panelHostname + ".local";
     // A long hostname overflows CONTENT_W and would wrap onto the IP line below,
     // so measure each size rather than assume one name's width
@@ -481,23 +513,12 @@ namespace
     lv_obj_set_width(urlLabel, CONTENT_W);
     lv_label_set_long_mode(urlLabel, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(urlLabel, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, y + 22);
+    lv_obj_align(urlLabel, LV_ALIGN_TOP_MID, 0, urlY);
 
-    const String ipUrl = String("http://") + screen.panelIp;
     lv_obj_t *ipLabel = text(parent, ipUrl.c_str(), &lv_font_montserrat_14, BLACK);
     lv_obj_set_width(ipLabel, CONTENT_W);
     lv_obj_set_style_text_align(ipLabel, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(ipLabel, LV_ALIGN_TOP_MID, 0, y + 22 + lv_font_get_line_height(urlFont) + 2);
-
-    lv_obj_t *pinHint = text(parent, "PIN", &lv_font_montserrat_10, BLACK);
-    lv_obj_set_width(pinHint, CONTENT_W);
-    lv_obj_set_style_text_align(pinHint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(pinHint, LV_ALIGN_TOP_MID, 0, y + 60);
-
-    lv_obj_t *pin = text(parent, screen.panelPin.c_str(), &lv_font_montserrat_28, BLACK);
-    lv_obj_set_width(pin, CONTENT_W);
-    lv_obj_set_style_text_align(pin, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(pin, LV_ALIGN_TOP_MID, 0, y + 72);
+    lv_obj_align(ipLabel, LV_ALIGN_TOP_MID, 0, urlY + lv_font_get_line_height(urlFont) + 2);
 
     // Two stacked lines at the bottom: the warning, and the exit hint one line above it
     const int footerLineH = lv_font_get_line_height(&lv_font_montserrat_12);
