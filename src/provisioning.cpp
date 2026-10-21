@@ -10,30 +10,30 @@
 
 namespace
 {
-WebServer *server = nullptr;
-DNSServer *dns = nullptr;
-bool active = false;
-bool rebootPending = false;
-uint32_t rebootAtMs = 0;
+  WebServer *server = nullptr;
+  DNSServer *dns = nullptr;
+  bool active = false;
+  bool rebootPending = false;
+  uint32_t rebootAtMs = 0;
 
-const IPAddress AP_IP(192, 168, 4, 1);
-const IPAddress AP_MASK(255, 255, 255, 0);
+  const IPAddress AP_IP(192, 168, 4, 1);
+  const IPAddress AP_MASK(255, 255, 255, 0);
 
-String apSsid()
-{
-  // Straight from eFuse: WiFi.macAddress() reads the STA interface, which
-  // does not exist in AP-only mode, and would leave mac uninitialized. This is
-  // the same MAC the Web Panel shows under Device details.
-  uint8_t mac[6] = {};
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  char buf[24];
-  snprintf(buf, sizeof(buf), "claude-meter-%02X%02X%02X", mac[3], mac[4], mac[5]);
-  return String(buf);
-}
+  String apSsid()
+  {
+    // Straight from eFuse: WiFi.macAddress() reads the STA interface, which
+    // does not exist in AP-only mode, and would leave mac uninitialized. This is
+    // the same MAC the Web Panel shows under Device details.
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "claude-meter-%02X%02X%02X", mac[3], mac[4], mac[5]);
+    return String(buf);
+  }
 
-// Self-contained captive-portal setup, styled to match the local Web Panel.
-// Scan starts on page load; no external assets or internet connection required.
-const char SETUP_HTML[] PROGMEM = R"HTML(<!doctype html>
+  // Self-contained captive-portal setup, styled to match the local Web Panel.
+  // Scan starts on page load; no external assets or internet connection required.
+  const char SETUP_HTML[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -63,6 +63,7 @@ setTheme(themeMode);
 .btn{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;min-height:44px;padding:11px 16px;border:1px solid var(--text);border-radius:8px;background:var(--text);color:var(--bg);font-size:13px;font-weight:600}.btn:hover{opacity:.88}.btn.alt{background:var(--card);color:var(--text);border-color:var(--line);font-weight:500}.btn.alt:hover{background:var(--soft);opacity:1}.btn .icon{width:16px;height:16px}.actions{display:flex;gap:10px;margin-top:24px}.actions>.alt{width:auto;min-width:80px}.list{max-height:248px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;scrollbar-width:thin}.row{padding:13px 12px;border:0;border-bottom:1px solid var(--line);display:flex;gap:12px;justify-content:space-between;align-items:center;width:100%;min-height:54px;text-align:left;background:var(--card);color:var(--text);font-size:13px}.row:last-child{border-bottom:0}.row:hover{background:var(--soft)}.row:focus-visible{outline-offset:-3px}.network-name{min-width:0;overflow-wrap:anywhere}.network-meta{display:flex;align-items:center;gap:7px;flex-shrink:0;color:var(--dim)}.network-meta .icon{width:14px;height:14px}.rssi{font-size:10px;font-variant-numeric:tabular-nums}.list-message{padding:28px 16px;color:var(--dim);font-size:13px;text-align:center}.rescan{margin-top:12px}.notice{padding:14px 16px;background:var(--soft);border-radius:8px;color:var(--dim);font-size:12px;line-height:1.6;margin-top:20px}.notice strong{color:var(--text);font-weight:600}.card-foot{border-top:1px solid var(--line);margin-top:24px;padding-top:18px;color:var(--dim);font-size:11px;display:flex;gap:8px;align-items:center}.card-foot .icon{width:15px;height:15px;color:var(--acc)}.status{font-size:12px;overflow-wrap:anywhere}.status:not(:empty){margin-top:16px;padding:12px 14px;background:var(--soft);border-radius:8px}.err{color:var(--err)}.ok{color:var(--ok)}.setup-footer{text-align:center;color:var(--dim);font-size:11px;padding:18px 24px}
 @media(max-width:800px){.setup-header{padding:20px 24px}.brand{font-size:24px}.brand-mark{width:30px;height:30px}.setup-layout{min-height:0;grid-template-columns:1fr;gap:28px;padding:24px 24px 32px;max-width:520px}.setup-story h1{font-size:44px;margin:12px 0}.setup-story>p{font-size:14px;margin:12px 0 0}.story-foot{display:none}.card{padding:26px}.card:before{left:26px;right:26px}.setup-footer{font-size:10px}}
 @media(max-width:480px){.setup-header{padding:16px 20px}.brand{font-size:22px;gap:8px}.brand-mark{width:28px;height:28px}.theme-switch button{width:30px;height:38px}.setup-layout{padding:12px 18px 24px;gap:24px}.setup-story .eyebrow{font-size:9px}.setup-story h1{font-size:38px}.setup-story>p{font-size:13px}.card{padding:22px;border-radius:16px}.steps{gap:12px;padding-bottom:18px;margin-bottom:20px}.steps li{font-size:10px;gap:6px}.step-number{width:22px;height:22px}h2{font-size:28px}.sub{margin-bottom:20px}.card-foot{font-size:10px}.notice{padding:12px}.setup-footer{padding-top:0}}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.steps li{flex-direction:column;align-items:center;gap:7px}.account-fields+.account-fields{border-top:1px solid var(--line);margin-top:22px;padding-top:20px}.account-fields h3{margin:0;font-size:13px;font-weight:600}.optional{font-size:10px;font-weight:500;letter-spacing:.08em;color:var(--acc);text-transform:uppercase;margin-bottom:10px}.skip-btn{display:block;min-height:44px;margin:10px auto 0;padding:10px 16px;border:0;border-radius:8px;background:transparent;color:var(--dim);font-size:12px}.skip-btn:hover{background:var(--soft);color:var(--text)}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important}}
 </style></head>
 <body>
@@ -86,7 +87,7 @@ setTheme(themeMode);
 <main class="setup-layout">
   <div class="setup-story">
     <div class="eyebrow">Your desktop companion</div>
-    <h1>A little setup.<br>A clearer view.</h1>
+    <h1>Onboarding.<br>A little setup.</h1>
     <p>Connect your meter to Wi-Fi and give your Claude usage a quiet place on your desk.</p>
     <div class="story-foot"><svg class="icon" aria-hidden="true"><use href="#i-device"/></svg><span>Made for the little screen on your desk.</span></div>
   </div>
@@ -94,7 +95,8 @@ setTheme(themeMode);
     <ol class="steps" aria-label="Setup progress">
       <li aria-current="step"><span class="step-number">01</span>Network</li>
       <li><span class="step-number">02</span>Password</li>
-      <li><span class="step-number">03</span>Device PIN</li>
+      <li><span class="step-number">03</span>Tokens</li>
+      <li><span class="step-number">04</span>Device PIN</li>
     </ol>
     <div id="pane-pick">
       <h2 id="pick-title" tabindex="-1">Let's get connected.</h2>
@@ -112,6 +114,28 @@ setTheme(themeMode);
       <input id="pass" type="password" placeholder="Wi-Fi password" autocomplete="off" autocapitalize="off" autocorrect="off" aria-describedby="pass-hint">
       <p class="hint" id="pass-hint">Use your Wi-Fi password, not your Claude password.</p>
       <div class="actions"><button class="btn alt" id="back" type="button">Back</button><button class="btn" id="next" type="button">Continue <span aria-hidden="true">&rarr;</span></button></div>
+    </div>
+    <div id="pane-tokens" class="hidden">
+      <div class="optional">Optional step</div>
+      <h2>Your Claude accounts.</h2>
+      <p class="sub">Add up to two Claude OAuth tokens now, or set them up later in the web panel's Accounts page.</p>
+      <div class="account-fields">
+        <h3>Account 01</h3>
+        <label for="name1">Display name</label>
+        <input id="name1" maxlength="20" placeholder="e.g. Personal" autocomplete="off">
+        <label for="token1">Claude OAuth token</label>
+        <input id="token1" type="password" maxlength="256" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="sk-ant-oat01-..." aria-describedby="tokens-hint">
+      </div>
+      <div class="account-fields">
+        <h3>Account 02</h3>
+        <label for="name2">Display name</label>
+        <input id="name2" maxlength="20" placeholder="e.g. Work" autocomplete="off">
+        <label for="token2">Claude OAuth token</label>
+        <input id="token2" type="password" maxlength="256" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="sk-ant-oat01-..." aria-describedby="tokens-hint">
+      </div>
+      <p class="hint" id="tokens-hint">Leave either token blank if you don't need it. Tokens are encrypted with your Device PIN and used after the meter connects to Wi-Fi.</p>
+      <div class="actions"><button class="btn alt" id="tokensback" type="button">Back</button><button class="btn" id="tokensnext" type="button">Continue <span aria-hidden="true">&rarr;</span></button></div>
+      <button class="skip-btn" id="skipTokens" type="button">Skip for now</button>
     </div>
     <div id="pane-pin" class="hidden">
       <h2>A PIN for your meter.</h2>
@@ -131,6 +155,7 @@ setTheme(themeMode);
 <script>
 const $=s=>document.querySelector(s);
 let picked=null;
+let skipTokens=false;
 
 function syncTheme(){
   setTheme(themeMode);
@@ -146,7 +171,7 @@ else darkPreference.addListener(syncTheme);
 syncTheme();
 
 function showStep(step){
-  ['pick','pass','pin'].forEach((pane,i)=>$('#pane-'+pane).classList.toggle('hidden',i!==step));
+  ['pick','pass','tokens','pin'].forEach((pane,i)=>$('#pane-'+pane).classList.toggle('hidden',i!==step));
   document.querySelectorAll('.steps li').forEach((item,i)=>{
     if(i===step)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');
     item.classList.toggle('complete',i<step);
@@ -202,20 +227,32 @@ $('#back').onclick=()=>{
   (previous||$('#pick-title')).focus();
 };
 $('#next').onclick=()=>{
-  $('#pin').value='';$('#pin2').value='';
-  $('#status').className='status';$('#status').textContent='';
   showStep(2);
-  $('#pin').focus();
+  $('#token1').focus();
 };
-$('#pinback').onclick=()=>{
+$('#tokensback').onclick=()=>{
   showStep(1);
   $('#pass').focus();
+};
+function toPin(skip){
+  skipTokens=skip;
+  $('#pin').value='';$('#pin2').value='';
+  $('#status').className='status';$('#status').textContent='';
+  showStep(3);
+  $('#pin').focus();
+}
+$('#tokensnext').onclick=()=>toPin(false);
+$('#skipTokens').onclick=()=>toPin(true);
+$('#pinback').onclick=()=>{
+  showStep(2);
+  $('#token1').focus();
 };
 
 const ERRORS={
   bad_pin:'PIN must be exactly 4 digits',
   seal_failed:'Could not store the credentials securely. Try again.',
-  empty_ssid:'Pick a network that has a name'
+  empty_ssid:'Pick a network that has a name',
+  token_too_long:'Each Claude OAuth token must be at most 256 characters. Go back to the Tokens step to edit it.'
 };
 function fail(msg){$('#status').className='status err';$('#status').textContent=msg;}
 
@@ -226,13 +263,17 @@ $('#save').onclick=async()=>{
   if(pin!==$('#pin2').value){fail('The two PINs do not match');return;}
   const btn=$('#save');btn.disabled=true;$('#pinback').disabled=true;
   $('#status').className='status';$('#status').textContent='Saving...';
+  const body={ssid:picked.ssid,pass:$('#pass').value,pin:pin};
+  if(!skipTokens){
+    ['token1','token2','name1','name2'].forEach(id=>body[id]=$('#'+id).value.trim());
+  }
   try{
     const r=await fetch('/save',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ssid:picked.ssid,pass:$('#pass').value,pin:pin})});
+      body:JSON.stringify(body)});
     const j=await r.json();
     if(j.ok){
       btn.textContent='Saved';
-      ['pass','pin','pin2'].forEach(id=>{$('#'+id).value='';$('#'+id).disabled=true;});
+      ['pass','pin','pin2','token1','token2'].forEach(id=>{$('#'+id).value='';$('#'+id).disabled=true;});
       $('#status').className='status ok';
       $('#status').textContent='Saved. The meter is rebooting and will connect to "'+picked.ssid+'". Remember your PIN - the meter asks for it on its buttons after every power loss. You can close this page.';
     }else{
@@ -249,83 +290,97 @@ scan();
 </script>
 </body></html>)HTML";
 
-void handleRoot()
-{
-  server->send_P(200, "text/html", SETUP_HTML);
-}
+  void handleRoot()
+  {
+    server->send_P(200, "text/html", SETUP_HTML);
+  }
 
-// Captive-portal detection endpoints across OSes. Each OS probes a specific
-// URL and compares the response against a known-good template; anything else
-// trips the "sign-in required" sheet. Serving the full setup HTML with 200 OK
-// works across iOS, Android, and Windows more reliably than a 302 redirect,
-// since some phones follow redirects transparently and never pop the sheet.
-void handleCaptive()
-{
-  server->sendHeader("Cache-Control", "no-store");
-  server->send_P(200, "text/html", SETUP_HTML);
-}
+  // Captive-portal detection endpoints across OSes. Each OS probes a specific
+  // URL and compares the response against a known-good template; anything else
+  // trips the "sign-in required" sheet. Serving the full setup HTML with 200 OK
+  // works across iOS, Android, and Windows more reliably than a 302 redirect,
+  // since some phones follow redirects transparently and never pop the sheet.
+  void handleCaptive()
+  {
+    server->sendHeader("Cache-Control", "no-store");
+    server->send_P(200, "text/html", SETUP_HTML);
+  }
 
-void handleScan()
-{
-  WiFi.scanDelete();
-  int n = WiFi.scanNetworks(false, false, false, 300);
-  JsonDocument d;
-  JsonArray arr = d["networks"].to<JsonArray>();
-  for (int i = 0; i < n; i++)
+  void handleScan()
   {
-    JsonObject o = arr.add<JsonObject>();
-    o["ssid"] = WiFi.SSID(i);
-    o["rssi"] = WiFi.RSSI(i);
-    o["channel"] = WiFi.channel(i);
-    o["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    WiFi.scanDelete();
+    int n = WiFi.scanNetworks(false, false, false, 300);
+    JsonDocument d;
+    JsonArray arr = d["networks"].to<JsonArray>();
+    for (int i = 0; i < n; i++)
+    {
+      JsonObject o = arr.add<JsonObject>();
+      o["ssid"] = WiFi.SSID(i);
+      o["rssi"] = WiFi.RSSI(i);
+      o["channel"] = WiFi.channel(i);
+      o["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    }
+    WiFi.scanDelete();
+    String out;
+    serializeJson(d, out);
+    server->send(200, "application/json", out);
   }
-  WiFi.scanDelete();
-  String out;
-  serializeJson(d, out);
-  server->send(200, "application/json", out);
-}
 
-void handleSave()
-{
-  if (!server->hasArg("plain"))
+  void handleSave()
   {
-    server->send(400, "application/json", "{\"error\":\"bad_body\"}");
-    return;
+    if (!server->hasArg("plain"))
+    {
+      server->send(400, "application/json", "{\"error\":\"bad_body\"}");
+      return;
+    }
+    JsonDocument d;
+    if (deserializeJson(d, server->arg("plain")) != DeserializationError::Ok)
+    {
+      server->send(400, "application/json", "{\"error\":\"bad_json\"}");
+      return;
+    }
+    String ssid = String((const char *)(d["ssid"] | ""));
+    String pass = String((const char *)(d["pass"] | ""));
+    String pin = String((const char *)(d["pin"] | ""));
+    String token1 = String((const char *)(d["token1"] | ""));
+    String token2 = String((const char *)(d["token2"] | ""));
+    token1.trim();
+    token2.trim();
+    ssid.trim();
+    if (ssid.isEmpty())
+    {
+      server->send(400, "application/json", "{\"error\":\"empty_ssid\"}");
+      return;
+    }
+    if (!secret_store::validPin(pin.c_str()))
+    {
+      server->send(400, "application/json", "{\"error\":\"bad_pin\"}");
+      return;
+    }
+    if (token1.length() > secret_store::PLAIN_MAX || token2.length() > secret_store::PLAIN_MAX)
+    {
+      server->send(400, "application/json", "{\"error\":\"token_too_long\"}");
+      return;
+    }
+    // Seal first, store the SSID second. A stored SSID with no generation marker
+    // is precisely what legacy() reports, so sealing after the SSID would make a
+    // failed seal look like old firmware and wipe on the next boot. The AP is up,
+    // so esp_random() has the radio it needs for the salt.
+    if (!secret_store::provision(pin.c_str(), pass, token1, token2))
+    {
+      server->send(500, "application/json", "{\"error\":\"seal_failed\"}");
+      return;
+    }
+    settings::setWifiSsid(ssid);
+    // Missing optional fields preserve the existing Wi-Fi-only setup contract.
+    if (d["name1"].is<const char *>())
+      settings::setAccountName(1, d["name1"].as<String>());
+    if (d["name2"].is<const char *>())
+      settings::setAccountName(2, d["name2"].as<String>());
+    server->send(200, "application/json", "{\"ok\":true}");
+    rebootPending = true;
+    rebootAtMs = millis() + 1200; // let the response flush before restart
   }
-  JsonDocument d;
-  if (deserializeJson(d, server->arg("plain")) != DeserializationError::Ok)
-  {
-    server->send(400, "application/json", "{\"error\":\"bad_json\"}");
-    return;
-  }
-  String ssid = String((const char *)(d["ssid"] | ""));
-  String pass = String((const char *)(d["pass"] | ""));
-  String pin = String((const char *)(d["pin"] | ""));
-  ssid.trim();
-  if (ssid.isEmpty())
-  {
-    server->send(400, "application/json", "{\"error\":\"empty_ssid\"}");
-    return;
-  }
-  if (!secret_store::validPin(pin.c_str()))
-  {
-    server->send(400, "application/json", "{\"error\":\"bad_pin\"}");
-    return;
-  }
-  // Seal first, store the SSID second. A stored SSID with no generation marker
-  // is precisely what legacy() reports, so sealing after the SSID would make a
-  // failed seal look like old firmware and wipe on the next boot. The AP is up,
-  // so esp_random() has the radio it needs for the salt.
-  if (!secret_store::provision(pin.c_str(), pass))
-  {
-    server->send(500, "application/json", "{\"error\":\"seal_failed\"}");
-    return;
-  }
-  settings::setWifiSsid(ssid);
-  server->send(200, "application/json", "{\"ok\":true}");
-  rebootPending = true;
-  rebootAtMs = millis() + 1200; // let the response flush before restart
-}
 }
 
 void provisionBegin(ProvisionInfo &out)
@@ -351,12 +406,12 @@ void provisionBegin(ProvisionInfo &out)
   server->on("/scan", HTTP_GET, handleScan);
   server->on("/save", HTTP_POST, handleSave);
   // Captive-portal probes
-  server->on("/generate_204", handleCaptive);          // Android / Chrome
-  server->on("/gen_204", handleCaptive);               // Android (older)
-  server->on("/hotspot-detect.html", handleCaptive);   // Apple
+  server->on("/generate_204", handleCaptive);        // Android / Chrome
+  server->on("/gen_204", handleCaptive);             // Android (older)
+  server->on("/hotspot-detect.html", handleCaptive); // Apple
   server->on("/library/test/success.html", handleCaptive);
-  server->on("/connecttest.txt", handleCaptive);       // Windows
-  server->on("/ncsi.txt", handleCaptive);              // Windows
+  server->on("/connecttest.txt", handleCaptive); // Windows
+  server->on("/ncsi.txt", handleCaptive);        // Windows
   server->on("/redirect", handleCaptive);
   server->onNotFound(handleCaptive);
   server->begin();

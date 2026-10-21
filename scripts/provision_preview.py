@@ -112,11 +112,16 @@ class PreviewHandler(BaseHTTPRequestHandler):
         # alone would also accept non-ASCII digits like "١٢٣٤".
         if len(pin) != 4 or not pin.isdigit() or not pin.isascii():
             return self.reply(400, {"error": "bad_pin"})
+        tokens = [str(body.get(key, "")).strip() for key in ("token1", "token2")]
+        # Arduino String::length() and the sealed record limit count UTF-8 bytes.
+        if any(len(token.encode("utf-8")) > 256 for token in tokens):
+            return self.reply(400, {"error": "token_too_long"})
         if SAVE_MODE == "seal-fail":
             return self.reply(500, {"error": "seal_failed"})
         password = str(body.get("pass", ""))
-        print('Would seal a %d-character password under a 4-digit PIN for SSID '
-              '"%s", then reboot.' % (len(password), ssid), flush=True)
+        print('Would seal a %d-character password and %d Claude token(s) under '
+              'a 4-digit PIN for SSID "%s", then reboot.'
+              % (len(password), sum(bool(token) for token in tokens), ssid), flush=True)
         self.reply(200, {"ok": True})
 
     def log_message(self, *_):

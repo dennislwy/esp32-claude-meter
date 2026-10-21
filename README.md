@@ -54,13 +54,16 @@ Setup therefore starts on the device's own Wi-Fi, not on the serial console.
    and shows that name plus `http://192.168.4.1` on the ePaper.
 2. Join that network. The captive-portal popup opens the setup page by
    itself; if your phone doesn't offer it, browse to `http://192.168.4.1`.
-3. Pick your network, type its password, and choose a **4-digit Device PIN**.
-   The password is encrypted with a key derived from that PIN before anything
-   is written to NVS, then the board reboots onto your Wi-Fi.
-4. No Claude token is saved yet, so the board opens the [Web
+3. Pick your network and type its password. The optional **Tokens** step lets
+   you add Claude OAuth tokens and display names for up to two accounts.
+   Choose **Skip for now** to add them later.
+4. Choose a **4-digit Device PIN** and select **Save & connect**. The password
+   and any supplied tokens are encrypted together with a key derived from
+   that PIN, then the board reboots onto your Wi-Fi.
+5. If you skipped the tokens, the board opens the [Web
    panel](docs/PANEL_FEATURES.md) by itself and shows its URLs, a QR code and
    a six-digit sign-in code on the ePaper. Sign in, open **Accounts**, and paste your
-   tokens there.
+   tokens there. Accounts can also be added or updated in the panel later.
 
 The serial console at 115200 does the same job once the board is unlocked:
 

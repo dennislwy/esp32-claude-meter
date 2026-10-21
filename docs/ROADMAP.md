@@ -6,10 +6,9 @@ What Claude Meter aims to achieve and the planned features for its development.
 - [ ] Re-order & enable/disable views in device display, 1st view will be the default view
 - [x] Editable hostname (e.g. claude-meter)
 - [x] Temporary switch display to relevant view on usage warning/depleted/resets events, switch back to default view on next wake
-- [ ] When enable web panel mode, display a QR code view (url link, e.g. http://192.168.1.200) on device for easy accesss to web panel page
+- [x] When enable web panel mode, display a QR code view (url link, e.g. http://192.168.1.200) on device for easy accesss to web panel page
 - [x] PIN encrypted oauth token & wifi password
-- [ ] Use the Device PIN for the web panel sign-in (replacing the random 6-digit code), lock the panel after 5 wrong tries, show the panel URL on the device, and let provisioning set the account names and tokens
-- [ ] improve AP provision flow and user experience
+- [x] improve AP provision flow and user experience
 - [ ] Allow upload custom WAV alert sounds (5H/7D for warning/depleted/reset) in web panel. Default sounds (data/*.wav) will be used if no custom sounds are uploaded. Uploads must be 16-bit PCM WAV (format code 1, mono or stereo), no longer than 10 seconds, and no larger than 220 KB per file; reject anything else. Mono 16000 Hz recommended — see docs/ALERT_SOUNDS.md. Note six custom files at the 220 KB cap is 1.32 MB, which does not fit the 1.5 MB LittleFS partition alongside the 871 KB of defaults — decide whether customs replace or coexist with the defaults.
 
 ## Lower Priority
