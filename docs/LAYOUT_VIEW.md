@@ -50,8 +50,8 @@ Each card is 87 px tall.
 |   +---------------------------------------------------+   |
 |   |###################### 7-DAY               78%    |   |
 |   +---------------------------------------------------+   |
-| 5H resets SAT 3 Oct 01:10 in 1h 14m                       |   10 px UPPERCASE
-| 7D resets FRI 9 Oct 13:00 in 6d 13h                       |
+| 5H resets 1:10 in 1h 14m                                  |   10 px
+| 7D resets Fri 13:00 in 6d 13h                             |
 +===========================================================+ y=111  (2-px divider)
 | Claude 2                                      2m ago      |
 |                                                           |
@@ -61,8 +61,8 @@ Each card is 87 px tall.
 |   +---------------------------------------------------+   |
 |   |############################### 7-DAY       92%   |   |
 |   +---------------------------------------------------+   |
-| 5H resets SAT 3 Oct 05:40 in 5h 44m                       |
-| 7D resets FRI 9 Oct 13:00 in 6d 13h                       |
+| 5H resets 5:40 in 5h 44m                                  |
+| 7D resets Fri 13:00 in 6d 13h                             |
 +-----------------------------------------------------------+ y=200
 ```
 
@@ -81,8 +81,8 @@ Per-card y offsets (relative to the card's top-left):
 | Age        | +4       | Montserrat 10, right     |
 | 5-HOUR bar | +20      | 18 px tall               |
 | 7-DAY bar  | +40      | 18 px tall               |
-| 5H resets  | +60      | Montserrat 10 UPPERCASE  |
-| 7D resets  | +72      | Montserrat 10 UPPERCASE  |
+| 5H resets  | +60      | Montserrat 10            |
+| 7D resets  | +72      | Montserrat 10            |
 
 ## Single-account view (R2 / Layout #1 style)
 
@@ -100,14 +100,14 @@ short BOOT press, cycling dual -> account 1 -> account 2.
 |   +---------------------------------------------------+   |
 |   |#####################                              |   |   14 px bar
 |   +---------------------------------------------------+   |
-|   [R] Sat 3 Oct 01:10 in 1h 14m                           |   12 px Title case
+|   [R] 1:10 in 1h 14m                                      |   14 px
 |                                                           |
 |                                                           |
 |   7D                                             78%      |
 |   +---------------------------------------------------+   |
 |   |##########################################         |   |
 |   +---------------------------------------------------+   |
-|   [R] Fri 9 Oct 13:00 in 6d 13h                           |
+|   [R] Fri 13:00 in 6d 13h                                 |
 |                                                           |
 +-----------------------------------------------------------+ y=200
 ```
@@ -122,7 +122,7 @@ Per-window y offsets (`singleWindow()`, relative to the window's top-left):
 | `5H` / `7D`   | 0        | Montserrat 28, black     |
 | Value `NN%`   | 0        | Montserrat 28, right     |
 | Bar track     | +32      | 14 px tall               |
-| Reset line    | +49      | Montserrat 12 Title case |
+| Reset line    | +49      | Montserrat 14            |
 
 Window pitch = 76 px (so `7D` starts 76 px below `5H`).
 
@@ -215,8 +215,14 @@ roughly 2 hours of continuous polling after a cold boot.
 
 `formatResetLine()` builds strings like:
 
-- Dual view: `5H resets SAT 3 Oct 01:10 in 1h 14m` (`DayCase::Upper`)
-- Single view: `[R] Sat 3 Oct 01:10 in 1h 14m` (`DayCase::Title`)
+- Dual view: `5H resets 1:10 in 1h 14m`, `7D resets Fri 13:00 in 6d 13h`
+- Single view: `[R] 1:10 in 1h 14m`, `[R] Fri 13:00 in 6d 13h`
+
+The 5H line carries no weekday: that window always resets within five
+hours, so the countdown settles which day `1:10` falls on. Times are
+24-hour with no leading zero on the hour. The time of day comes from
+`formatResetWhen()` in `src/reset_time.cpp`, covered by the host check in
+`test/reset_time/`.
 
 Countdown shows the two most significant units via `formatDuration()`:
 
