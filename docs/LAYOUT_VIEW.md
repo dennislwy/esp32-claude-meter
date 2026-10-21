@@ -4,6 +4,26 @@
 `src/meter_ui.cpp`. The ASCII mock-ups are not to scale — they show
 element order and relative placement.
 
+## Views at a glance
+
+Every view is a `MeterView` (`src/meter_ui.h`), drawn by `meterUiShow()`.
+
+| View              | Kind      | Drawn by        | Shown when                                                   |
+| ----------------- | --------- | --------------- | ------------------------------------------------------------ |
+| `Dual`            | Dashboard | `dualCard()` x2 | Both accounts have a token                                   |
+| `Account1`        | Dashboard | `singleView()`  | Account 1 has a token                                        |
+| `Account1History` | Dashboard | `historyView()` | Account 1 has a token and recorded history                   |
+| `Account2`        | Dashboard | `singleView()`  | Account 2 has a token                                        |
+| `Account2History` | Dashboard | `historyView()` | Account 2 has a token and recorded history                   |
+| `Panel`           | Mode      | `panelView()`   | Web Panel mode is on (long BOOT, or no token after setup)    |
+| `Setup`           | Mode      | `setupView()`   | No Wi-Fi SSID is stored: the AP captive portal is running    |
+| `Unlock`          | Mode      | `unlockView()`  | Cold boot of a provisioned board: the Device PIN is needed   |
+
+A short BOOT press (or serial `view`) cycles the dashboard views in table
+order, skipping any whose condition is not met. The mode views are set by
+code, never reached by cycling, and each replaces the dashboard until its
+mode ends.
+
 ## Status bar (shared by every view)
 
 Height 24 px, black background, white content.
@@ -86,8 +106,9 @@ Per-card y offsets (relative to the card's top-left):
 
 ## Single-account view (R2 / Layout #1 style)
 
-One account filling the area below the status bar. Switched to by a
-short BOOT press, cycling dual -> account 1 -> account 2.
+One account filling the area below the status bar. Reached by a short
+BOOT press, in the cycle `Dual -> Acct1 -> Acct1 History -> Acct2 ->
+Acct2 History -> Dual`.
 
 ```
 0                                                       199
@@ -205,15 +226,154 @@ cannot shift a label by a day.
 Visibility of a line segment requires >= 2 adjacent valid columns, i.e.
 roughly 2 hours of continuous polling after a cold boot.
 
+## Panel view (Web Panel mode)
+
+Shown while the Web Panel is serving on your Wi-Fi. The QR code encodes
+`http://<ip>` — the IP, not the `.local` name, because Android browsers
+don't resolve mDNS — so a phone camera opens the panel directly.
+
+```
+0                                                       199
++-----------------------------------------------------------+ y=0
+| [M] [fan]          12:34               [bat] 85%          |   status bar (24)
++-----------------------------------------------------------+ y=24
+|  +-----------+                                            | y=30
+|  |▓▓ ▓ ▓▓▓ ▓▓|         Web Panel                          |   Montserrat 16
+|  |▓ ▓▓▓  ▓ ▓ |                                            |
+|  |▓▓▓ QR ▓▓▓ |            PIN                             |   Montserrat 10
+|  |▓  ▓ ▓▓ ▓▓ |          123456                            |   Montserrat 28
+|  |▓▓ ▓▓▓ ▓ ▓▓|                                            |
+|  +-----------+                                            | y=105
+|                                                           |
+|              http://claude-meter.local                    | y=115  14 / 12 / 10
+|               http://192.168.1.200                        | y=133  Montserrat 14
+|                                                           |
+|                 Long BOOT = exit                          | y=168  Montserrat 12
+|               Wi-Fi on, drains fast                       | y=183  Montserrat 12
++-----------------------------------------------------------+ y=200
+```
+
+| Element            | Position                          | Font / size              | Notes                                              |
+| ------------------ | --------------------------------- | ------------------------ | -------------------------------------------------- |
+| QR code            | x = 8, y = 30                     | 75 x 75 px               | `lv_qrcode`; drawn only when the IP is known       |
+| `Web Panel` title  | column centre, y = 32             | Montserrat 16            | Column runs x = 89..196, centre x = 142            |
+| `PIN` label        | column centre, y = 58             | Montserrat 10            |                                                    |
+| Sign-in code       | column centre, y = 70             | Montserrat 28            | No fixed width, so a wide code spills, never wraps |
+| `.local` URL       | centred, y = 115                  | 14, else 12, else 10     | Largest size that fits 192 px; dots if none fits   |
+| IP URL             | centred, y = 115 + URL line + 2   | Montserrat 14            | y = 133 with the 14 px URL font                    |
+| Exit hint          | bottom-centred, one line up       | Montserrat 12            | `Long BOOT = exit`                                 |
+| Battery warning    | bottom-centred, 2 px above edge   | Montserrat 12            | `Wi-Fi on, drains fast`                            |
+
+QR sizing: any IP URL (`http://255.255.255.255` at most, 22 bytes) is a
+version 2 code at LVGL's ECC level M — 25 modules — so 75 px is exactly
+3 px per module. The white screen around the code is its quiet zone. The
+widest six-digit code at 28 px is ~3 px wider than the 107 px column;
+centring lets it spill evenly into the margins.
+
+## Setup view (AP provisioning mode)
+
+Shown while the board runs its own open access point for first-time
+setup, or after a factory reset.
+
+```
+0                                                       199
++-----------------------------------------------------------+ y=0
+| [M] [fan]          12:34               [bat] 85%          |   status bar (24)
++-----------------------------------------------------------+ y=24
+|                     Wi-Fi setup                           | y=28   Montserrat 16
+|                                                           |
+|                  Join this network:                       | y=52   Montserrat 12
+|                 claude-meter-D81A24                       | y=70   Montserrat 14
+|                 (open, no password)                       | y=90   Montserrat 10
+|                                                           |
+|                      Then open:                           | y=112  Montserrat 12
+|                  http://192.168.4.1                       | y=130  Montserrat 14
+|                                                           |
+|                                                           |
+|           Most phones show it automatically               | y=187  Montserrat 10
++-----------------------------------------------------------+ y=200
+```
+
+Every line is centred across `CONTENT_W` (192 px), offset from
+y = STATUS_BAR_H + 4 = 28:
+
+| Element               | y offset | y   | Font          |
+| --------------------- | -------- | --- | ------------- |
+| `Wi-Fi setup`         | 0        | 28  | Montserrat 16 |
+| `Join this network:`  | +24      | 52  | Montserrat 12 |
+| AP SSID               | +42      | 70  | Montserrat 14 |
+| `(open, no password)` | +62      | 90  | Montserrat 10 |
+| `Then open:`          | +84      | 112 | Montserrat 12 |
+| `http://192.168.4.1`  | +102     | 130 | Montserrat 14 |
+| Footer                | bottom   | 187 | Montserrat 10 |
+
+The SSID is `claude-meter-` plus the last three bytes of the eFuse Wi-Fi
+MAC in hex, the same MAC the Web Panel shows under Device details.
+
+## Unlock view (PIN entry)
+
+Shown on a cold boot of a provisioned board, until the Device PIN is
+entered on the buttons. It has two screens.
+
+**PIN entry** — BOOT changes the digit under the cursor, PWR confirms it:
+
+```
+0                                                       199
++-----------------------------------------------------------+ y=0
+| [M] [fan]          --:--               [bat] 85%          |   status bar (24)
++-----------------------------------------------------------+ y=24
+|                       Locked                              | y=30   Montserrat 16
+|                                                           |
+|               Enter your 4-digit PIN                      | y=54   Montserrat 12
+|                                                           |
+|                                                           |
+|                    *  *  3  _                             | y=86   Montserrat 28
+|                                                           |
+|                                                           |
+|                 BOOT = change digit                       | y=165  Montserrat 10
+|                 PWR = confirm digit                       | y=176  Montserrat 10
+|                Hold both 5 s = reset                      | y=187  Montserrat 10
++-----------------------------------------------------------+ y=200
+```
+
+| Element       | y   | Font          | Notes                                                             |
+| ------------- | --- | ------------- | ----------------------------------------------------------------- |
+| `Locked`      | 30  | Montserrat 16 |                                                                   |
+| Message       | 54  | Montserrat 12 | `Enter your 4-digit PIN`, `Wrong PIN - try again`, or `Checking...` |
+| Digit slots   | 86  | Montserrat 28 | Confirmed `*`, active slot shows its digit, rest `_`, space-separated |
+| Hints (x3)    | 165 / 176 / 187 | Montserrat 10 | Stacked up from 2 px above the bottom edge, 11 px apart |
+
+`Checking...` shows once the fourth digit is confirmed, while the PIN
+derivation (~400 ms) runs.
+
+**Factory-reset confirm** — BOOT + PWR held together for 5 s switches the
+view to this screen. PWR erases, BOOT cancels back to PIN entry:
+
+```
++-----------------------------------------------------------+ y=24
+|                   Factory reset?                          | y=30   Montserrat 16
+|                                                           |
+|              Erases Wi-Fi, both tokens,                   | y=60   Montserrat 12
+|                the PIN, all settings                      |        3 lines, wrapped
+|                     and history.                          |
+|                                                           |
+|            PWR = reset    BOOT = cancel                    | y=187  Montserrat 10
++-----------------------------------------------------------+ y=200
+```
+
 ## Pop-ups and notices
+
+Neither is a view: both are drawn over (or instead of) a dashboard view,
+and never over the Panel, Setup or Unlock views.
 
 - **Wi-Fi failure popup** — `WifiState::Failed`. A 170 px bordered white
   box, centred over the view, title Montserrat 14, body Montserrat 12
   wrapped. Shows the SSID, failure reason, and (when the clock is valid)
   the retry time.
-- **Setup notice** — shown instead of any view when the Wi-Fi SSID is
-  blank or no account has a token: `Setup needed\nConnect USB and type
-  help in the serial monitor`.
+- **Setup notice** — shown instead of a dashboard view when the Wi-Fi SSID
+  is blank or no account has a token: `Setup needed\nConnect USB and type
+  help in the serial monitor`, Montserrat 14, centred below the status
+  bar.
 
 ## Reset-line format
 
@@ -256,3 +416,5 @@ When the reset time has passed, the "in ..." tail becomes `(now)`.
 | `CHART_COLS`              | 168   | History columns (one per hour)            |
 | `CHART_LEFT / RIGHT`      | 6/174 | History plot x bounds                     |
 | `CHART_TOP / BOTTOM`      | 50/170| History plot y bounds                     |
+| `QR_SIZE`                 | 75    | Panel-view QR code, 3 px per module       |
+| `QR_X / QR_GAP`           | 8/6   | QR left edge; gap to the title/PIN column |
