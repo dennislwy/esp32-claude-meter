@@ -100,7 +100,7 @@ short BOOT press, cycling dual -> account 1 -> account 2.
 |   +---------------------------------------------------+   |
 |   |#####################                              |   |   14 px bar
 |   +---------------------------------------------------+   |
-|   [R] 1:10 in 1h 14m                                      |   14 px
+|   [R] 1:10 in 1h 14m                                      |   16 px
 |                                                           |
 |                                                           |
 |   7D                                             78%      |
@@ -122,7 +122,7 @@ Per-window y offsets (`singleWindow()`, relative to the window's top-left):
 | `5H` / `7D`   | 0        | Montserrat 28, black     |
 | Value `NN%`   | 0        | Montserrat 28, right     |
 | Bar track     | +32      | 14 px tall               |
-| Reset line    | +49      | Montserrat 14            |
+| Reset line    | +49      | Montserrat 16            |
 
 Window pitch = 76 px (so `7D` starts 76 px below `5H`).
 

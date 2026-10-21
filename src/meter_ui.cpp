@@ -26,7 +26,7 @@ namespace
   constexpr int SINGLE_BAR_Y_OFFSET = 32;
   constexpr int SINGLE_RESET_Y_OFFSET = SINGLE_BAR_Y_OFFSET + THIN_BAR_H + 3;
   // Pitch between 5H and 7D windows (the second starts this many pixels below the first)
-  constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 16 + 11;
+  constexpr int SINGLE_WINDOW_PITCH = SINGLE_RESET_Y_OFFSET + 18 + 9;
 
   // Wi-Fi icon in the status bar: a dot with three concentric arcs fanning upwards
   constexpr int WIFI_ICON_W = 22; // width of the outer arc's 90-degree wedge
@@ -307,9 +307,9 @@ namespace
       box(track, 0, 0, fillW, THIN_BAR_H - 2, BLACK);
     }
 
-    // The longest form ("Wed 23:59 in 6d 23h" after the icon) is ~165 px at 14 px
+    // The longest form ("Wed 20:00 in 6d 20h" after the icon) is ~188 px at 16 px, ending near x = 190
     const String resets = formatResetLine(screen, account, LV_SYMBOL_REFRESH, reset, showWeekday);
-    lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_14, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
+    lv_obj_set_pos(text(parent, resets.c_str(), &lv_font_montserrat_16, BLACK), RESET_LINE_X, y + SINGLE_RESET_Y_OFFSET);
   }
 
   // Chart geometry (used by historyView and chartSeries). Shifted left so the right-side
