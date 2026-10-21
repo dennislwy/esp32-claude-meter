@@ -45,7 +45,8 @@ Button behaviour (awake only):
 Button behaviour (from deep sleep): `setup()` polls both pins for up to
 `LONG_PRESS_MS` right after an `ext1` wake and classifies the press
 accordingly — short BOOT = next view, long BOOT = enter panel mode
-directly, PWR = power off (any duration), BOOT+PWR held = toggle debug.
+directly, long PWR = power off, short PWR = back to sleep (no change),
+BOOT+PWR held = toggle debug.
 
 ### Debug flag
 

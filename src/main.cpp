@@ -1656,6 +1656,7 @@ void setup()
   // for LONG_PRESS_MS toggles it (counting from the wake, which millis() starts at).
   bool comboLongPress = false;
   bool bootLongPress = false;
+  bool pwrLongPress = false;
   if (!resumed)
   {
     debugMode = usbHostConnected();
@@ -1680,6 +1681,15 @@ void setup()
       delay(10);
     }
     bootLongPress = digitalRead(PIN_BOOT_BUTTON) == LOW && digitalRead(PIN_PWR_BUTTON) == HIGH;
+  }
+  else if (pwrWake && digitalRead(PIN_PWR_BUTTON) == LOW && digitalRead(PIN_BOOT_BUTTON) == HIGH)
+  {
+    // PWR alone held after wake: only a long press powers off, as it does while awake
+    while (digitalRead(PIN_PWR_BUTTON) == LOW && digitalRead(PIN_BOOT_BUTTON) == HIGH && millis() < LONG_PRESS_MS)
+    {
+      delay(10);
+    }
+    pwrLongPress = digitalRead(PIN_PWR_BUTTON) == LOW && digitalRead(PIN_BOOT_BUTTON) == HIGH;
   }
   applyDebugMode();
 
@@ -1787,6 +1797,11 @@ void setup()
   }
   if (pwrWake && !comboLongPress)
   {
+    if (!pwrLongPress)
+    {
+      // Short PWR: not a power-off. Back to sleep with the screen as it was.
+      sleepUntilNextPoll();
+    }
     // Returns only when USB keeps the board running; stay awake in debug mode then
     powerOff();
     debugMode = true;
