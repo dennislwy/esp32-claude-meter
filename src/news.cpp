@@ -1,6 +1,7 @@
 #include "news.h"
 
 #include <HTTPClient.h>
+#include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <time.h>
 
