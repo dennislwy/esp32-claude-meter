@@ -4,6 +4,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <ArduinoJson.h>
+#include <esp_mac.h>
 #include "settings.h"
 #include "secret_store.h"
 
@@ -20,8 +21,11 @@ const IPAddress AP_MASK(255, 255, 255, 0);
 
 String apSsid()
 {
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
+  // Straight from eFuse: WiFi.macAddress() reads the STA interface, which
+  // does not exist in AP-only mode, and would leave mac uninitialized. This is
+  // the same MAC the Web Panel shows under Device details.
+  uint8_t mac[6] = {};
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
   char buf[24];
   snprintf(buf, sizeof(buf), "claude-meter-%02X%02X%02X", mac[3], mac[4], mac[5]);
   return String(buf);
