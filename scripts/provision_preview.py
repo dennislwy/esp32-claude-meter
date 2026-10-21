@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Deliberately varied: an open network for the "leave blank" placeholder, a hidden
 # SSID that the firmware rejects as empty_ssid, an over-long name for layout, and
-# enough rows to scroll past the list's 220 px max-height.
+# enough rows to scroll past the list's max-height.
 NETWORKS = [
     {"ssid": "Studio Wi-Fi", "rssi": -42, "channel": 6, "secure": True},
     {"ssid": "reflexpointKR", "rssi": -47, "channel": 11, "secure": True},
