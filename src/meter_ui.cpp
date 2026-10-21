@@ -371,8 +371,7 @@ namespace
   void historyView(lv_obj_t *parent, const MeterScreen &screen, int index)
   {
     const int y = STATUS_BAR_H + 4;
-    const String title = screen.names[index] + " - 7-day";
-    lv_obj_set_pos(text(parent, title.c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
+    lv_obj_set_pos(text(parent, screen.names[index].c_str(), &lv_font_montserrat_14, BLACK), PAD, y);
 
     // Legend top-right: "5H" with a thin line sample, "7D" with a thick one
     lv_obj_set_pos(text(parent, "5H", &lv_font_montserrat_10, BLACK), 118, y + 4);
@@ -431,46 +430,26 @@ namespace
     chartSeries(parent, points5h, cols5h, 1);
     chartSeries(parent, points7d, cols7d, 2);
 
-    // X-axis: ticks at local midnight boundaries, one-letter day labels centred on each day's slice
+    // X-axis: a tick at each local midnight, with the initial of the day that starts there centred under it
     if (newest != 0)
     {
       static const char *const DAY_INITIALS[] = {"S", "M", "T", "W", "T", "F", "S"};
       const time_t newestT = (time_t)newest;
       struct tm newestLocal;
       localtime_r(&newestT, &newestLocal);
-      // Column at the local midnight that started "today" (col 167 = newest hour)
+      // Column at the local midnight that started "today" (col 167 = newest hour). The 168 columns
+      // always hold exactly 7 midnights, the earliest at col 23 - hour.
       const int midnightCol = CHART_COLS - 1 - newestLocal.tm_hour;
-      for (int d = 0; d <= 7; d++)
+      for (int d = 0; midnightCol - d * 24 >= 0; d++)
       {
         const int col = midnightCol - d * 24;
-        if (col >= 0 && col < CHART_COLS)
-        {
-          box(parent, CHART_LEFT + col, CHART_BOTTOM + 1, 1, 2, BLACK);
-        }
-      }
-      for (int d = 0; d < 8; d++)
-      {
-        int sliceStart = midnightCol - d * 24;
-        int sliceEnd = d == 0 ? CHART_COLS - 1 : sliceStart + 23;
-        if (sliceEnd < 0)
-        {
-          break;
-        }
-        if (sliceStart < 0)
-        {
-          sliceStart = 0;
-        }
-        if (sliceEnd >= CHART_COLS)
-        {
-          sliceEnd = CHART_COLS - 1;
-        }
-        const int colCentre = (sliceStart + sliceEnd) / 2;
-        const time_t t = newestT - (time_t)(d * 86400);
-        struct tm local;
-        localtime_r(&t, &local);
-        // Single letter is ~5 px wide; shift by -2 to centre under the tick
-        lv_obj_set_pos(text(parent, DAY_INITIALS[local.tm_wday], &lv_font_montserrat_10, BLACK),
-                       CHART_LEFT + colCentre - 2, CHART_BOTTOM + 4);
+        box(parent, CHART_LEFT + col, CHART_BOTTOM + 1, 1, 2, BLACK);
+        // Counted back from today's weekday; newest - d * 86400 can land on the wrong day across DST
+        const char *initial = DAY_INITIALS[(newestLocal.tm_wday - d + 7) % 7];
+        lv_point_t size;
+        lv_text_get_size(&size, initial, &lv_font_montserrat_10, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        lv_obj_set_pos(text(parent, initial, &lv_font_montserrat_10, BLACK), CHART_LEFT + col - size.x / 2,
+                       CHART_BOTTOM + 4);
       }
     }
   }

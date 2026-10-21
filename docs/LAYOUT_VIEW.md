@@ -145,7 +145,7 @@ A history view is skipped when its account has no recorded samples yet.
 +-----------------------------------------------------------+ y=0
 | [M] [fan]          12:34               [bat] 85%          |   status bar (24)
 +-----------------------------------------------------------+ y=24
-| Claude 1 - 7-day            5H --   7D ==                 |   title (14) + legend (10)
+| Claude 1                    5H --   7D ==                 |   title (14) + legend (10)
 |                                                           |
 | 100 -|                                                    |
 |      |                                                    |
@@ -192,11 +192,15 @@ Y-axis ticks and labels at 25 % intervals (`0 / 25 / 50 / 75 / 100`),
 right of `CHART_RIGHT`. The baseline (`CHART_BOTTOM`, 0 %) carries the
 `0` label but no extra tick (the axis itself is the tick).
 
-X-axis: one tick (1 px x 2 px) per day label, 24 columns apart, 7 ticks
-total. Labels use single-letter abbreviations (`S / M / T / W / T / F /
-S`); duplicates for Sun/Sat and Tue/Thu are intentional. The newest day
-sits above the rightmost tick (col 155), each previous day 24 columns to
-the left.
+X-axis: one tick (1 px x 2 px) at each local midnight, 24 columns apart.
+The 168-column window always holds exactly 7 midnights, so there are 7
+ticks. Each tick carries the single-letter initial of the day that starts
+there (`S / M / T / W / T / F / S`; duplicates for Sun/Sat and Tue/Thu are
+intentional), centred under the tick by its measured width. The rightmost
+tick is today's midnight, at column `167 - <current hour>`. The partial
+day left of the first tick has no label. Weekdays are counted back from
+today's rather than derived from `newest - d * 86400`, so a DST change
+cannot shift a label by a day.
 
 Visibility of a line segment requires >= 2 adjacent valid columns, i.e.
 roughly 2 hours of continuous polling after a cold boot.
