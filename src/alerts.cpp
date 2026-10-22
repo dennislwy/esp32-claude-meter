@@ -2,6 +2,7 @@
 
 #include <Preferences.h>
 #include "audio_player.h"
+#include "window_reset.h"
 
 namespace
 {
@@ -30,6 +31,14 @@ const Window WINDOWS[] = {
     {"7d", "/7d-warning.wav", "/7d-depleted.wav", "/7d-reset.wav"},
 };
 constexpr int WINDOW_COUNT = sizeof(WINDOWS) / sizeof(WINDOWS[0]);
+
+// The baseline the drop test compares against. RTC memory rather than NVS: utilisation
+// changes on nearly every poll, and this namespace otherwise writes almost never.
+// main.cpp:52-64 already keeps ten RTC_DATA_ATTR variables, so the mechanism is proven.
+// A power cycle zero-initialises prevSeen, so the first poll afterwards skips the drop
+// test instead of reading prevPercent as a real previous value.
+RTC_DATA_ATTR float prevPercent[settings::CLAUDE_TOKEN_COUNT][WINDOW_COUNT];
+RTC_DATA_ATTR bool prevSeen[settings::CLAUDE_TOKEN_COUNT][WINDOW_COUNT];
 
 // NVS keys, e.g. "lvl1_5h": alert level reached in the current window; "rst1_5h": the reset time
 // we're waiting for (0 = none)
@@ -94,18 +103,24 @@ AlertOutcome evaluateAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_C
       const Level stored = (Level)(prefs.isKey(levelKey.c_str()) ? prefs.getUChar(levelKey.c_str()) : NORMAL);
       const uint32_t pendingReset = prefs.isKey(resetKey.c_str()) ? prefs.getULong(resetKey.c_str()) : 0;
 
-      if (pendingReset != 0 && now >= (time_t)pendingReset)
+      // Two ways a window resets: its reset time arrives, or its utilisation falls, which
+      // can only happen when the window was replaced early - a gifted usage-limit reset.
+      // rolledOver gates the drop test so the two never chime for the same reset.
+      const bool rolledOver = pendingReset != 0 && now >= (time_t)pendingReset;
+      const float percent = windowPercent(account, w);
+      const bool resetEarly = isEarlyWindowReset(prevSeen[i][w], prevPercent[i][w], percent, rolledOver);
+      if (rolledOver || resetEarly)
       {
-        Serial.printf("Alert: %s %s reset\n", name.c_str(), window.name);
+        Serial.printf("Alert: %s %s reset%s\n", name.c_str(), window.name, resetEarly ? " (early)" : "");
         addSound(outcome, window.resetSound);
         outcome.fired[i] = true;
       }
 
       // Rising only: a drop (after a reset, or a raised threshold) just updates the stored level
-      const Level level = levelFor(windowPercent(account, w), w);
+      const Level level = levelFor(percent, w);
       if (level > stored)
       {
-        Serial.printf("Alert: %s %s %s (%.0f%%)\n", name.c_str(), window.name, LEVEL_NAMES[level], windowPercent(account, w));
+        Serial.printf("Alert: %s %s %s (%.0f%%)\n", name.c_str(), window.name, LEVEL_NAMES[level], percent);
         addSound(outcome, level == DEPLETED ? window.depletedSound : window.warningSound);
         outcome.fired[i] = true;
       }
@@ -120,6 +135,11 @@ AlertOutcome evaluateAlerts(const AccountUsage accounts[settings::CLAUDE_TOKEN_C
       {
         prefs.putULong(resetKey.c_str(), nextReset);
       }
+
+      // The loop already skipped accounts with no data or a failed poll, so a failed poll
+      // leaves the last good reading here to compare the next one against.
+      prevPercent[i][w] = percent;
+      prevSeen[i][w] = true;
     }
   }
   prefs.end();
@@ -177,8 +197,15 @@ void printAlertState()
         localtime_r(&reset, &local);
         strftime(when, sizeof(when), "%Y-%m-%d %H:%M", &local);
       }
-      Serial.printf("  %-20s %s  %-8s  reset alert at %s\n", settings::accountName(i + 1).c_str(), WINDOWS[w].name,
-                    LEVEL_NAMES[level < 3 ? level : 0], when);
+      // The drop baseline is RTC-only, so this is the one way to confirm it survived a
+      // deep sleep without spending a gifted reset.
+      char last[12] = "none";
+      if (prevSeen[i][w])
+      {
+        snprintf(last, sizeof(last), "%.0f%%", prevPercent[i][w]);
+      }
+      Serial.printf("  %-20s %s  %-8s  reset alert at %s  last %s\n", settings::accountName(i + 1).c_str(),
+                    WINDOWS[w].name, LEVEL_NAMES[level < 3 ? level : 0], when, last);
     }
   }
   prefs.end();
