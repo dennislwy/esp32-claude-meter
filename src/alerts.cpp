@@ -217,4 +217,15 @@ void clearAlertState()
   prefs.begin(NAMESPACE, false);
   prefs.clear();
   prefs.end();
+
+  // The drop baseline is RTC-resident, so clearing NVS alone would leave the next poll
+  // comparing against a pre-clear reading.
+  for (int i = 0; i < settings::CLAUDE_TOKEN_COUNT; i++)
+  {
+    for (int w = 0; w < WINDOW_COUNT; w++)
+    {
+      prevPercent[i][w] = 0.0f;
+      prevSeen[i][w] = false;
+    }
+  }
 }

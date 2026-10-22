@@ -60,15 +60,16 @@ the last-seen level stored in NVS (namespace `alerts`, keys
   `src/window_reset.cpp` decides the second case, and it is suppressed
   when the first already fired for the same window in the same pass, so
   one reset never chimes twice.
-- Only the fall is used, never the reset timestamp moving. Measured
-  2026-10-22: a gift moved the 5-hour reset time but left the 7-day
-  reset time unchanged, so a timestamp test would miss every 7-day
-  gift.
+- For detecting an early reset, only the fall is used, never the reset
+  timestamp moving. Measured 2026-10-22: a gift moved the 5-hour reset
+  time but left the 7-day reset time unchanged, so a timestamp test
+  would miss every 7-day gift.
 - The fall is measured against `prevPercent` / `prevSeen` in
   `src/alerts.cpp`, which live in RTC memory rather than NVS because
   utilisation changes on nearly every poll. They survive deep sleep; a
   power cycle clears them, so the first poll afterwards skips the fall
-  test rather than guessing.
+  test rather than guessing. A failed poll leaves the last good reading
+  as the baseline, so a gift is still detected after an outage.
 - A gift zeroes both windows, so both reset WAVs play in sequence.
 - Accounts whose latest poll failed are skipped.
 - Multiple accounts can request the same WAV in a single poll; the
@@ -119,7 +120,7 @@ Quiet hours can be disabled entirely with `quiet off`.
 | Command | Effect |
 | --- | --- |
 | `alerts` | Print the stored alert level, pending reset time, and last-seen utilisation for each (account, window) |
-| `alerts clear` | Wipe the `alerts` NVS namespace. The next poll re-alerts for anything above a threshold |
+| `alerts clear` | Wipe the `alerts` NVS namespace and the RTC drop baseline. The next poll re-alerts for anything above a threshold, but skips the reset check for that poll while it repopulates the baseline |
 | `warn5h <50-99>` / `warn7d <50-99>` | Change the warning threshold per window |
 | `quiet on` / `quiet off` | Enable or disable quiet hours |
 | `quiet <start>-<end>` | Set the quiet-hours window (24-h local, e.g. `quiet 22-8`) |

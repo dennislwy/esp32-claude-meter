@@ -27,8 +27,11 @@ int main()
   // 0-1 fraction with two decimals.
   assert(isEarlyWindowReset(true, 50.0f, 49.0f, false));
 
-  // Below the margin, so indistinguishable from float noise
+  // Below the margin, and under the 1-point granularity of real readings
   assert(!isEarlyWindowReset(true, 50.0f, 49.7f, false));
+
+  // Pins the margin from above: a larger margin would miss this fall
+  assert(isEarlyWindowReset(true, 50.0f, 49.4f, false));
 
   // The margin is exclusive: exactly half a point is not a drop
   assert(!isEarlyWindowReset(true, 50.0f, 49.5f, false));
