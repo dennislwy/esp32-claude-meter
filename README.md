@@ -34,7 +34,7 @@ Requires [PlatformIO](https://platformio.org/).
 ```sh
 pio run                  # compile
 pio run -t upload        # flash firmware over USB (COM5 on Windows)
-pio run -t uploadfs      # upload data/ (WAV sounds) to LittleFS
+pio run -t uploadfs      # upload the sound theme (data_dir) to LittleFS
 pio device monitor       # serial console at 115200 bps
 ```
 
@@ -221,7 +221,8 @@ scripts/       build_info.py (git revision; FW_VERSION is set in src/build_info.
                panel_preview.py and provision_preview.py (run the embedded pages
                without a board), chart_bundle/ (ECharts build), check_panel_ui.cjs
 test/          host-side checks: hostname, panel_poll, pause_hours, pin_entry, reset_time
-data/          LittleFS payload: WAV alert sounds (gitignored)
+sounds/        LittleFS payload: one folder of six WAVs per theme (gitignored)
+sound-sources/ original audio (MP3s, credits) the themes were made from (gitignored)
 docs/          design notes: modes, battery, alert sounds, web panel, memory footprint
 ```
 

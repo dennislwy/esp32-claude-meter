@@ -25,6 +25,40 @@ are intentionally gitignored (`*.wav` in `.gitignore`) — the repo keeps
 the firmware honest about licensing and lets each user drop in their
 own audio.
 
+### Sound themes
+
+Each theme is a folder of the same six WAVs under `sounds/`. The
+original audio a theme was made from (MP3s, credits) lives in a
+matching folder under `sound-sources/`, so it is never flashed. Both
+trees are gitignored.
+
+```
+sounds/
+  jarvis/          the six WAVs, nothing else
+  mario/
+sound-sources/
+  jarvis/          5h-warning.mp3 ... and README.md
+```
+
+`data_dir` in the `[platformio]` section of `platformio.ini` picks the
+theme `uploadfs` flashes:
+
+```ini
+[platformio]
+data_dir = sounds/jarvis
+```
+
+`uploadfs` packs *everything* in that folder, subfolders included, into
+the 1.5 MB partition — keep a theme folder to its six WAVs. To flash a
+different theme once without editing the file:
+
+```sh
+PLATFORMIO_DATA_DIR=sounds/mario pio run -t uploadfs
+```
+
+A new theme is a new `sounds/<name>/` folder with the six filenames
+below; the firmware plays fixed paths and needs no change.
+
 | File | When it plays |
 | --- | --- |
 | `/5h-warning.wav` | 5-hour usage crosses the warning threshold |
@@ -157,7 +191,7 @@ Stereo *works*, but we convert source material to mono because:
    reason — stereo content would just get summed in the air.
 2. **Half the file size.** LittleFS lives in the same 8 MB flash as
    the firmware. Uncompressed 16-bit PCM costs 32 kB per second at
-   16000 Hz mono, double that in stereo. The six shipped sounds run
+   16000 Hz mono, double that in stereo. The Mario theme's six sounds run
    2.7-6.7 s and total 871 kB of the 1.5 MB partition — stereo would
    not fit, for zero audible benefit.
 3. **Faster `uploadfs`** and less flash wear every time the WAVs
@@ -189,11 +223,26 @@ For a louder result without re-recording, add gain (ffmpeg clips at
 ffmpeg -i source.mp3 -ac 1 -ar 16000 -sample_fmt s16 -af "volume=6dB" 5h-warning.wav
 ```
 
-For a one-shot batch (all six files at once from a `src_sfx/` dir):
+To keep themes at the same perceived volume, normalise loudness rather
+than adding fixed gain. The existing themes sit at -16 LUFS integrated
+with peaks at or below -1.5 dBTP:
 
 ```sh
-for f in src_sfx/*.mp3; do
-  ffmpeg -y -i "$f" -ac 1 -ar 16000 -sample_fmt s16 "data/$(basename "${f%.mp3}").wav"
+ffmpeg -i source.mp3 -af "loudnorm=I=-16:TP=-1.5:LRA=11" -ac 1 -ar 16000 -sample_fmt s16 5h-warning.wav
+```
+
+Check a file's loudness with
+`ffmpeg -i 5h-warning.wav -af ebur128 -f null -` (the `I:` line in the
+summary).
+
+For a one-shot batch (all six files of a theme at once):
+
+```sh
+theme=jarvis
+mkdir -p "sounds/$theme"
+for f in "sound-sources/$theme"/*.mp3; do
+  ffmpeg -y -i "$f" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -ac 1 -ar 16000 -sample_fmt s16 \
+    "sounds/$theme/$(basename "${f%.mp3}").wav"
 done
 ```
 
@@ -212,7 +261,7 @@ the flags above.
 ## First-time setup
 
 A fresh board with no WAVs on LittleFS still runs — alerts just make
-no sound. Upload the WAVs once with:
+no sound. Upload the `data_dir` theme once with:
 
 ```sh
 pio run -t uploadfs
@@ -220,6 +269,11 @@ pio run -t uploadfs
 
 LittleFS survives firmware flashes, so subsequent `pio run -t upload`
 calls don't need `uploadfs`.
+
+Run `upload` and `uploadfs` as separate commands. `pio run -t upload -t
+uploadfs` turns PlatformIO's library dependency finder off for the
+whole run, and the firmware then fails to compile with missing headers
+(`epaper.h`, `LittleFS.h`, ...).
 
 ## Known limitations
 

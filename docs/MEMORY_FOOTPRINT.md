@@ -18,7 +18,7 @@ thing it prints before building the binary.
 The 8 MB octal PSRAM is a separate address space and is not counted in the
 RAM figure. LVGL draw buffers and the panel's larger allocations live there.
 
-The sound figure is the raw size of `data/`; the LittleFS image carries
+The sound figure is the raw size of the `sounds/mario/` theme; the LittleFS image carries
 block and metadata overhead on top, so usable free space is somewhat less
 than 665 KB.
 
@@ -66,7 +66,7 @@ difference from the ELF-derived figure is expected.
 
 ## Things that move these numbers
 
-- **WAV files** dominate the filesystem. Six sounds in `data/` account for
+- **WAV files** dominate the filesystem. The six sounds of the flashed theme account for
   essentially all of its 871 KB; the history ring is small by comparison.
 - **Embedded assets** count against firmware, not the filesystem: the two
   root CA bundles in `assets/certs/` and the gzipped ECharts bundle in
