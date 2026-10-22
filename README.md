@@ -172,7 +172,7 @@ While the board is locked the console answers only `help`, `status`, `creds`,
   battery. See [docs/MODES.md](docs/MODES.md).
 
 The usage ring survives power cycles (persisted to LittleFS; written only
-when the 30-min slot advances — ~48 writes/day).
+when the 15-min slot advances — ~96 writes/day).
 
 ### Device views
 

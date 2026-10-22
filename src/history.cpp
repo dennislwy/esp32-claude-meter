@@ -12,15 +12,29 @@ constexpr uint32_t TIME_SANE_EPOCH = 1700000000UL;
 const char *const HIST_PATH = "/history.bin";
 
 constexpr uint32_t HIST_MAGIC = 0x31484D43; // "CMH1" little-endian
-constexpr uint16_t HIST_VERSION = 1;
+constexpr uint16_t HIST_VERSION = 2;
 
 struct HistFile
 {
   uint32_t magic;
   uint16_t version;
   uint16_t accountCount; // sanity check against build-time CLAUDE_TOKEN_COUNT
-  uint32_t lastAbsSlot;  // absolute slot (epoch/1800) of the newest sample
+  uint32_t lastAbsSlot;  // absolute slot (epoch/HIST_SLOT_SEC) of the newest sample
   HistSlot ring[settings::CLAUDE_TOKEN_COUNT][HIST_SLOTS];
+};
+
+// Version 1: the same header, but 336 slots of 1800 s. Read so an existing
+// 7-day history survives the move to 15-minute sampling.
+constexpr uint16_t V1_SLOTS = 336;
+static_assert(HIST_SLOTS == V1_SLOTS * 2, "v1 migration assumes two new slots per old one");
+
+struct HistFileV1
+{
+  uint32_t magic;
+  uint16_t version;
+  uint16_t accountCount;
+  uint32_t lastAbsSlot;
+  HistSlot ring[settings::CLAUDE_TOKEN_COUNT][V1_SLOTS];
 };
 
 HistFile hist;
@@ -31,6 +45,25 @@ void clearRing()
 {
   memset(hist.ring, HIST_EMPTY, sizeof(hist.ring));
   hist.lastAbsSlot = 0;
+}
+
+// A v1 slot spanned 1800 s, so it covers the two 900 s slots at 2*abs and
+// 2*abs+1; both get its value. HIST_SLOTS is exactly twice V1_SLOTS, so the
+// ring index doubles the same way the absolute slot does and the whole 7-day
+// window lands in the same place it occupied before.
+void upsampleV1(const HistFileV1 &old)
+{
+  clearRing();
+  for (int a = 0; a < settings::CLAUDE_TOKEN_COUNT; a++)
+  {
+    for (uint16_t i = 0; i < V1_SLOTS; i++)
+    {
+      hist.ring[a][i * 2] = old.ring[a][i];
+      hist.ring[a][i * 2 + 1] = old.ring[a][i];
+    }
+  }
+  // The newer half of the old slot, so the next poll doesn't blank it as a gap
+  hist.lastAbsSlot = old.lastAbsSlot == 0 ? 0 : old.lastAbsSlot * 2 + 1;
 }
 
 void persist()
@@ -69,14 +102,35 @@ void historyInit()
   {
     return;
   }
-  HistFile onDisk;
-  const bool ok = f.read((uint8_t *)&onDisk, sizeof(onDisk)) == sizeof(onDisk) &&
-                  onDisk.magic == HIST_MAGIC && onDisk.version == HIST_VERSION &&
-                  onDisk.accountCount == settings::CLAUDE_TOKEN_COUNT;
-  f.close();
-  if (ok)
+  // The size tells the versions apart before any of the body is trusted
+  const size_t size = f.size();
+  bool migrated = false;
+  if (size == sizeof(HistFile))
   {
-    hist = onDisk;
+    HistFile onDisk;
+    if (f.read((uint8_t *)&onDisk, sizeof(onDisk)) == sizeof(onDisk) &&
+        onDisk.magic == HIST_MAGIC && onDisk.version == HIST_VERSION &&
+        onDisk.accountCount == settings::CLAUDE_TOKEN_COUNT)
+    {
+      hist = onDisk;
+    }
+  }
+  else if (size == sizeof(HistFileV1))
+  {
+    HistFileV1 old;
+    if (f.read((uint8_t *)&old, sizeof(old)) == sizeof(old) && old.magic == HIST_MAGIC &&
+        old.version == 1 && old.accountCount == settings::CLAUDE_TOKEN_COUNT)
+    {
+      upsampleV1(old);
+      migrated = true;
+    }
+  }
+  f.close();
+  if (migrated)
+  {
+    // Rewrite now so the upsample runs once, not on every boot
+    persist();
+    Serial.println("History: upsampled 30-min samples to 15-min slots");
   }
 }
 
@@ -207,7 +261,7 @@ void printHistoryState()
   struct tm local;
   localtime_r(&newest, &local);
   strftime(when, sizeof(when), "%Y-%m-%d %H:%M", &local);
-  Serial.printf("History: 30-min slots, newest %s (slot %u)\n", when, hist.lastAbsSlot);
+  Serial.printf("History: 15-min slots, newest %s (slot %u)\n", when, hist.lastAbsSlot);
   for (int a = 0; a < settings::CLAUDE_TOKEN_COUNT; a++)
   {
     uint16_t filled = 0;

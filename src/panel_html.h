@@ -288,7 +288,7 @@ function loadHistoryEngine(){
   return histEnginePromise;
 }
 function historyTickHours(){
-  const span=(lastHistData?.cols||336)*(lastHistData?.col_seconds||1800)/3600;
+  const span=(lastHistData?.cols||672)*(lastHistData?.col_seconds||900)/3600;
   const hours=span*(histZoom.end-histZoom.start)/100;
   const plotWidth=Math.max(1,(histChart?.getWidth()||innerWidth)-58);
   const maxLabels=Math.max(2,Math.floor(plotWidth/48));
@@ -339,7 +339,7 @@ function updateHistoryLegend(series){
 }
 function historyZoom(start,end){
   if(!histChart||!lastHistData)return;
-  const minSpan=100/Math.max(1,(lastHistData.cols||336)-1);
+  const minSpan=100/Math.max(1,(lastHistData.cols||672)-1);
   const span=Math.max(minSpan,Math.min(100,end-start));
   start=Math.max(0,Math.min(100-span,start));
   histChart.dispatchAction({type:'dataZoom',start,end:start+span});
@@ -355,7 +355,7 @@ function toggleHistoryZoomAt(clientX,clientY){
   if(histZoom.end-histZoom.start<99.9)historyZoom(0,100);
   else{
     const col=histChart.convertFromPixel({xAxisIndex:0},point[0]);
-    zoomHistoryBy(0.5,100*col/Math.max(1,(lastHistData?.cols||336)-1));
+    zoomHistoryBy(0.5,100*col/Math.max(1,(lastHistData?.cols||672)-1));
   }
 }
 function bindHistoryZoomGestures(){
@@ -418,7 +418,7 @@ async function renderHistory(data){
     }
     const css=getComputedStyle(document.documentElement),color=name=>css.getPropertyValue(name).trim();
     const dim=color('--dim'),line=color('--line'),text=color('--text'),card=color('--card'),colors=[color('--account-1'),color('--blue')];
-    const cols=data.cols||336,step=data.col_seconds||1800;
+    const cols=data.cols||672,step=data.col_seconds||900;
     const lastEpoch=Math.floor(data.newest_epoch||deviceNow||Date.now()/1000)-1;
     // Snap columns to local :00/:30 so historyTicks still finds whole hours in zones with a
     // fractional UTC offset, where the device's UTC-aligned slots would never land on :00.
@@ -506,7 +506,7 @@ function withCsvDatetime(text){
   }).join('\r\n');
 }
 
-// Downloads the raw 30-min history as CSV; the device names the file after the first and last sample
+// Downloads the raw 15-min history as CSV; the device names the file after the first and last sample
 async function exportHistoryCsv(){
   const status=$('chartStatus');
   try{

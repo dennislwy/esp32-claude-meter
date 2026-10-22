@@ -315,7 +315,11 @@ namespace
 
   // Chart geometry (used by historyView and chartSeries). Shifted left so the right-side
   // y-axis labels ("100", "50", "0") fit within the 200-px panel.
-  constexpr int CHART_COLS = HIST_SLOTS / 2; // 168 columns, 1 col = 1 hour
+  // One column per hour: the panel is only 200 px wide, so the 15-min slots are
+  // max-downsampled in groups of four rather than plotted one-to-one
+  constexpr int SLOTS_PER_COL = 3600 / HIST_SLOT_SEC;    // 4
+  constexpr int CHART_COLS = HIST_SLOTS / SLOTS_PER_COL; // 168 columns, 1 col = 1 hour
+  static_assert(HIST_SLOTS % SLOTS_PER_COL == 0, "columns must tile the ring exactly");
   constexpr int CHART_LEFT = 6;
   constexpr int CHART_RIGHT = CHART_LEFT + CHART_COLS; // 174
   constexpr int CHART_TOP = 50;
@@ -396,7 +400,7 @@ namespace
       lv_obj_set_pos(text(parent, buf, &lv_font_montserrat_10, BLACK), CHART_RIGHT + 2, yTick - 5);
     }
 
-    // Snapshot and downsample to one column per hour, max of the two 30-min samples
+    // Snapshot and downsample to one column per hour, max of the hour's samples
     HistSlot buf[HIST_SLOTS];
     uint32_t newest = 0;
     historySnapshot(index, buf, newest);
@@ -404,25 +408,19 @@ namespace
     uint8_t cols7d[CHART_COLS];
     for (int c = 0; c < CHART_COLS; c++)
     {
-      const HistSlot &a = buf[c * 2];
-      const HistSlot &b = buf[c * 2 + 1];
       uint8_t h5 = HIST_EMPTY;
-      if (a.h5 != HIST_EMPTY)
-      {
-        h5 = a.h5;
-      }
-      if (b.h5 != HIST_EMPTY && (h5 == HIST_EMPTY || b.h5 > h5))
-      {
-        h5 = b.h5;
-      }
       uint8_t d7 = HIST_EMPTY;
-      if (a.d7 != HIST_EMPTY)
+      for (int s = c * SLOTS_PER_COL; s < (c + 1) * SLOTS_PER_COL; s++)
       {
-        d7 = a.d7;
-      }
-      if (b.d7 != HIST_EMPTY && (d7 == HIST_EMPTY || b.d7 > d7))
-      {
-        d7 = b.d7;
+        const HistSlot &slot = buf[s];
+        if (slot.h5 != HIST_EMPTY && (h5 == HIST_EMPTY || slot.h5 > h5))
+        {
+          h5 = slot.h5;
+        }
+        if (slot.d7 != HIST_EMPTY && (d7 == HIST_EMPTY || slot.d7 > d7))
+        {
+          d7 = slot.d7;
+        }
       }
       cols5h[c] = h5;
       cols7d[c] = d7;

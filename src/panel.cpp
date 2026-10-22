@@ -560,7 +560,7 @@ namespace
   {
     if (!requireAuth())
       return;
-    constexpr int COLS = HIST_SLOTS; // 336 half-hour columns, the device's full resolution
+    constexpr int COLS = HIST_SLOTS; // 672 quarter-hour columns, the device's full resolution
     HistSlot buf[HIST_SLOTS];
     JsonDocument d;
     d["cols"] = COLS;
@@ -595,7 +595,7 @@ namespace
     sendJson(200, d);
   }
 
-  // Raw 30-min samples as CSV: timestamp (slot start, epoch seconds), then 5h and 7d % per
+  // Raw 15-min samples as CSV: timestamp (slot start, epoch seconds), then 5h and 7d % per
   // account. Rows with no sample for any account (device off) are left out; a missing value for
   // one account is an empty cell.
   void handleHistoryCsv()

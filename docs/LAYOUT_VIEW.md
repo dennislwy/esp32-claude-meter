@@ -185,7 +185,8 @@ Chart geometry:
 
 | Element       | Value                 | Purpose                           |
 | ------------- | --------------------- | --------------------------------- |
-| `CHART_COLS`  | 168                   | One column per hour (`HIST_SLOTS / 2`) |
+| `SLOTS_PER_COL` | 4                   | 15-min slots per hourly column (`3600 / HIST_SLOT_SEC`) |
+| `CHART_COLS`  | 168                   | One column per hour (`HIST_SLOTS / SLOTS_PER_COL`) |
 | `CHART_LEFT`  | 6                     | Left edge of plot                 |
 | `CHART_RIGHT` | 174                   | Right edge (= LEFT + COLS)        |
 | `CHART_TOP`   | 50                    | Top of plot                       |
@@ -194,10 +195,10 @@ Chart geometry:
 
 Data pipeline:
 
-1. `historySnapshot(index, buf, newest)` fills a 336-slot stack buffer
+1. `historySnapshot(index, buf, newest)` fills a 672-slot stack buffer
    oldest-to-newest.
-2. Downsample 2 adjacent slots per column (`max`, so sawtooth peaks
-   survive): `cols[c] = max(buf[2c], buf[2c+1])`.
+2. Downsample `SLOTS_PER_COL` (4) adjacent slots per column with `max`, so
+   sawtooth peaks survive the 15-min → 1-hour reduction.
 3. For each series, group contiguous non-`HIST_EMPTY` columns and emit
    one `lv_line` widget per segment. `HIST_EMPTY` columns become line
    breaks, so off-device gaps stay visible.

@@ -45,7 +45,7 @@ const initialState = {
   const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { executablePath: process.argv[3] } : {}) });
   const errors = [], posts = [], external = [];
   let signedIn = false, state = structuredClone(initialState), loginThrottle = false, offline = false, clearHistory = false, newsFetching = false, csvEmpty = false;
-  const HIST_COLS = 336; // the device's full resolution: 7 days of 30-minute slots
+  const HIST_COLS = 672; // the device's full resolution: 7 days of 15-minute slots
   const csvBody = 'timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d\r\n1791000000,12,40,3,\r\n1791001800,14,41,,\r\n';
   // The device sends epoch seconds; the browser prepends datetime in its own zone, so the two
   // contexts below must produce different clock times from the identical response body.
@@ -71,7 +71,7 @@ const initialState = {
     if (!signedIn) return reply({ error: 'auth' }, 401);
     if (endpoint === '/api/logout') { signedIn = false; return reply({ ok: true }); }
     if (endpoint === '/api/state') return reply(state);
-    if (endpoint === '/api/history') return reply({ cols: HIST_COLS, col_seconds: 1800, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:i%40), d7: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:20+i%50) })) });
+    if (endpoint === '/api/history') return reply({ cols: HIST_COLS, col_seconds: 900, newest_epoch: now, accounts: state.accounts.map(a => ({ name: a.name, h5: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:i%40), d7: Array.from({length:HIST_COLS},(_,i)=>clearHistory||i===50?null:20+i%50) })) });
     if (endpoint === '/api/news') return reply({ ok: true, fetching: newsFetching, fetched_epoch: now, items: Array.from({ length: 8 }, (_, i) => ({ title: i ? 'Preview headline ' + i : '<img src=x onerror="window.injected=true">', date: 'Oct 5, 2026', link: i ? 'https://www.anthropic.com/news' : 'javascript:alert(1)' })) });
     if (endpoint === '/api/settings') {
       if (body.hostname === 'rejected-by-dev') return reply({ error: 'bad_hostname' }, 400);

@@ -561,7 +561,7 @@ disabled for the live interval check and restored afterward.
 The solid 5-hour series narrowed from 1.6 px to 1.2 px (the dashed 7-day
 series stays at 1 px, superseding the 1.4 px figure recorded earlier). Solid
 versus dashed already separates the two windows, so the extra weight was only
-adding visual noise at full 30-minute resolution; 1.2 px keeps the 5-hour line
+adding visual noise at full sample resolution; 1.2 px keeps the 5-hour line
 the dominant one without it reading as a thick band.
 
 The panel remembers the open page across a browser refresh. `selectView`

@@ -92,7 +92,7 @@ below one minute, then whole minutes rounded down, such as `Updated 120m ago`.
 
 ## 7-day history
 
-Apache ECharts 6.1.0 chart in Usage, with 336 half-hour columns — the device's
+Apache ECharts 6.1.0 chart in Usage, with 672 quarter-hour columns — the device's
 full ring resolution. Its compressed library is served locally from firmware
 flash and loaded after sign-in.
 
@@ -117,7 +117,7 @@ flash and loaded after sign-in.
   downloads the raw 7-day history as
   `claude-meter-<first-timestamp>-<last-timestamp>.csv`. Columns:
   `datetime,timestamp,acct1-5h,acct1-7d,acct2-5h,acct2-7d`, where `timestamp`
-  is the start of the 30-minute sample slot in epoch seconds, `datetime` is
+  is the start of the 15-minute sample slot in epoch seconds, `datetime` is
   that slot rendered `dd-MMM-yyyy HH:mm:ss` in the **browser's** time zone,
   and the values are usage %. Only the browser knows the reader's zone, so the
   firmware sends epoch seconds and the panel widens each row before saving.
@@ -128,7 +128,7 @@ flash and loaded after sign-in.
   Account names are rendered as text, including inside tooltips. Mobile
   taps preserve line colors, widths, and opacity without focusing one
   series or dimming the others
-- On mobile (up to 760 px), the x-axis pointer snaps to 30-minute samples,
+- On mobile (up to 760 px), the x-axis pointer snaps to 15-minute samples,
   uses a 1 px line, and hides its time label. Tap tooltips still show
   device-local time.
   A visible 16 px handle is centered on the x-axis and can be dragged
@@ -149,7 +149,7 @@ flash and loaded after sign-in.
 - No recorded samples show an explicit empty state
 - A library-loading failure shows a Retry chart button; other views remain usable
 
-Served at the ring's native resolution: all 336 half-hour slots, with `cols`
+Served at the ring's native resolution: all 672 quarter-hour slots, with `cols`
 and `col_seconds` in the payload so the chart derives its own tick spacing
 rather than assuming one column per hour.
 

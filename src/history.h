@@ -4,12 +4,12 @@
 #include "settings.h"
 #include "usage_poll.h"
 
-// Per-account 7-day usage history: one slot per 30 minutes, 336 slots per
-// account, ~1.3 KB total. Slots are addressed by absolute index (epoch/1800)
+// Per-account 7-day usage history: one slot per 15 minutes, 672 slots per
+// account, ~2.6 KB total. Slots are addressed by absolute index (epoch/900)
 // so gaps while the device was off stay visible as gaps. Persisted to LittleFS
-// only when the slot advances (48 writes/day — wear-irrelevant).
-constexpr uint16_t HIST_SLOTS = 336;
-constexpr uint32_t HIST_SLOT_SEC = 1800;
+// only when the slot advances (96 writes/day — wear-irrelevant).
+constexpr uint16_t HIST_SLOTS = 672;
+constexpr uint32_t HIST_SLOT_SEC = 900;
 constexpr uint8_t HIST_EMPTY = 0xFF;
 
 struct HistSlot

@@ -166,9 +166,9 @@ formatter. Neither formatter switches to days.
 
 ### `/api/history` resolution
 
-336 slots × 2 accounts live in the ring (`src/history.cpp`, 30-min
-samples). The endpoint returns all **336 half-hour columns** per account at
-full resolution; `cols` and `col_seconds` (1800) describe the grid so the UI
+672 slots × 2 accounts live in the ring (`src/history.cpp`, 15-min
+samples). The endpoint returns all **672 quarter-hour columns** per account at
+full resolution; `cols` and `col_seconds` (900) describe the grid so the UI
 never assumes a column width. Empty slots become JSON `null` so the UI
 renders gaps as broken line segments.
 
