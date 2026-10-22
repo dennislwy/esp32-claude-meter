@@ -496,9 +496,7 @@ namespace
     lv_draw_buf_clear(buf, NULL);
     lv_canvas_set_palette(canvas, 0, lv_color_to_32(WHITE, LV_OPA_COVER));
     lv_canvas_set_palette(canvas, 1, lv_color_to_32(BLACK, LV_OPA_COVER));
-    // The image cache is keyed on the buffer address, and a fresh allocation can land on
-    // a freed one, which would render the previous panel entry's QR. lv_qrcode_update()
-    // drops the entry for the same reason (lv_qrcode.c:107).
+    // Belt and braces: mirrors what lv_qrcode_update() does (lv_qrcode.c:107).
     lv_image_cache_drop(buf);
 
     // For an indexed format lv_canvas_set_px takes the palette index as a colour.

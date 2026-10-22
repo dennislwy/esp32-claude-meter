@@ -326,8 +326,8 @@ window ends. It does not put an active panel session to sleep.
   "GET does not mutate": a phone camera can only issue a navigation. The
   PIN is the secret that authorises it, and anyone holding the PIN could
   call `/api/login` instead. The PIN is regenerated every time the panel
-  opens and wiped when it closes, so a photographed QR code or a browser
-  history entry is worthless afterwards.
+  opens and invalidated when it closes, so a photographed QR code or a
+  browser history entry is worthless afterwards.
 
 ## Troubleshooting
 
@@ -341,6 +341,7 @@ window ends. It does not put an active panel session to sleep.
 | 401 "auth" after a while                 | Session evicted (new login elsewhere, or reboot). The panel returns to the PIN screen automatically   |
 | Scan returns `[]`                        | Scan completed but no networks visible on 2.4 GHz; try moving the device                              |
 | Serial `panel` doesn't start the server  | Device not in debug mode (no serial), or Wi-Fi not configured. Enter debug mode (long BOOT+PWR) first |
+| Scanned QR but got the sign-in page      | QR is stale (PIN regenerates on every panel open), or login throttle is active. Exit and re-enter panel mode, then rescan; or type the six-digit code shown beside the QR |
 
 ## Provisioning (Phase 2)
 

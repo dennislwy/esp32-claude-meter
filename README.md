@@ -146,8 +146,8 @@ While the board is locked the console answers only `help`, `status`, `creds`,
   view until the next poll.
 - **Web Panel**: a long `BOOT` press opens a browser control panel on
   your Wi-Fi; another long `BOOT` press closes it. The ePaper shows the
-  panel's `.local` and IP URLs, a QR code for the IP URL to scan with a phone,
-  and the six-digit sign-in code. Time zone (default Asia/Kuala_Lumpur)
+  panel's `.local` and IP URLs, a QR code that signs you in when scanned,
+  and the six-digit code for typing in by hand. Time zone (default Asia/Kuala_Lumpur)
   and screen rotation (default 0°) are set there, along with tokens,
   Wi-Fi, the Device PIN, alerts, sounds, and the mDNS device name (applied at the next
   restart). Usage continues polling automatically at the

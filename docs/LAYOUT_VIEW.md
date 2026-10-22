@@ -272,11 +272,10 @@ module. URL schemes are case-insensitive (RFC 3986 §3.1).
 | Exit hint          | bottom-centred, one line up       | Montserrat 12            | `Long BOOT = exit`                                 |
 | Battery warning    | bottom-centred, 2 px above edge   | Montserrat 12            | `Wi-Fi on, drains fast`                            |
 
-QR sizing: any IP URL (`http://255.255.255.255` at most, 22 bytes) is a
-version 2 code at LVGL's ECC level M — 25 modules — so 75 px is exactly
-3 px per module. The white screen around the code is its quiet zone. The
-widest six-digit code at 28 px is ~3 px wider than the 107 px column;
-centring lets it spill evenly into the margins.
+QR sizing: the payload described above fits a version 2 code — 25 modules
+— so 75 px is exactly 3 px per module. The white screen around the code
+is its quiet zone. The widest six-digit code at 28 px is ~3 px wider than
+the 107 px column; centring lets it spill evenly into the margins.
 
 ## Setup view (AP provisioning mode)
 

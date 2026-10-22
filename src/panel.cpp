@@ -232,10 +232,22 @@ namespace
   // could call /api/login instead.
   void handleQrLogin()
   {
-    uint32_t retryS;
-    if (!throttled(retryS))
+    // If the request already carries a valid session, refresh it rather than minting
+    // a new slot. GET is replayable (history, back button, link previews), and with
+    // MAX_SESSIONS=4 four replays would evict every other client.
+    const int existing = findSession();
+    if (existing >= 0)
     {
-      startSession();
+      sessions[existing].lastSeenMs = millis();
+      lastActivityMs = millis();
+    }
+    else
+    {
+      uint32_t retryS;
+      if (!throttled(retryS))
+      {
+        startSession();
+      }
     }
     // Either way the browser lands on "/", where tryBoot() probes /api/state and shows
     // the dashboard or the sign-in form. A lockout earned by guessing must not be
