@@ -839,11 +839,18 @@ namespace
 
   void handleNotFound()
   {
-    // A six-digit path is a guess at the QR login route. Charge it to the same throttle
-    // as /api/login, or that GET route would be an unthrottled million-guess surface.
+    // A six-digit path is either a guess at the QR login route or a scan of a QR code
+    // from an earlier panel session, since the PIN is regenerated on every open. Charge
+    // it to the same throttle as /api/login, or that GET route would be an unthrottled
+    // million-guess surface, then send it to the sign-in form rather than a dead end: a
+    // stale scan is the common case, and a guesser learns nothing from the redirect that
+    // a correct guess would not already have told them.
     if (isPanelQrLoginPath(server->uri().c_str()))
     {
       throttleFail();
+      server->sendHeader("Location", "/");
+      server->send(302, "text/plain", "");
+      return;
     }
     server->send(404, "text/plain", "not found");
   }
