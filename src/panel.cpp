@@ -15,6 +15,7 @@
 #include "history.h"
 #include "news.h"
 #include "panel_html.h"
+#include "panel_qr.h"
 #include "panel_usage_poll.h"
 #include "secret_store.h"
 #include "hostname.h"
@@ -167,28 +168,11 @@ namespace
     server->send_P(200, "text/html", PANEL_HTML);
   }
 
-  void handleLogin()
+  // Allocates a session slot, sets the sid cookie and clears the login throttle. Shared
+  // by the PIN POST and the scanned QR path so the two cannot drift apart. The caller
+  // sends the response body.
+  void startSession()
   {
-    JsonDocument body;
-    if (!readJsonBody(body))
-      return;
-    uint32_t retryS;
-    if (throttled(retryS))
-    {
-      server->sendHeader("Retry-After", String(retryS));
-      JsonDocument d;
-      d["error"] = "throttled";
-      d["retry_s"] = retryS;
-      sendJson(429, d);
-      return;
-    }
-    const char *pin = body["pin"] | "";
-    if (strlen(pin) != 6 || strcmp(pin, pinCode) != 0)
-    {
-      throttleFail();
-      sendErr(401, "auth");
-      return;
-    }
     loginFails = 0;
     int slot = 0;
     for (int i = 0; i < MAX_SESSIONS; i++)
@@ -212,9 +196,52 @@ namespace
     for (int i = 0; i < 16; i++)
       sprintf(sid + i * 2, "%02x", session.id[i]);
     server->sendHeader("Set-Cookie", String("sid=") + sid + "; Path=/; HttpOnly; SameSite=Strict");
+  }
+
+  void handleLogin()
+  {
+    JsonDocument body;
+    if (!readJsonBody(body))
+      return;
+    uint32_t retryS;
+    if (throttled(retryS))
+    {
+      server->sendHeader("Retry-After", String(retryS));
+      JsonDocument d;
+      d["error"] = "throttled";
+      d["retry_s"] = retryS;
+      sendJson(429, d);
+      return;
+    }
+    const char *pin = body["pin"] | "";
+    if (strlen(pin) != 6 || strcmp(pin, pinCode) != 0)
+    {
+      throttleFail();
+      sendErr(401, "auth");
+      return;
+    }
+    startSession();
     JsonDocument d;
     d["ok"] = true;
     sendJson(200, d);
+  }
+
+  // GET /<pin>, registered only for this session's actual PIN, so scanning the e-paper's
+  // QR code signs in. Mutating state on GET is deliberate: a phone camera can only issue
+  // a navigation, and the PIN is the secret that authorises it. Anyone holding the PIN
+  // could call /api/login instead.
+  void handleQrLogin()
+  {
+    uint32_t retryS;
+    if (!throttled(retryS))
+    {
+      startSession();
+    }
+    // Either way the browser lands on "/", where tryBoot() probes /api/state and shows
+    // the dashboard or the sign-in form. A lockout earned by guessing must not be
+    // scannable past, so a throttled scan gets the redirect without a cookie.
+    server->sendHeader("Location", "/");
+    server->send(302, "text/plain", "");
   }
 
   void handleLogout()
@@ -800,6 +827,12 @@ namespace
 
   void handleNotFound()
   {
+    // A six-digit path is a guess at the QR login route. Charge it to the same throttle
+    // as /api/login, or that GET route would be an unthrottled million-guess surface.
+    if (isPanelQrLoginPath(server->uri().c_str()))
+    {
+      throttleFail();
+    }
     server->send(404, "text/plain", "not found");
   }
 
@@ -831,6 +864,9 @@ void panelBegin(PanelDisplay &out)
   const char *trackedHeaders[] = {"Cookie", "Content-Type"};
   server->collectHeaders(trackedHeaders, sizeof(trackedHeaders) / sizeof(trackedHeaders[0]));
   server->on("/", HTTP_GET, handleRoot);
+  // Only the real PIN gets a route, so there is nothing to compare at request time.
+  // Every other six-digit path 404s through handleNotFound, which throttles the attempt.
+  server->on(String("/") + pinCode, HTTP_GET, handleQrLogin);
   server->on("/assets/echarts-6.1.0-v2.js", HTTP_GET, handleChartAsset);
   server->on("/api/login", HTTP_POST, handleLogin);
   server->on("/api/logout", HTTP_POST, handleLogout);
