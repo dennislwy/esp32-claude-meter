@@ -230,8 +230,15 @@ roughly 2 hours of continuous polling after a cold boot.
 ## Panel view (Web Panel mode)
 
 Shown while the Web Panel is serving on your Wi-Fi. The QR code encodes
-`http://<ip>` — the IP, not the `.local` name, because Android browsers
-don't resolve mDNS — so a phone camera opens the panel directly.
+`HTTP://<ip>/<pin>` — the IP, not the `.local` name, because Android
+browsers don't resolve mDNS — so scanning it with a phone camera opens the
+panel already signed in. The PIN is still printed beside the code for
+typing in by hand.
+
+The scheme is uppercase so the whole payload stays inside QR alphanumeric
+mode, which holds 38 characters at version 2 where byte mode holds 26.
+That is what keeps the code at 25 modules, and so 75 px at 3 px per
+module. URL schemes are case-insensitive (RFC 3986 §3.1).
 
 ```
 0                                                       199
@@ -256,7 +263,7 @@ don't resolve mDNS — so a phone camera opens the panel directly.
 
 | Element            | Position                          | Font / size              | Notes                                              |
 | ------------------ | --------------------------------- | ------------------------ | -------------------------------------------------- |
-| QR code            | x = 8, y = 30                     | 75 x 75 px               | `lv_qrcode`; drawn only when the IP is known       |
+| QR code            | x = 8, y = 30                     | 75 x 75 px, 25 modules   | `lv_canvas` + qrcodegen; drawn only when the IP is known |
 | `Web Panel` title  | column centre, y = 32             | Montserrat 16            | Column runs x = 89..196, centre x = 142            |
 | `PIN` label        | column centre, y = 58             | Montserrat 10            |                                                    |
 | Sign-in code       | column centre, y = 70             | Montserrat 28            | No fixed width, so a wide code spills, never wraps |
