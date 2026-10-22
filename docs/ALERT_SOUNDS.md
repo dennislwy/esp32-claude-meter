@@ -29,10 +29,10 @@ own audio.
 | --- | --- |
 | `/5h-warning.wav` | 5-hour usage crosses the warning threshold |
 | `/5h-depleted.wav` | 5-hour usage reaches 100 % |
-| `/5h-reset.wav` | 5-hour window reset time passes |
+| `/5h-reset.wav` | 5-hour window resets: its reset time passes, or its usage drops |
 | `/7d-warning.wav` | 7-day usage crosses the warning threshold |
 | `/7d-depleted.wav` | 7-day usage reaches 100 % |
-| `/7d-reset.wav` | 7-day window reset time passes |
+| `/7d-reset.wav` | 7-day window resets: its reset time passes, or its usage drops |
 
 The warning threshold is per-window (`warn5h`, `warn7d`; defaults 80 %
 and 90 %). The depleted threshold is a fixed `99.95 %` — see
@@ -45,12 +45,31 @@ compares the current level (`NORMAL` / `WARNING` / `DEPLETED`) against
 the last-seen level stored in NVS (namespace `alerts`, keys
 `lvl<n>_<window>` and `rst<n>_<window>`).
 
-- Rising edges only. A drop (after a reset, or a raised threshold)
-  just updates the stored level; no re-alert.
+- Rising edges only, for level alerts. A drop (after a reset, or a
+  raised threshold) just updates the stored level; no warning or
+  depleted re-alert. The drop can still raise a reset alert — see
+  below.
 - `DEPLETED` wins over `WARNING` when usage jumps straight to 100 %.
-- Window-reset alerts fire when `now >= rst<n>_<window>` — the firmware
-  records the previously-reported reset timestamp and waits for it to
-  pass.
+- Window-reset alerts have two triggers. The first is
+  `now >= rst<n>_<window>`: the firmware records the previously
+  reported reset timestamp and waits for it to pass. The second is a
+  fall in utilisation of more than half a percentage point since the
+  previous evaluated poll — utilisation is cumulative within a window,
+  so it can only fall when the window was replaced early. That is what
+  a gifted usage-limit reset does. `isEarlyWindowReset()` in
+  `src/window_reset.cpp` decides the second case, and it is suppressed
+  when the first already fired for the same window in the same pass, so
+  one reset never chimes twice.
+- Only the fall is used, never the reset timestamp moving. Measured
+  2026-10-22: a gift moved the 5-hour reset time but left the 7-day
+  reset time unchanged, so a timestamp test would miss every 7-day
+  gift.
+- The fall is measured against `prevPercent` / `prevSeen` in
+  `src/alerts.cpp`, which live in RTC memory rather than NVS because
+  utilisation changes on nearly every poll. They survive deep sleep; a
+  power cycle clears them, so the first poll afterwards skips the fall
+  test rather than guessing.
+- A gift zeroes both windows, so both reset WAVs play in sequence.
 - Accounts whose latest poll failed are skipped.
 - Multiple accounts can request the same WAV in a single poll; the
   sound queue de-duplicates and plays each sound once.
@@ -99,7 +118,7 @@ Quiet hours can be disabled entirely with `quiet off`.
 
 | Command | Effect |
 | --- | --- |
-| `alerts` | Print the stored alert level and pending reset time for each (account, window) |
+| `alerts` | Print the stored alert level, pending reset time, and last-seen utilisation for each (account, window) |
 | `alerts clear` | Wipe the `alerts` NVS namespace. The next poll re-alerts for anything above a threshold |
 | `warn5h <50-99>` / `warn7d <50-99>` | Change the warning threshold per window |
 | `quiet on` / `quiet off` | Enable or disable quiet hours |
