@@ -224,21 +224,42 @@ ffmpeg -i source.mp3 -ac 1 -ar 16000 -sample_fmt s16 -af "volume=6dB" 5h-warning
 ```
 
 To keep themes at the same perceived volume, normalise loudness rather
-than adding fixed gain. The existing themes sit at -16 LUFS integrated
-with peaks at or below -1.5 dBTP:
+than adding fixed gain. Matching LUFS alone is not enough on this
+speaker: steady tones (the Mario theme) sound louder than speech at
+the same reading, because speech is spiky — its peaks hit the ceiling
+while its average stays low. Measure the crest factor (peak minus RMS)
+as well as loudness:
+
+| Theme | Integrated | Crest factor | Peak |
+| --- | --- | --- | --- |
+| Tones (`mario`) | -16 LUFS | 10-12 dB | -1.3 to -6 dBFS |
+| Speech (`jarvis`) | -12 LUFS | 11-12 dB | -1 dBFS |
+
+Tonal sources only need loudness normalisation:
 
 ```sh
 ffmpeg -i source.mp3 -af "loudnorm=I=-16:TP=-1.5:LRA=11" -ac 1 -ar 16000 -sample_fmt s16 5h-warning.wav
 ```
 
-Check a file's loudness with
-`ffmpeg -i 5h-warning.wav -af ebur128 -f null -` (the `I:` line in the
-summary).
-
-For a one-shot batch (all six files of a theme at once):
+Speech needs compressing and limiting first. The high-pass drops bass
+the small speaker cannot reproduce; the compressor and limiter bring
+the crest factor down to the tones' range, which frees the headroom to
+raise the level. Tune `volume` per file until the output reads about
+-12 LUFS (+20 dB or so for a -27 LUFS source):
 
 ```sh
-theme=jarvis
+ffmpeg -i source.mp3 -af "aresample=16000,highpass=f=180,acompressor=threshold=-26dB:ratio=4:attack=3:release=100,volume=21dB,alimiter=limit=0.89:attack=1:release=50:level=false" -ac 1 -sample_fmt s16 5h-warning.wav
+```
+
+Check a file's loudness with
+`ffmpeg -i 5h-warning.wav -af ebur128 -f null -` (the `I:` line in the
+summary), and its crest factor from the `Peak level dB` and
+`RMS level dB` lines of `-af astats`.
+
+For a one-shot batch of a tonal theme (all six files at once):
+
+```sh
+theme=mario
 mkdir -p "sounds/$theme"
 for f in "sound-sources/$theme"/*.mp3; do
   ffmpeg -y -i "$f" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -ac 1 -ar 16000 -sample_fmt s16 \
