@@ -451,7 +451,7 @@ async function renderHistory(data){
     const legendContext=document.createElement('canvas').getContext('2d');
     legendContext.font='11px '+getComputedStyle(document.body).fontFamily;
     const legendLabel=name=>{
-      const label=histLabels[name]||name,maxWidth=Math.max(60,histChart.getWidth()-106);
+      const label=histLabels[name]||name,maxWidth=Math.max(60,histChart.getWidth()-100);
       if(legendContext.measureText(label).width<=maxWidth)return label;
       const suffix=label.slice(label.lastIndexOf(' · '));let account=label.slice(0,-suffix.length);
       while(account.length&&legendContext.measureText(account+'\u2026'+suffix).width>maxWidth)account=account.slice(0,-1);
@@ -460,9 +460,11 @@ async function renderHistory(data){
     histChart.setOption({animation:false,backgroundColor:'transparent',
       aria:{enabled:true,label:{description:hasSamples?'Seven-day usage history. Solid lines show 5-hour usage; dashed lines show 7-day usage. Use the series buttons to show or hide lines. Use plus/minus keys to zoom, arrow keys to pan, and 0 to reset.':'No usage history recorded yet.'}},
       title:{text:'7 days usage history',left:0,top:0,padding:0,textStyle:{color:text,fontFamily:getComputedStyle(document.body).fontFamily,fontSize:matchMedia('(max-width:480px)').matches?16:18,fontWeight:600}},
-      legend:{show:true,left:0,right:66,top:mobileSidebar.matches?46:50,itemWidth:24,itemHeight:8,itemGap:10,textStyle:{color:text,fontSize:11,fontFamily:getComputedStyle(document.body).fontFamily},formatter:legendLabel,
-        // Plain line swatches match the tooltip: 5h solid, 7d dashed, without circle markers.
-        data:series.map(item=>({name:item.name,icon:'line',itemStyle:{borderColor:item.lineStyle.color,borderWidth:2,borderType:item.lineStyle.type}})),selected:histSelected},
+      legend:{show:true,left:0,right:66,top:mobileSidebar.matches?46:50,itemWidth:18,itemHeight:8,itemGap:10,textStyle:{color:text,fontSize:11,fontFamily:getComputedStyle(document.body).fontFamily},formatter:legendLabel,
+        // Plain line swatches match the tooltip: 5h solid, 7d dashed, without circle markers. The swatch
+        // is the tooltip's 18x2px, and the dash is spelled out because ECharts would otherwise stretch
+        // 'dashed' to 4x/2x the stroke width, twice the rhythm of the tooltip's CSS dashed border.
+        data:series.map(item=>({name:item.name,icon:'line',itemStyle:{borderColor:item.lineStyle.color,borderWidth:2,borderType:item.lineStyle.type==='dashed'?[4,2]:item.lineStyle.type}})),selected:histSelected},
       toolbox:{right:4,top:0,padding:0,itemSize:18,showTitle:false,
         tooltip:{show:true,position:'bottom',confine:true,formatter:item=>item.title,backgroundColor:card,borderColor:line,textStyle:{color:text,fontSize:12},extraCssText:'padding:6px 10px;box-shadow:0 4px 20px #0002;'},
         iconStyle:{borderColor:dim,borderWidth:1.5,borderCap:'round',borderJoin:'round'},emphasis:{iconStyle:{borderColor:text}},feature:{saveAsImage:{show:true,icon:'M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z M15 13a3 3 0 1 1-6 0a3 3 0 1 1 6 0',title:'Take snapshot',name:'claude-meter-usage-history',type:'png',pixelRatio:2,backgroundColor:card,excludeComponents:['toolbox']},myExportCsv:{show:true,title:'Export to CSV',icon:'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M12 18V12 M9 15l3 3l3-3',onclick:exportHistoryCsv}}},
