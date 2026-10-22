@@ -15,7 +15,9 @@
 #define LV_FONT_MONTSERRAT_16 1
 #define LV_FONT_MONTSERRAT_28 1
 
-// Panel view QR code for the web panel URL
+// Panel view QR code for the web panel URL. The canvas is what the QR is drawn onto;
+// lv_qrcode itself is unused because it cannot select the encoding mode.
 #define LV_USE_QRCODE 1
+#define LV_USE_CANVAS 1
 
 #endif

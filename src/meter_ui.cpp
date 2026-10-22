@@ -1,7 +1,9 @@
 #include "meter_ui.h"
 
 #include <lvgl.h>
+#include <src/libs/qrcode/qrcodegen.h>
 #include "history.h"
+#include "panel_qr.h"
 #include "reset_time.h"
 
 extern "C" const lv_image_dsc_t claude_icon;
@@ -39,6 +41,10 @@ namespace
   constexpr int8_t WIFI_1_ARC_DBM = -80; // weaker: the dot alone
 
   constexpr int POPUP_W = 170;
+
+  // Pinned so the module count — and so the pixel scale — can never drift with the
+  // payload. Version 2 is 25 modules and holds 38 alphanumeric characters.
+  constexpr int PANEL_QR_VERSION = 2;
 
   const lv_color_t BLACK = lv_color_black();
   const lv_color_t WHITE = lv_color_white();
@@ -453,11 +459,74 @@ namespace
     }
   }
 
+  // lv_canvas does not own its draw buffer, so release it when the object dies. This
+  // mirrors lv_qrcode's destructor; clearScreen()'s lv_obj_clean() deletes the canvas
+  // on every redraw, so without this the panel would leak a buffer per refresh.
+  void destroyQrDrawBuf(lv_event_t *e)
+  {
+    lv_draw_buf_destroy((lv_draw_buf_t *)lv_event_get_user_data(e));
+  }
+
+  // Draws text as a QR code, letting qrcodegen pick the encoding mode. lv_qrcode cannot:
+  // it always calls qrcodegen_encodeBinary, and byte mode holds 26 bytes at version 2
+  // against alphanumeric mode's 38 characters. Returns nullptr if the payload does not
+  // fit the pinned version, so the caller can fall back.
+  lv_obj_t *qrCode(lv_obj_t *parent, const char *payload, int size)
+  {
+    uint8_t qr[qrcodegen_BUFFER_LEN_FOR_VERSION(PANEL_QR_VERSION)];
+    uint8_t scratch[qrcodegen_BUFFER_LEN_FOR_VERSION(PANEL_QR_VERSION)];
+    // boostEcl raises the error correction above MEDIUM when the spare capacity is
+    // free; it changes robustness, never the module count.
+    if (!qrcodegen_encodeText(payload, scratch, qr, qrcodegen_Ecc_MEDIUM, PANEL_QR_VERSION,
+                              PANEL_QR_VERSION, qrcodegen_Mask_AUTO, true))
+      return nullptr;
+
+    const int modules = qrcodegen_getSize(qr);
+    const int scale = size / modules;
+    if (scale <= 0)
+      return nullptr;
+
+    lv_draw_buf_t *buf = lv_draw_buf_create(size, size, LV_COLOR_FORMAT_I1, LV_STRIDE_AUTO);
+    if (buf == nullptr)
+      return nullptr;
+
+    lv_obj_t *canvas = lv_canvas_create(parent);
+    lv_canvas_set_draw_buf(canvas, buf);
+    lv_obj_add_event_cb(canvas, destroyQrDrawBuf, LV_EVENT_DELETE, buf);
+    lv_draw_buf_clear(buf, NULL);
+    lv_canvas_set_palette(canvas, 0, lv_color_to_32(WHITE, LV_OPA_COVER));
+    lv_canvas_set_palette(canvas, 1, lv_color_to_32(BLACK, LV_OPA_COVER));
+    // The image cache is keyed on the buffer address, and a fresh allocation can land on
+    // a freed one, which would render the previous panel entry's QR. lv_qrcode_update()
+    // drops the entry for the same reason (lv_qrcode.c:107).
+    lv_image_cache_drop(buf);
+
+    // For an indexed format lv_canvas_set_px takes the palette index as a colour.
+    // Per-pixel writes are slow in LVGL's terms but this runs once per panel entry,
+    // against an e-paper refresh measured in seconds.
+    const lv_color_t dark = lv_color_hex(1);
+    const int margin = (size - modules * scale) / 2;
+    for (int my = 0; my < modules; my++)
+    {
+      for (int mx = 0; mx < modules; mx++)
+      {
+        if (!qrcodegen_getModule(qr, mx, my))
+          continue;
+        for (int dy = 0; dy < scale; dy++)
+          for (int dx = 0; dx < scale; dx++)
+            lv_canvas_set_px(canvas, margin + mx * scale + dx, margin + my * scale + dy, dark,
+                             LV_OPA_COVER);
+      }
+    }
+    return canvas;
+  }
+
   void panelView(lv_obj_t *parent, const MeterScreen &screen)
   {
-    // QR code on the left; the title and PIN centred in the column to its right. An IP URL
-    // ("http://255.255.255.255" at most) is a version 2 code, 25 modules, so 75 px is 3 px per
-    // module. The screen's white around it is the quiet zone.
+    // QR code on the left; the title and PIN centred in the column to its right. The
+    // payload is "HTTP://<ip>/<pin>", at most 29 characters, which QR alphanumeric mode
+    // fits in a version 2 code: 25 modules, so 75 px is 3 px per module. The screen's
+    // white around it is the quiet zone.
     constexpr int QR_SIZE = 75;
     constexpr int QR_X = 8;
     constexpr int QR_GAP = 6;
@@ -470,12 +539,16 @@ namespace
     const String ipUrl = String("http://") + screen.panelIp;
     if (screen.panelIp.length() > 0)
     {
-      lv_obj_t *qr = lv_qrcode_create(parent);
-      lv_qrcode_set_size(qr, QR_SIZE);
-      lv_qrcode_set_dark_color(qr, BLACK);
-      lv_qrcode_set_light_color(qr, WHITE);
-      lv_qrcode_update(qr, ipUrl.c_str(), ipUrl.length());
-      lv_obj_set_pos(qr, QR_X, y);
+      // The PIN travels in the QR so a scan signs in; GET /<pin> trades it for a
+      // session cookie. A missing PIN degrades to a navigate-only code.
+      char payload[PANEL_QR_PAYLOAD_MAX];
+      if (formatPanelQrPayload(screen.panelIp.c_str(), screen.panelPin.c_str(), payload,
+                               sizeof(payload)))
+      {
+        lv_obj_t *qr = qrCode(parent, payload, QR_SIZE);
+        if (qr != nullptr)
+          lv_obj_set_pos(qr, QR_X, y);
+      }
     }
 
     lv_obj_t *title = text(parent, "Web Panel", &lv_font_montserrat_16, BLACK);
