@@ -38,9 +38,10 @@ The complete sign-in screen fits a 360 × 780 CSS viewport at DPR 3 in
 light and dark themes, with normal text size and the keyboard closed.
 Enlarged text and shorter viewports can scroll naturally.
 
-Entering or pasting six digits signs in automatically. Incomplete or
-non-numeric codes are not submitted; a pending sign-in cannot submit twice.
-The button and Enter key also support manual retries after an error.
+Scanning the display's QR code signs in without typing. Otherwise entering
+or pasting six digits signs in automatically. Incomplete or non-numeric
+codes are not submitted; a pending sign-in cannot submit twice. The button
+and Enter key also support manual retries after an error.
 
 Enter the 6-digit sign-in code shown on the ePaper → mint a `sid` cookie
 (`HttpOnly`, `SameSite=Strict`), held in RAM. Up to 4 sessions at once

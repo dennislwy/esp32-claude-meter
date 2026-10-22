@@ -9,6 +9,8 @@ node_modules/
 
 # to remove in production
 *.wav
+*.mp3
+data/
 foobar/
 DESIGN_REQUIREMENTS.md
 src/build_info.cpp

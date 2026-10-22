@@ -185,6 +185,12 @@ const char *viewName(MeterView value)
     return "account 2";
   case MeterView::Account2History:
     return "account 2 history";
+  case MeterView::Panel:
+    return "web panel";
+  case MeterView::Setup:
+    return "setup";
+  case MeterView::Unlock:
+    return "unlock";
   }
   return "?";
 }
@@ -630,6 +636,28 @@ void printStatus()
   const uint32_t millivolts = battery.readMillivolts();
   Serial.printf("Battery:   %.2f V  %u %%\n", millivolts / 1000.0f, Battery::percentFromMillivolts(millivolts));
   Serial.printf("View:      %s\n", viewName(view));
+  {
+    // Wi-Fi is off between polls, so an IP only exists during a poll or a panel
+    // session. Print the saved SSID either way: a device sitting on a different
+    // network than the browser is the usual reason the panel looks unreachable.
+    const String ssid = settings::wifiSsid();
+    if (WiFi.status() == WL_CONNECTED)
+      Serial.printf("Wi-Fi:     \"%s\"  IP %s  %d dBm\n", WiFi.SSID().c_str(),
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    else if (ssid.isEmpty())
+      Serial.println("Wi-Fi:     not configured");
+    else
+      Serial.printf("Wi-Fi:     \"%s\"  off until the next poll\n", ssid.c_str());
+  }
+  if (panelMode)
+  {
+    // Idle age against the limit that closes the session, plus the deferred-exit
+    // flag: once set it latches off the timeout check, so a stuck exit shows here.
+    Serial.printf("Panel:     http://%s  idle %lu s of %lu s%s\n", panelDisplay.ip.c_str(),
+                  (unsigned long)((millis() - panelLastActivityMs()) / 1000),
+                  (unsigned long)(PANEL_INACTIVITY_MS / 1000),
+                  panelExitRequested ? "  exit pending" : "");
+  }
   {
     const String saved = settings::hostname();
     const String active = panelMode ? panelDisplay.hostname : saved;

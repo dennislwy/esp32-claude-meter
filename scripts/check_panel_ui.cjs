@@ -155,6 +155,13 @@ const initialState = {
       const model=histChart.getModel();
       const legend=histChart.getViewOfComponentModel(model.getComponent('legend'));
       const items=legend.getContentGroup().children().filter(item=>item.__legendDataIndex!==undefined);
+      const swatches=items.map(item=>{
+        const strokes=[];
+        item.traverse(child=>{if(child.style?.stroke&&child.style.lineWidth>0)strokes.push(child.style)});
+        return {count:strokes.length,color:strokes[0]?.stroke,width:strokes[0]?.lineWidth,
+          dashed:!!strokes[0]?.lineDash&&strokes[0].lineDash!=='solid',
+          expectedColor:model.getSeriesByIndex(item.__legendDataIndex).get(['lineStyle','color'])};
+      });
       const center=element=>{
         const rect=element.getBoundingRect();
         return element.transformCoordToGlobal(rect.x+rect.width/2,rect.y+rect.height/2)[1];
@@ -168,13 +175,19 @@ const initialState = {
       const title=histChart.getViewOfComponentModel(model.getComponent('title'));
       const titleRect=title.group.getBoundingRect(),titleTop=title.group.transformCoordToGlobal(titleRect.x,titleRect.y);
       const rect=legend.group.getBoundingRect(),top=legend.group.transformCoordToGlobal(rect.x,rect.y);
-      return {zoomTypes:histChart.getOption().dataZoom.map(item=>item.type),items:items.length,
+      return {zoomTypes:histChart.getOption().dataZoom.map(item=>item.type),items:items.length,swatches,
         titleText:model.getComponent('title').get('text'),titleBottom:titleTop[1]+titleRect.height,
         legendTop:top[1],legendBottom:top[1]+rect.height,plotTop:model.getComponent('grid').coordinateSystem.getRect().y,
         titleCenter:center(title.group),iconCenter:center(icon),iconTop:Math.min(...iconTops)};
     });
     assert.deepEqual(layout.zoomTypes,['inside'],'Zoom slider is removed; gesture zoom remains');
     assert.equal(layout.items,4);
+    layout.swatches.forEach((swatch,index)=>{
+      assert.equal(swatch.count,1,'Legend uses a single line without a circle marker');
+      assert.equal(swatch.color,swatch.expectedColor,'Legend swatch matches its account color');
+      assert.equal(swatch.width,2,'Legend swatch is as legible as the tooltip line');
+      assert.equal(swatch.dashed,index%2===1,'Legend uses solid 5h and dashed 7d lines');
+    });
     assert.equal(layout.titleText,'7 days usage history');
     assert(layout.titleBottom<layout.legendTop,'Legend stays below the title');
     assert(layout.legendBottom<layout.plotTop,'Legend stays above the plot');
