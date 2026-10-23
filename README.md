@@ -39,7 +39,13 @@ pio device monitor       # serial console at 115200 bps
 ```
 
 The first upload needs both `uploadfs` (sounds) and `upload` (firmware).
-Close the serial monitor before flashing — it holds COM5.
+Close the serial monitor before flashing — it holds COM5. Run the two as
+separate commands; combined, the firmware fails to compile.
+
+`uploadfs` rewrites the whole partition, so changing themes later wipes the
+usage history stored alongside the sounds. `python
+scripts/uploadfs_keep_history.py` reads it back first — see
+[docs/ALERT_SOUNDS.md](docs/ALERT_SOUNDS.md).
 
 There is no `pio test` environment. The host-side checks under `test/` build
 with a plain C++ compiler; each folder's `README.md` has the command.
@@ -218,8 +224,11 @@ include/       lv_conf.h and other build-only headers
 lib/           local libraries (Battery, Epaper154, ES8311, PCF85063, ClaudeUsage)
 assets/certs/  pinned root CAs for api.anthropic.com and the news feed (embedded at build time)
 scripts/       build_info.py (git revision; FW_VERSION is set in src/build_info.h),
-               panel_preview.py and provision_preview.py (run the embedded pages
-               without a board), chart_bundle/ (ECharts build), check_panel_ui.cjs
+               check_sound_theme.py (stops an uploadfs with no sounds staged),
+               uploadfs_keep_history.py (swap sound themes without wiping the
+               usage history), panel_preview.py and provision_preview.py (run
+               the embedded pages without a board), chart_bundle/ (ECharts
+               build), check_panel_ui.cjs
 test/          host-side checks: hostname, panel_poll, pause_hours, pin_entry, reset_time
 sounds/        LittleFS payload: one folder of six WAVs per theme (gitignored)
 sound-sources/ original audio (MP3s, credits) the themes were made from (gitignored)

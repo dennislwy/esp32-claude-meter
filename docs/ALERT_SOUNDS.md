@@ -29,8 +29,9 @@ own audio.
 
 Each theme is a folder of the same six WAVs under `sounds/`. The
 original audio a theme was made from (MP3s, credits) lives in a
-matching folder under `sound-sources/`, so it is never flashed. Both
-trees are gitignored.
+matching folder under `sound-sources/`, so it is never flashed. The
+audio itself is gitignored (`*.wav`, `*.mp3`), and `sound-sources/` is
+ignored outright, so a fresh clone has to supply its own sounds.
 
 ```
 sounds/
@@ -55,6 +56,10 @@ different theme once without editing the file:
 ```sh
 PLATFORMIO_DATA_DIR=sounds/mario pio run -t uploadfs
 ```
+
+That wipes the usage history, which shares the partition — see
+[Changing themes without losing the
+history](#changing-themes-without-losing-the-history).
 
 A new theme is a new `sounds/<name>/` folder with the six filenames
 below; the firmware plays fixed paths and needs no change.
@@ -291,10 +296,50 @@ pio run -t uploadfs
 LittleFS survives firmware flashes, so subsequent `pio run -t upload`
 calls don't need `uploadfs`.
 
+`scripts/check_sound_theme.py` fails the `buildfs` and `uploadfs`
+targets when `data_dir` holds none of the six sounds, and warns when it
+holds only some. Left to itself, `mklittlefs` reports success on an
+empty folder, and the resulting blank image overwrites both the sounds
+and the history ring. Plain `pio run` and `pio run -t upload` skip the
+check, since the firmware runs fine with no sounds on LittleFS.
+
 Run `upload` and `uploadfs` as separate commands. `pio run -t upload -t
 uploadfs` turns PlatformIO's library dependency finder off for the
 whole run, and the firmware then fails to compile with missing headers
 (`epaper.h`, `LittleFS.h`, ...).
+
+### Changing themes without losing the history
+
+`uploadfs` replaces the whole partition, and `/history.bin` lives there
+beside the WAVs, so switching themes with a plain `uploadfs` costs the
+7-day usage history. Keep it with:
+
+```sh
+pip install littlefs-python          # once
+python scripts/uploadfs_keep_history.py --theme sounds/mario
+```
+
+Both arguments are optional: `--theme` defaults to `data_dir`, and
+`--port` to whatever esptool detects. The script reads the partition
+off the board, copies every non-WAV file it finds into a staging
+folder, adds the theme's WAVs, and runs `uploadfs` against that — so
+anything the firmware keeps on LittleFS survives, not just the
+history.
+
+Reading 1.5 MB over USB-Serial/JTAG takes about half a minute and
+fails often enough that the dump is done in retried 64 KB chunks; a
+single whole-partition read reliably dies with "Serial data stream
+stopped" partway through. If a chunk can't be read after six tries the
+script exits without writing anything, leaving the board as it was.
+The chip is also held in its bootloader during the dump (`--after
+no-reset`) — a running firmware would append a history sample after
+the read, and that sample would then be lost to the flash.
+
+A board whose filesystem has never been written has no history to
+keep. The script says so and flashes the theme alone.
+
+Nothing preserves the history across a `buildfs` of the wrong folder,
+so the guard above still matters.
 
 ## Known limitations
 
