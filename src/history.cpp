@@ -277,6 +277,110 @@ void printHistoryState()
   }
 }
 
+namespace
+{
+void formatSlotTime(char *out, size_t size, uint32_t epoch)
+{
+  const time_t when = (time_t)epoch;
+  struct tm local;
+  localtime_r(&when, &local);
+  strftime(out, size, "%Y-%m-%d %H:%M", &local);
+}
+
+void formatSpan(char *out, size_t size, uint16_t slots)
+{
+  const uint32_t minutes = (uint32_t)slots * (HIST_SLOT_SEC / 60);
+  const unsigned days = (unsigned)(minutes / 1440);
+  const unsigned hours = (unsigned)((minutes % 1440) / 60);
+  const unsigned mins = (unsigned)(minutes % 60);
+  if (days && hours)
+  {
+    snprintf(out, size, "%ud %uh", days, hours);
+  }
+  else if (days)
+  {
+    snprintf(out, size, "%ud", days);
+  }
+  else if (hours && mins)
+  {
+    snprintf(out, size, "%uh %umin", hours, mins);
+  }
+  else if (hours)
+  {
+    snprintf(out, size, "%uh", hours);
+  }
+  else
+  {
+    snprintf(out, size, "%umin", mins);
+  }
+}
+}
+
+void printHistorySeries()
+{
+  if (!fsOk)
+  {
+    Serial.println("History: LittleFS not mounted - run: pio run -t uploadfs");
+    return;
+  }
+  if (hist.lastAbsSlot == 0)
+  {
+    Serial.println("History: empty (no samples yet)");
+    return;
+  }
+
+  char newest[20];
+  formatSlotTime(newest, sizeof(newest), (uint32_t)(hist.lastAbsSlot + 1) * HIST_SLOT_SEC);
+  Serial.printf("History: %u slots of %u min, newest %s\n", (unsigned)HIST_SLOTS,
+                (unsigned)(HIST_SLOT_SEC / 60), newest);
+
+  for (int a = 0; a < settings::CLAUDE_TOKEN_COUNT; a++)
+  {
+    HistSlot slots[HIST_SLOTS];
+    uint32_t newestEpoch = 0;
+    historySnapshot(a, slots, newestEpoch);
+    Serial.printf("%s:\n", settings::accountName(a + 1).c_str());
+
+    // Consecutive slots sharing both percentages collapse into one line, so an
+    // idle stretch prints once instead of 672 times. Empty runs are the gaps;
+    // the leading and trailing ones are just unfilled ring, not downtime.
+    bool printedAny = false;
+    uint16_t start = 0;
+    for (uint16_t i = 1; i <= HIST_SLOTS; i++)
+    {
+      if (i < HIST_SLOTS && slots[i].h5 == slots[start].h5 && slots[i].d7 == slots[start].d7)
+      {
+        continue;
+      }
+      const uint16_t count = i - start;
+      char span[16];
+      formatSpan(span, sizeof(span), count);
+      if (slots[start].h5 == HIST_EMPTY && slots[start].d7 == HIST_EMPTY)
+      {
+        if (start != 0 && i != HIST_SLOTS)
+        {
+          Serial.printf("  .... no samples for %s (%u slots)\n", span, (unsigned)count);
+        }
+      }
+      else
+      {
+        char from[20], to[20];
+        formatSlotTime(from, sizeof(from),
+                       newestEpoch - (uint32_t)(HIST_SLOTS - start) * HIST_SLOT_SEC);
+        formatSlotTime(to, sizeof(to), newestEpoch - (uint32_t)(HIST_SLOTS - i) * HIST_SLOT_SEC);
+        Serial.printf("  %s .. %s  5h=%3u%%  7d=%3u%%  (%s)\n", from, to, slots[start].h5,
+                      slots[start].d7, span);
+        printedAny = true;
+      }
+      start = i;
+    }
+    if (!printedAny)
+    {
+      Serial.println("  no samples in the last 7 days");
+    }
+  }
+}
+
 void historyErase()
 {
   clearRing();

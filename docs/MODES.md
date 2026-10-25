@@ -76,7 +76,7 @@ of this flag, so the flag is only meaningful in Normal mode.
 A STA-mode HTTP server on `<hostname>.local` (default `claude-meter`,
 configurable; applies at the next restart) for editing settings,
 reviewing history, playing alert sounds, and triggering a refresh. See
-[WEB_SERVER.md](WEB_SERVER.md).
+[PANEL_FEATURES.md](PANEL_FEATURES.md).
 
 Automatic usage polling continues at the configured 1–5 minute interval,
 respecting Pause Hours. HTTPS requests run on a worker using the existing
@@ -110,8 +110,8 @@ Close the tab or long-press BOOT when finished.
 
 First-time Wi-Fi setup. The board comes up as an open SoftAP named
 `claude-meter-XXXXXX` at `192.168.4.1`; a DNS hijack triggers the OS
-captive-portal popup on connect. See the "Provisioning (Phase 2)"
-section of [WEB_SERVER.md](WEB_SERVER.md).
+captive-portal popup on connect. The screen in this mode is the
+[Setup view](LAYOUT_VIEW.md#setup-view-ap-provisioning-mode).
 
 Entry: boot with no `wifi.ssid` NVS key — typically on first boot or
 after a factory reset (or after wiping the SSID with serial `ssid `).

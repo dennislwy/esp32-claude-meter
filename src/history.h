@@ -38,5 +38,9 @@ bool historyHasData(int account);
 // Serial dump: coverage per account and newest-slot timestamp
 void printHistoryState();
 
+// Serial dump: the recorded samples per account with the off periods between
+// them, which a coverage percentage alone hides.
+void printHistorySeries();
+
 // Wipe ring and file (factory reset)
 void historyErase();

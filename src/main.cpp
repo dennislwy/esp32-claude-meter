@@ -592,6 +592,7 @@ void printHelp()
   Serial.println("  warn7d <50-99>             7-day warning sound threshold % (default 90)");
   Serial.println("  alerts                     show which alerts have fired; \"alerts clear\" re-arms them");
   Serial.println("  history                    show 7-day history coverage; \"history clear\" wipes it");
+  Serial.println("  history dump               list the recorded samples and the off periods between them");
   Serial.println("  quiet on | off             enable or disable quiet hours (default on)");
   Serial.println("  quiet <start>-<end>        set quiet hours in 24h local time, e.g. quiet 22-8 or quiet 22:30-7:15");
   Serial.println("  pause on | off             pause automatic polls during Pause Hours (default off)");
@@ -979,6 +980,10 @@ void runCommand(const String &line)
   else if (line == "history")
   {
     printHistoryState();
+  }
+  else if (line == "history dump")
+  {
+    printHistorySeries();
   }
   else if (line == "history clear")
   {

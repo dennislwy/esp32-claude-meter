@@ -115,7 +115,8 @@ Type `help` for the full list. Highlights:
 | `pause <start>-<end>`                 | Set the local polling-pause window (e.g. `pause 00:00-06:00`)                           |
 | `hostname` / `hostname <name>`        | Show or set the mDNS name, max 15 chars; `clear` restores the default                   |
 | `alerts` / `alerts clear`             | Inspect / reset the per-window alert state                                              |
-| `history` / `history clear`           | Inspect / wipe the 7-day usage ring                                                     |
+| `history`, `history dump`             | Coverage summary / every recorded sample with the off periods between them              |
+| `history clear`                       | Wipe the 7-day usage ring                                                               |
 | `rtc` / `rtc set YYYY-MM-DD HH:MM:SS` | Read / set the hardware clock                                                           |
 | `scan`, `tlscheck`                    | Diagnostics                                                                             |
 | `files`, `play <file.wav>`            | LittleFS tools                                                                          |
@@ -165,8 +166,7 @@ While the board is locked the console answers only `help`, `status`, `creds`,
   is on. Automatic polls do not count as activity, but an open signed-in tab
   polls every 5 seconds and keeps the panel alive indefinitely — close the tab
   when you're done, or the radio will flatten the battery.
-  See [docs/WEB_SERVER.md](docs/WEB_SERVER.md)
-  and [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
+  See [docs/PANEL_FEATURES.md](docs/PANEL_FEATURES.md).
 - **Locked** (after any cold boot — battery pull, a PWR power-off on battery,
   or first power-up of a provisioned board): the radio stays off and the ePaper
   shows `Locked`, `Enter your 4-digit PIN`, and four digit slots. `BOOT`
@@ -204,7 +204,7 @@ applied before first paint, reopening the same page after a browser
 refresh, and a seven-day chart with weekday labels
 directly below the midnight ticks in the device's time zone. Device details
 includes the Wi-Fi MAC address. See [panel features](docs/PANEL_FEATURES.md)
-and [panel design](docs/PANEL_DESIGN.md) for the full behavior and verification.
+for the full behavior.
 
 Preview the actual embedded page locally without a board:
 

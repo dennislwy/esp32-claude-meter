@@ -1,8 +1,8 @@
 # Panel features
 
 Everything a signed-in user can do in the Web control panel, by feature.
-See [WEB_SERVER.md](WEB_SERVER.md) for how to reach it and the
-underlying REST surface.
+See [Web Panel mode](MODES.md#2--web-panel) for how to reach it and when
+it exits.
 
 ## Navigation and appearance
 
@@ -30,7 +30,8 @@ tab, so a new tab starts on Usage.
 Keyboard focus, labelled controls, live feedback, and reduced-motion
 preferences are supported.
 
-Design analysis and local preview instructions: [PANEL_DESIGN.md](PANEL_DESIGN.md).
+Preview the embedded page locally without a board with
+`python scripts/panel_preview.py`; the README has the details.
 
 ## Sign in
 
@@ -337,7 +338,7 @@ confirm", second tap within 5 s executes.
 - **Factory reset** — erases the whole NVS partition and history, then
   reboots. This erases the Device PIN along with everything else, including
   any Wi-Fi driver or earlier-firmware copies. Device comes up in
-  [AP provisioning mode](WEB_SERVER.md#provisioning-phase-2) because Wi-Fi
+  [AP provisioning mode](MODES.md#3--ap-provisioning) because Wi-Fi
   SSID is empty. You will need to re-enter the SSID, password, a new PIN, and
   your Claude tokens. Serial `reset confirm` and BOOT + PWR at the PIN prompt
   run the same reset.
@@ -348,7 +349,7 @@ line of defence.
 
 ## Not exposed in the panel
 
-Serial commands without a panel equivalent (noted in [WEB_SERVER.md](WEB_SERVER.md#serial-parity)):
+Serial commands without a panel equivalent:
 
 - `alerts` / `alerts clear` — per-window alert-latch inspection and reset
 - `rtc` / `rtc set` — read/set the PCF85063 RTC chip
